@@ -10,8 +10,6 @@ RUN npm install
 # Copiar el código del frontend
 COPY . .
 
-# Crear el directorio destino que espera Vite (../backend/dist)
-RUN mkdir -p /app/backend/dist
 
 # Limitar la memoria máxima de Node a 512MB para evitar OOM Killer en servidores pequeños
 ENV NODE_OPTIONS="--max-old-space-size=512"
@@ -25,7 +23,7 @@ FROM nginx:alpine
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copiar los estáticos compilados desde la ruta que Vite generó
-COPY --from=builder /app/backend/dist /usr/share/nginx/html
+COPY --from=builder /app/frontend/dist /usr/share/nginx/html
 
 EXPOSE 80
 
