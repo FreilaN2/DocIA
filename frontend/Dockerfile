@@ -3,7 +3,8 @@ FROM node:18-alpine AS builder
 WORKDIR /app/frontend
 
 # Copiar configuración e instalar
-COPY package*.json ./
+COPY package.json ./
+# Ignoramos el package-lock.json de Windows para forzar a npm a descargar los binarios de Linux (esbuild)
 RUN npm install
 
 # Copiar el código del frontend
