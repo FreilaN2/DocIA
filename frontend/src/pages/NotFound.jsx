@@ -222,7 +222,6 @@ export default function NotFound() {
   return (
     <div 
       style={{
-        minHeight: '100vh',
         minHeight: '100dvh',
         background: c.bg,
         // FIX: Usar gradiente solo si hay efectos (más barato que el canvas)

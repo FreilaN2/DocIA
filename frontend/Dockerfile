@@ -12,8 +12,8 @@ COPY . .
 # Crear el directorio destino que espera Vite (../backend/dist)
 RUN mkdir -p /app/backend/dist
 
-# Incrementar la memoria máxima de Node para evitar Out Of Memory en VPS pequeños
-ENV NODE_OPTIONS="--max-old-space-size=1024"
+# Limitar la memoria máxima de Node a 512MB para evitar OOM Killer en servidores pequeños
+ENV NODE_OPTIONS="--max-old-space-size=512"
 
 # Construir el proyecto usando el script original
 RUN npm run build
