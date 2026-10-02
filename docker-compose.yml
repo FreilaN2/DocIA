@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: docai_db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASS:-rootpassword}
+      MYSQL_DATABASE: ${DB_NAME:-docai_db}
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docai_backend
+    restart: always
+    # Exponemos el backend al host solo si quieres acceso directo, de lo contrario Nginx se encarga
+    # ports:
+    #   - "8000:8000" 
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=db
+      - DB_USER=root
+      - DB_PASS=${DB_PASS:-rootpassword}
+    depends_on:
+      - db
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/processed:/app/processed
+      # (Opcional) Las fuentes si quieres que LibreOffice las use
+      - ./backend/fonts:/app/fonts
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docai_frontend
+    restart: always
+    ports:
+      - "80:80"  # Expone la aplicación web en el puerto 80 del VPS
+    depends_on:
+      - backend
+
+volumes:
+  db_data:
