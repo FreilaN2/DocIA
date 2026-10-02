@@ -7,7 +7,7 @@ const api = axios.create({
   // En producción (Railway/cPanel) el backend y frontend están en el mismo dominio,
   // por lo que usar '' hará que Axios use el dominio actual automáticamente.
   baseURL: IS_PRODUCTION 
-    ? '' 
+    ? '/api' 
     : 'http://127.0.0.1:8000',
 });
 
@@ -25,7 +25,7 @@ api.interceptors.request.use((config) => {
 // Create a separate instance for Admin Panel to isolate sessions
 export const adminApi = axios.create({
   baseURL: IS_PRODUCTION 
-    ? '' 
+    ? '/api' 
     : 'http://127.0.0.1:8000',
 });
 
