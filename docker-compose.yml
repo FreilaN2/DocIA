@@ -23,7 +23,7 @@ services:
     # ports:
     #   - "8000:8000" 
     env_file:
-      - ./backend/.env
+      - .env
     environment:
       - DB_HOST=db
       - DB_USER=root
