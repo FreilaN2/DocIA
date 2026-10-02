@@ -1,18 +1,17 @@
-FROM node:18-alpine AS builder
+# Usar node:20-slim (Debian) en lugar de Alpine para máxima compatibilidad con esbuild y Rollup
+FROM node:20-slim AS builder
 
 WORKDIR /app/frontend
 
-# Copiar configuración e instalar
+# Copiar solo el package.json para forzar a generar dependencias desde cero para Linux
 COPY package.json ./
-# Ignoramos el package-lock.json de Windows para forzar a npm a descargar los binarios de Linux (esbuild)
 RUN npm install
 
 # Copiar el código del frontend
 COPY . .
 
-
-# Limitar la memoria máxima de Node a 512MB para evitar OOM Killer en servidores pequeños
-ENV NODE_OPTIONS="--max-old-space-size=512"
+# Memoria ajustada a 800MB (suficiente para Vite sin reventar un VPS de 1GB)
+ENV NODE_OPTIONS="--max-old-space-size=800"
 
 # Construir el proyecto usando el script original
 RUN npm run build
