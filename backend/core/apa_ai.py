@@ -11,15 +11,33 @@ Optimizaciones aplicadas:
 
 import asyncio
 import logging
+import os
 import re
 import time
 from functools import lru_cache
 from typing import AsyncGenerator
 
+import requests
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from core.groq_pool import pool, MODELO_LIGERO, MODELO_PESADO
 from core.apa_rules import clasificar_parrafo_reglas, _extraer_rel_imagen
 
 logger = logging.getLogger(__name__)
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
+OPENROUTER_MODEL = (
+    os.getenv("OPENROUTER_MODEL", "").strip()
+    or "nvidia/nemotron-3-ultra-550b-a55b:free"
+)
+AI_PROVIDER = os.getenv(
+    "AI_PROVIDER", "openrouter" if OPENROUTER_API_KEY else "groq"
+).strip().lower()
+
+if AI_PROVIDER not in {"openrouter", "groq"}:
+    raise ValueError("AI_PROVIDER debe ser 'openrouter' o 'groq'.")
 
 # ═══════════════════════════════════════════════════════════
 # CONSTANTES PRECOMPILADAS (FIX #1 y #2)
@@ -68,7 +86,7 @@ _BASE_STATS = {
 # ── Configuración (constantes de módulo) ────────────────────────────────────
 UMBRAL_MODELO_SCOUT = 80   # Párrafos: si el doc tiene más, se usa el modelo pesado
 BATCH_SIZE = 10            # Párrafos por lote de clasificación
-DELAY_ENTRE_LOTES = 1.0    # Segundos de respiro entre peticiones a Groq
+DELAY_ENTRE_LOTES = 1.0    # Segundos de respiro entre peticiones al proveedor IA
 MAX_RETRIES = 3            # Intentos máximos por lote
 MAX_COMPLETION_TOKENS = 200
 
@@ -135,6 +153,8 @@ def _seleccionar_modelo_cached(total_parrafos: int, umbral: int) -> str:
     FIX #7: Selección de modelo cacheada.
     Evita logs repetitivos para el mismo número de párrafos.
     """
+    if AI_PROVIDER == "openrouter":
+        return OPENROUTER_MODEL
     if total_parrafos > umbral:
         return MODELO_PESADO
     return MODELO_LIGERO
@@ -174,31 +194,110 @@ def clasificar_lote_ia(lista_textos: list[str], modelo: str) -> tuple[list[str],
 
     prompt = _prompt_para_lote(lista_textos)
 
-    # Intentar primero con el modelo seleccionado, luego con el alternativo
-    modelo_alternativo = MODELO_LIGERO if modelo == MODELO_PESADO else MODELO_PESADO
+    # OpenRouter usa un único modelo configurado; Groq conserva su selección dual.
+    modelos = (modelo,) if AI_PROVIDER == "openrouter" else (
+        modelo,
+        MODELO_LIGERO if modelo == MODELO_PESADO else MODELO_PESADO,
+    )
     
-    for modelo_actual in (modelo, modelo_alternativo):
+    for modelo_actual in modelos:
         resultado = _intentar_con_modelo(lista_textos, prompt, modelo_actual)
         if resultado is not None:
             return resultado
 
     # Fallback final: motor de reglas
-    logger.warning("⚠️  Todas las keys agotadas. Fallback → motor de reglas.")
+    logger.warning("⚠️  No se pudo clasificar con el proveedor IA. Fallback → motor de reglas.")
     return [clasificar_parrafo_reglas(txt) for txt in lista_textos], 0
+
+
+def _intentar_con_openrouter(
+    lista_textos: list[str], prompt: str, modelo: str
+) -> tuple[list[str], int] | None:
+    if not OPENROUTER_API_KEY:
+        logger.error("Falta OPENROUTER_API_KEY mientras AI_PROVIDER=openrouter.")
+        return None
+
+    url = "https://openrouter.ai/api/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": modelo,
+        "messages": [
+            {"role": "system", "content": PROMPT_INSTRUCTIONS},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.0,
+        "top_p": 1.0,
+        "max_tokens": MAX_COMPLETION_TOKENS,
+    }
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+            if response.status_code == 429:
+                logger.warning(
+                    f"OpenRouter limitó el modelo '{modelo}'. "
+                    f"Intento {attempt + 1}/{MAX_RETRIES}."
+                )
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+                return None
+
+            response.raise_for_status()
+            data = response.json()
+            content = data["choices"][0]["message"]["content"]
+            if not isinstance(content, str) or not content.strip():
+                logger.error("OpenRouter devolvió una respuesta sin contenido.")
+                return None
+
+            usage = data.get("usage") or {}
+            tokens_usados = int(usage.get("total_tokens") or 0)
+            etiquetas = _extraer_etiquetas(content.upper())
+
+            if len(etiquetas) != len(lista_textos):
+                logger.warning(
+                    "Respuesta inesperada de OpenRouter. "
+                    f"Esperadas: {len(lista_textos)}, obtenidas: {len(etiquetas)}. "
+                    f"Raw: {content[:100]!r}"
+                )
+                return (
+                    [clasificar_parrafo_reglas(txt) for txt in lista_textos],
+                    tokens_usados,
+                )
+
+            return etiquetas[:len(lista_textos)], tokens_usados
+        except requests.RequestException as error:
+            status_code = error.response.status_code if error.response else "sin respuesta"
+            logger.error(
+                f"Error de OpenRouter (HTTP {status_code}, modelo '{modelo}'): {error}"
+            )
+        except (KeyError, IndexError, TypeError, ValueError) as error:
+            logger.error(f"Respuesta inválida de OpenRouter para '{modelo}': {error}")
+
+        if attempt < MAX_RETRIES - 1:
+            time.sleep(2 ** attempt)
+
+    return None
 
 
 def _intentar_con_modelo(
     lista_textos: list[str], prompt: str, modelo: str
 ) -> tuple[list[str], int] | None:
     """
-    Intenta clasificar usando el pool para el modelo dado.
+    Intenta clasificar usando el proveedor configurado para el modelo dado.
     
     FIX #3: time.sleep() eliminado del loop de reintentos.
     Como esta función se llama desde run_in_executor(), 
     el sleep bloqueante es aceptable aquí (está en un thread separado).
     
-    Retorna (etiquetas, tokens) si tiene éxito, None si no hay keys disponibles.
+    Retorna (etiquetas, tokens) si tiene éxito, None si falla el proveedor.
     """
+    if AI_PROVIDER == "openrouter":
+        return _intentar_con_openrouter(lista_textos, prompt, modelo)
+
     for attempt in range(MAX_RETRIES):
         result = pool.get_best_key(modelo)
         if result is None:

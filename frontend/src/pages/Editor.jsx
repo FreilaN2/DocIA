@@ -214,7 +214,14 @@ export default function Editor() {
       setUploadId(upload_id);
 
       const baseURL = api.defaults.baseURL || '';
-      const sseUrl = `${baseURL}/procesar-apa/stream?upload_id=${upload_id}&edicion=${edicion}&plan=${plan}&token=${token}`;
+      const apiPrefix = import.meta.env.PROD ? '/api' : '';
+      const query = new URLSearchParams({
+        upload_id,
+        edicion,
+        plan,
+        token: token || '',
+      });
+      const sseUrl = `${baseURL}${apiPrefix}/procesar-apa/stream?${query}`;
 
       const es = new EventSource(sseUrl);
       esRef.current = es;
