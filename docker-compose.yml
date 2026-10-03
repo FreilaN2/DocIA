@@ -8,8 +8,8 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASS:-rootpassword}
       MYSQL_DATABASE: ${DB_NAME:-docai_db}
-    # ports:
-    #   - "3306:3306"
+    ports:
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
