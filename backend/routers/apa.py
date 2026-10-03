@@ -380,8 +380,12 @@ async def generar_final(
         p   = parrafos[i]
         cat = _normalizar_categoria(p.categoria)
 
-        # Títulos N3-N5 en 6ta: fusionar con párrafo siguiente
-        if datos.edicion == "6ta" and cat in {"TITULO_N3", "TITULO_N4", "TITULO_N5"} and i + 1 < len(parrafos):
+        # Los encabezados de párrafo APA continúan en la misma línea que el texto.
+        inline_heading = (
+            (datos.edicion == "6ta" and cat in {"TITULO_N3", "TITULO_N4", "TITULO_N5"})
+            or (datos.edicion == "7ma" and cat in {"TITULO_N4", "TITULO_N5"})
+        )
+        if inline_heading and i + 1 < len(parrafos):
             if _normalizar_categoria(parrafos[i + 1].categoria) == "PARRAFO_NORMAL":
                 paragraph = doc.add_paragraph()
                 configurar_parrafo_estilo(paragraph, cat, reglas, body_text=parrafos[i + 1].texto.strip())
@@ -398,12 +402,7 @@ async def generar_final(
                 heading_texto += " " + parrafos[i + 1].texto.strip()
                 i += 1
             ref_h = doc.add_paragraph(heading_texto)
-            ref_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for run in ref_h.runs:
-                run.bold = datos.edicion != "6ta"
-                run.font.name, run.font.size = reglas["fuente"], Pt(reglas["tamano"])
-            ref_h.paragraph_format.space_before = Pt(12)
-            ref_h.paragraph_format.space_after  = Pt(12)
+            configurar_parrafo_estilo(ref_h, "TITULO_N1", reglas)
             reference_started = True
             paragraph_counter += 1
             i += 1
@@ -413,12 +412,7 @@ async def generar_final(
             if paragraph_counter > 0:
                 doc.add_page_break()
             ref_h = doc.add_paragraph("Referencias")
-            ref_h.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            for run in ref_h.runs:
-                run.bold = datos.edicion != "6ta"
-                run.font.name, run.font.size = reglas["fuente"], Pt(reglas["tamano"])
-            ref_h.paragraph_format.space_before = Pt(12)
-            ref_h.paragraph_format.space_after  = Pt(12)
+            configurar_parrafo_estilo(ref_h, "TITULO_N1", reglas)
             reference_started = True
 
         if reference_started and cat == "REFERENCIA":

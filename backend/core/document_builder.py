@@ -59,8 +59,8 @@ NORMAS_APA = {
             "N1": {"bold": True,  "italic": False, "align": "center"},
             "N2": {"bold": True,  "italic": False, "align": "left"},
             "N3": {"bold": True,  "italic": False, "align": "left"},
-            "N4": {"bold": True,  "italic": False, "align": "indent"},
-            "N5": {"bold": True,  "italic": True,  "align": "indent"},
+            "N4": {"bold": True,  "italic": True,  "align": "indent"},
+            "N5": {"bold": False, "italic": True,  "align": "indent"},
         },
     },
     "7ma": {
@@ -222,7 +222,9 @@ def _ordenar_referencia_por_autor(texto: str) -> str:
 # ESTILOS DE PÁRRAFO APA
 # ═══════════════════════════════════════════════════════════
 
-def configurar_parrafo_estilo(paragraph, categoria: str, reglas: dict, body_text: str = None) -> None:
+def configurar_parrafo_estilo(
+    paragraph, categoria: str, reglas: dict, body_text: str = None
+) -> None:
     """
     Aplica el estilo APA correspondiente a un párrafo de documento Word.
 
@@ -230,7 +232,7 @@ def configurar_parrafo_estilo(paragraph, categoria: str, reglas: dict, body_text
         paragraph: Objeto párrafo de python-docx.
         categoria: Categoría del párrafo (TITULO_N1, REFERENCIA, PARRAFO_NORMAL, etc.).
         reglas: Dict con las reglas APA activas (fuente, tamaño, sangrías, etc.).
-        body_text: Texto del cuerpo que se fusiona con títulos N3-N5 en 6ta edición.
+        body_text: Texto del cuerpo que continúa en la misma línea del encabezado.
     """
     categoria = _normalizar_categoria(categoria)
     pf = paragraph.paragraph_format
@@ -240,43 +242,46 @@ def configurar_parrafo_estilo(paragraph, categoria: str, reglas: dict, body_text
     pf.keep_together     = False
     pf.first_line_indent = Inches(0)
     pf.left_indent       = Inches(0)
-    paragraph.alignment  = WD_ALIGN_PARAGRAPH.JUSTIFY
+    paragraph.alignment  = WD_ALIGN_PARAGRAPH.LEFT
 
     if categoria.startswith("TITULO"):
         nivel   = categoria.split("_")[-1] if "_" in categoria else "N1"
         edicion = reglas.get("edicion", "7ma")
-        paragraph.text       = formatear_titulo_por_nivel(paragraph.text, nivel, edicion)
-        pf.space_before      = Pt(12)
-        pf.space_after       = Pt(0)
-        pf.keep_with_next    = True
-        pf.first_line_indent = Inches(0)
-        pf.left_indent       = Inches(0)
-
-        heading_map = {"N1": "Heading 1", "N2": "Heading 2"}
-        if edicion == "6ta" and nivel in {"N3", "N4", "N5"}:
-            paragraph.style      = "Normal"
-            pf.left_indent       = Inches(reglas["sangria_primera_linea"])
-            pf.first_line_indent = Inches(0)
-        else:
-            paragraph.style = heading_map.get(nivel, "Heading 1")
-            if nivel in {"N3", "N4", "N5"}:
-                pf.left_indent = Inches(reglas["sangria_primera_linea"])
-
-        bold_italic_align = {
-            "N1": (True,  False, WD_ALIGN_PARAGRAPH.CENTER),
-            "N2": (True,  False, WD_ALIGN_PARAGRAPH.LEFT),
-            "N3": (True,  False, WD_ALIGN_PARAGRAPH.LEFT),
-            "N4": (True,  True,  WD_ALIGN_PARAGRAPH.LEFT),
-            "N5": (False, True,  WD_ALIGN_PARAGRAPH.LEFT),
+        inline_heading = (
+            (edicion == "6ta" and nivel in {"N3", "N4", "N5"})
+            or (edicion == "7ma" and nivel in {"N4", "N5"})
+        )
+        heading_styles = {
+            "6ta": {
+                "N1": (True, False, WD_ALIGN_PARAGRAPH.CENTER),
+                "N2": (True, False, WD_ALIGN_PARAGRAPH.LEFT),
+                "N3": (True, False, WD_ALIGN_PARAGRAPH.LEFT),
+                "N4": (True, True, WD_ALIGN_PARAGRAPH.LEFT),
+                "N5": (False, True, WD_ALIGN_PARAGRAPH.LEFT),
+            },
+            "7ma": {
+                "N1": (True, False, WD_ALIGN_PARAGRAPH.CENTER),
+                "N2": (True, False, WD_ALIGN_PARAGRAPH.LEFT),
+                "N3": (True, True, WD_ALIGN_PARAGRAPH.LEFT),
+                "N4": (True, False, WD_ALIGN_PARAGRAPH.LEFT),
+                "N5": (True, True, WD_ALIGN_PARAGRAPH.LEFT),
+            },
         }
-        bold, italic, align = bold_italic_align.get(nivel, (True, False, WD_ALIGN_PARAGRAPH.LEFT))
+        bold, italic, align = heading_styles.get(edicion, heading_styles["7ma"]).get(
+            nivel, (True, False, WD_ALIGN_PARAGRAPH.LEFT)
+        )
         paragraph.alignment = align
+        paragraph.style = "Normal" if inline_heading else f"Heading {nivel[-1]}"
+        pf.keep_with_next = not inline_heading
+        if inline_heading:
+            pf.first_line_indent = Inches(reglas["sangria_primera_linea"])
+        else:
+            pf.first_line_indent = Inches(0)
 
-        # Títulos N3-N5 en 6ta edición: título + punto + texto en el mismo párrafo
-        if body_text and edicion == "6ta" and nivel in {"N3", "N4", "N5"}:
-            heading_text = formatear_titulo_por_nivel(paragraph.text, nivel, edicion)
-            if not heading_text.strip().endswith('.'):
-                heading_text = heading_text.rstrip() + '.'
+        if body_text and inline_heading:
+            heading_text = paragraph.text.strip()
+            if not heading_text.endswith("."):
+                heading_text += "."
             paragraph.text = ""
             hr = paragraph.add_run(heading_text)
             hr.bold, hr.italic, hr.font.name, hr.font.size = (
@@ -289,8 +294,8 @@ def configurar_parrafo_estilo(paragraph, categoria: str, reglas: dict, body_text
             )
             return
 
-        if edicion == "6ta" and nivel in {"N3", "N4", "N5"} and not paragraph.text.strip().endswith('.'):
-            paragraph.text = paragraph.text.rstrip() + '.'
+        if inline_heading and not paragraph.text.strip().endswith("."):
+            paragraph.text = paragraph.text.rstrip() + "."
 
         from docx.shared import RGBColor
         for run in paragraph.runs:
@@ -321,7 +326,7 @@ def configurar_parrafo_estilo(paragraph, categoria: str, reglas: dict, body_text
 
     # PARRAFO_NORMAL (default)
     pf.first_line_indent = Inches(reglas["sangria_primera_linea"])
-    paragraph.alignment  = WD_ALIGN_PARAGRAPH.JUSTIFY
+    paragraph.alignment  = WD_ALIGN_PARAGRAPH.LEFT
     for run in paragraph.runs:
         run.font.name, run.font.size = reglas["fuente"], Pt(reglas["tamano"])
 
@@ -351,13 +356,10 @@ def _insertar_tabla_de_contenidos(doc) -> None:
 
 
 def _configurar_encabezado_paginas(doc) -> None:
-    """Configura el encabezado de páginas con número de página centrado."""
-    for i, section in enumerate(doc.sections):
+    """Configura el número de página alineado a la derecha, incluso en portada."""
+    for section in doc.sections:
         section.header.is_linked_to_previous = False
-        
-        # Ocultar el número en la primera página (portada)
-        if i == 0:
-            section.different_first_page_header_footer = True
+        section.different_first_page_header_footer = False
             
         header = section.header
         paragraph = header.paragraphs[0] if header.paragraphs else header.add_paragraph()
