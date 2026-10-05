@@ -1,0 +1,69 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: docai_backend
+    restart: always
+    # Exponemos el backend solo si se requiere depuración directa; de lo contrario Nginx se encarga
+    # ports:
+    #   - "8000:8000"
+    environment:
+      # Conexión al servidor MySQL central compartido (Ahorro de ~450MB RAM en VPS)
+      - DB_HOST=84.46.240.252
+      - DB_PORT=3306
+      - DB_USER=root
+      - DB_USERNAME=root
+      # Los signos $ se escapan como $$ para que Docker Compose no los interprete como variables vacías
+      - DB_PASS=Tr1pl3$$g0rdo$$M4ld1t0$$
+      - DB_PASSWORD=Tr1pl3$$g0rdo$$M4ld1t0$$
+      - DB_NAME=docai_db
+      - DB_DATABASE=docai_db
+
+      # Usuario Administrador inicial (se autoseedeará si la BD no tiene usuarios)
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@docai.com}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-Admin123456!}
+
+      # Entorno de ejecución
+      - ENVIRONMENT=production
+
+      # APIs de Inteligencia Artificial (Groq)
+      - GROQ_API_KEY_1=${GROQ_API_KEY_1:-}
+      - GROQ_API_KEY_2=${GROQ_API_KEY_2:-}
+      - GROQ_API_KEY_3=${GROQ_API_KEY_3:-}
+      - GROQ_API_KEY_4=${GROQ_API_KEY_4:-}
+      - GROQ_API_KEY_5=${GROQ_API_KEY_5:-}
+      - GROQ_API_KEY_6=${GROQ_API_KEY_6:-}
+      - GROQ_API_KEY_7=${GROQ_API_KEY_7:-}
+      - GROQ_API_KEY_8=${GROQ_API_KEY_8:-}
+
+      # Pasarelas de Pago (PayPal y Binance)
+      - PAYPAL_CLIENT_ID_LIVE=${PAYPAL_CLIENT_ID_LIVE:-}
+      - PAYPAL_CLIENT_SECRET_LIVE=${PAYPAL_CLIENT_SECRET_LIVE:-}
+      - PAYPAL_CLIENT_ID_SANDBOX=${PAYPAL_CLIENT_ID_SANDBOX:-}
+      - PAYPAL_CLIENT_SECRET_SANDBOX=${PAYPAL_CLIENT_SECRET_SANDBOX:-}
+      - PAYPAL_MODE=${PAYPAL_MODE:-live}
+      - BINANCE_API_KEY=${BINANCE_API_KEY:-}
+      - BINANCE_API_SECRET=${BINANCE_API_SECRET:-}
+
+      # Notificaciones Push PWA y Publicidad
+      - VAPID_PUBLIC_KEY=${VAPID_PUBLIC_KEY:-}
+      - VAPID_PRIVATE_KEY=${VAPID_PRIVATE_KEY:-}
+      - Adsterra_API_KEY=${Adsterra_API_KEY:-}
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/processed:/app/processed
+      - ./backend/fonts:/app/fonts
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: docai_frontend
+    restart: always
+    ports:
+      - "80:80"  # Expone la aplicación web en el puerto 80 del VPS
+    depends_on:
+      - backend

@@ -24,8 +24,14 @@ COPY . .
 # Asegurar carpetas de almacenamiento
 RUN mkdir -p uploads processed
 
+# Normalizar saltos de línea CRLF de Windows a LF y otorgar permisos de ejecución al entrypoint
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod +x /app/docker-entrypoint.sh
+
 # Exponer el puerto
 EXPOSE 8000
 
-# Ejecutar el backend
+# Configurar el entrypoint para inicialización automática
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+
+# Ejecutar el backend por defecto
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

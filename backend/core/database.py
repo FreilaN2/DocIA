@@ -1,5 +1,6 @@
 import os
 import traceback
+import urllib.parse
 from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -9,17 +10,19 @@ import logging
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASS = os.getenv("DB_PASS", "")
+DB_USER = os.getenv("DB_USER") or os.getenv("DB_USERNAME") or "root"
+DB_PASS = os.getenv("DB_PASS") if os.getenv("DB_PASS") is not None else os.getenv("DB_PASSWORD", "")
 DB_HOST = os.getenv("DB_HOST", "127.0.0.1")
 if DB_HOST == "localhost":
     DB_HOST = "127.0.0.1"
-# DB_NAME: intentar múltiples variables que Railway puede usar
+
+# DB_NAME: soporte para DB_NAME, DB_DATABASE, variables de Railway y fallback a docai_db
 DB_NAME = (
     os.getenv("DB_NAME")
+    or os.getenv("DB_DATABASE")
     or os.getenv("MYSQLDATABASE")       # Railway: sin guion bajo
     or os.getenv("MYSQL_DATABASE")      # Railway: con guion bajo
-    or "railway"                        # Nombre por defecto en Railway
+    or "docai_db"
 )
 DB_PORT = os.getenv("DB_PORT", "3306") or "3306"
 
@@ -32,8 +35,10 @@ if RAILWAY_MYSQL_URL:
     DATABASE_URL = RAILWAY_MYSQL_URL.replace("mysql://", "mysql+pymysql://", 1)
     logger.info(f"🚂 Usando MYSQL_URL de Railway")
 else:
-    DATABASE_URL = f"mysql+pymysql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
-    logger.info(f"🗄️ Usando variables DB_* individuales: host={DB_HOST}:{DB_PORT}")
+    # Escapar de forma segura la contraseña para la URL de SQLAlchemy
+    quoted_pass = urllib.parse.quote_plus(DB_PASS)
+    DATABASE_URL = f"mysql+pymysql://{DB_USER}:{quoted_pass}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+    logger.info(f"🗄️ Usando variables DB individuales: host={DB_HOST}:{DB_PORT} db={DB_NAME} user={DB_USER}")
 
 engine = create_engine(
     DATABASE_URL,
@@ -100,9 +105,31 @@ def _run_safe_migrations(conn):
         conn.rollback()
 
 
+def ensure_database_exists():
+    """
+    Se conecta al servidor MySQL sin especificar base de datos
+    y crea DB_NAME si aún no existe (con codificación utf8mb4).
+    """
+    try:
+        import pymysql
+        conn = pymysql.connect(
+            host=DB_HOST,
+            port=int(DB_PORT),
+            user=DB_USER,
+            password=DB_PASS,
+            connect_timeout=10,
+            autocommit=True
+        )
+        with conn.cursor() as cur:
+            cur.execute(f"CREATE DATABASE IF NOT EXISTS `{DB_NAME}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci")
+        conn.close()
+        logger.info(f"✅ Base de datos '{DB_NAME}' verificada/creada exitosamente en {DB_HOST}:{DB_PORT}.")
+    except Exception as e:
+        logger.warning(f"⚠️ ensure_database_exists: aviso al verificar/crear base de datos ({e}). Continuando...")
+
+
 def init_db():
-    # BLINDAJE 3: Eliminado el CREATE DATABASE porque cPanel no lo permite.
-    # Conectamos directo a las tablas.
+    ensure_database_exists()
     
     from . import models
     Base.metadata.create_all(bind=engine)
@@ -112,7 +139,8 @@ def init_db():
 
     db = SessionLocal()
     try:
-        from .models import Plan, TokenPack
+        from .models import Plan, TokenPack, User, TokenBalance
+        from .auth import get_password_hash
 
         if db.query(Plan).count() == 0:
             db.add_all([
@@ -131,6 +159,42 @@ def init_db():
             db.commit()
             logger.info("✅ Paquetes de tokens insertados.")
 
+        # Seed automático si la base de datos es nueva o no tiene usuarios
+        if db.query(User).count() == 0:
+            admin_email = os.getenv("ADMIN_EMAIL", "admin@docai.com")
+            admin_pass  = os.getenv("ADMIN_PASSWORD", "Admin123456!")
+
+            pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
+            default_plan_id = pro_plan.id if pro_plan else 1
+
+            initial_admin = User(
+                first_name="Admin",
+                last_name="DocAI",
+                email=admin_email,
+                phone=None,
+                password_hash=get_password_hash(admin_pass),
+                country="Global",
+                is_email_verified=True,
+                is_active=True,
+                is_admin=True,
+                plan_id=default_plan_id
+            )
+            db.add(initial_admin)
+            db.flush()
+
+            token_bal = TokenBalance(
+                user_id=initial_admin.id,
+                monthly_tokens=1000,
+                extra_tokens=500
+            )
+            db.add(token_bal)
+            db.commit()
+            logger.info(f"✅ Seeder inicial: Usuario Administrador inicial creado ({admin_email}).")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"❌ Error durante la ejecución de seeders: {e}")
+        raise
     finally:
         db.close()
 
