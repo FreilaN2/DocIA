@@ -250,6 +250,7 @@ def _intentar_con_modelo(
                 response_format={"type": "json_object"},
             )
 
+            tokens_usados = response.usage.total_tokens if response.usage else 0
             pool.register_usage(key_id, modelo)
 
             content = response.choices[0].message.content
