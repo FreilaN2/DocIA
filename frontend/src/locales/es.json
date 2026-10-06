@@ -200,7 +200,8 @@
     "setup_password_submit": "Guardar contraseña",
     "error_wrong_current_password": "La contraseña actual es incorrecta.",
     "error_changing_password": "Error al cambiar contraseña",
-    "error_updating_profile": "Error al actualizar el perfil"
+    "error_updating_profile": "Error al actualizar el perfil",
+    "error_loading_profile": "Error al cargar el perfil."
   },
   "upgrade": {
     "title": "Potencia tu investigación",

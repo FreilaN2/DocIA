@@ -48,7 +48,12 @@ function App() {
         
         if (oldDataStr) {
           const oldData = JSON.parse(oldDataStr);
-          if (newData.plan !== oldData.plan || newData.tokens !== oldData.tokens || updated) {
+          if (
+            newData.plan !== oldData.plan ||
+            newData.tokens !== oldData.tokens ||
+            newData.passwordSetupRequired !== oldData.passwordSetupRequired ||
+            updated
+          ) {
             localStorage.setItem('user', JSON.stringify(newData));
             window.dispatchEvent(new Event('storage'));
           }

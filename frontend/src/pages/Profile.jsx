@@ -47,6 +47,7 @@ export default function Profile() {
   const [showNewPassword, setShowNewPassword] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
     try {
       const stored = localStorage.getItem('user');
       if (stored) {
@@ -60,7 +61,34 @@ export default function Profile() {
           country: parsed.country || '',
         });
       }
-    } catch (e) { setUser(null); }
+    } catch {
+      setUser(null);
+    }
+
+    if (localStorage.getItem('token')) {
+      api.get('/user/me')
+        .then(({ data }) => {
+          if (!isMounted) return;
+          setUser(data);
+          localStorage.setItem('user', JSON.stringify(data));
+          setProfileForm({
+            firstName: data.firstName || '',
+            lastName: data.lastName || '',
+            phone: data.phone || '',
+            country: data.country || '',
+          });
+          setIsChangingPassword(Boolean(data.passwordSetupRequired));
+        })
+        .catch((err) => {
+          if (isMounted) {
+            toast.error(err.response?.data?.detail || t('profile.error_loading_profile'));
+          }
+        });
+    }
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   useEffect(() => {

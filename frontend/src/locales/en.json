@@ -199,7 +199,8 @@
     "setup_password_submit": "Save password",
     "error_wrong_current_password": "Current password is incorrect.",
     "error_changing_password": "Error changing password",
-    "error_updating_profile": "Error updating profile"
+    "error_updating_profile": "Error updating profile",
+    "error_loading_profile": "Error loading profile."
   },
   "upgrade": {
     "title": "Power up your research",
