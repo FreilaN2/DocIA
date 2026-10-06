@@ -97,6 +97,8 @@ export default function Navbar() {
     setUser(null);
     setIsPro(false);
     setShowLogoutConfirm(false);
+    window.dispatchEvent(new Event('storage'));
+    window.dispatchEvent(new Event('authChange'));
     navigate('/');
   }, [navigate]);
 

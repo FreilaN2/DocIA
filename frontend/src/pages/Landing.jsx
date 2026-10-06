@@ -19,6 +19,10 @@ export default function Landing() {
     if (userStr) {
       try {
         const user = JSON.parse(userStr);
+        if (user.passwordSetupRequired) {
+          navigate('/profile', { replace: true });
+          return;
+        }
         const plan = user.plan === 'pro' ? 'pro' : 'free';
         navigate(`/editor/${plan}`, { replace: true });
       } catch (e) {

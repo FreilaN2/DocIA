@@ -1,5 +1,5 @@
-import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import React, { useEffect, useState, useCallback } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { toast } from 'react-hot-toast';
 import api from './api';
@@ -15,6 +15,72 @@ import Tools from './pages/Tools';
 import AdminPanel from './pages/AdminPanel';
 import InstallPWA from './components/InstallPWA';
 import NotFound from './pages/NotFound';
+
+function getRequiresPasswordSetup() {
+  try {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (!token || !userStr) return false;
+    const user = JSON.parse(userStr);
+    return Boolean(user && user.passwordSetupRequired);
+  } catch {
+    return false;
+  }
+}
+
+function AppRoutes() {
+  const location = useLocation();
+  const [mustSetupPassword, setMustSetupPassword] = useState(getRequiresPasswordSetup);
+
+  const syncAuthState = useCallback(() => {
+    setMustSetupPassword(getRequiresPasswordSetup());
+  }, []);
+
+  useEffect(() => {
+    syncAuthState();
+  }, [location.pathname, syncAuthState]);
+
+  useEffect(() => {
+    window.addEventListener('storage', syncAuthState);
+    window.addEventListener('authChange', syncAuthState);
+    return () => {
+      window.removeEventListener('storage', syncAuthState);
+      window.removeEventListener('authChange', syncAuthState);
+    };
+  }, [syncAuthState]);
+
+  const shouldRedirectToProfile = (mustSetupPassword || getRequiresPasswordSetup()) && location.pathname !== '/profile';
+
+  useEffect(() => {
+    if (shouldRedirectToProfile) {
+      toast(i18n.t('profile.setup_password_required_toast'), {
+        id: 'force-password-setup',
+        icon: '🔒',
+        duration: 4000,
+      });
+    }
+  }, [shouldRedirectToProfile, location.pathname]);
+
+  if (shouldRedirectToProfile) {
+    return <Navigate to="/profile" replace />;
+  }
+
+  return (
+    <Routes>
+      <Route path="/" element={<Landing />} />
+      <Route path="/profile" element={<Profile />} />
+      <Route path="/editor/:plan" element={<Editor />} />
+      <Route path="/login" element={<Auth />} />
+      <Route path="/register" element={<Auth />} />
+      <Route path="/upgrade" element={<Upgrade />} />
+      <Route path="/support" element={<Support />} />
+      <Route path="/tools" element={<Tools />} />
+      <Route path="/pago/exitoso" element={<PaymentSuccess />} />
+      <Route path="/panel" element={<AdminPanel />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+}
 
 function App() {
   // Efecto polling de usuario y pagos
@@ -56,20 +122,26 @@ function App() {
           ) {
             localStorage.setItem('user', JSON.stringify(newData));
             window.dispatchEvent(new Event('storage'));
+            window.dispatchEvent(new Event('authChange'));
           }
         } else {
           localStorage.setItem('user', JSON.stringify(newData));
           window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new Event('authChange'));
         }
       } catch (err) {
         // Silently fail, user might just be offline or token expired (handled elsewhere)
       }
     };
 
+    pollUser();
     const interval = setInterval(pollUser, 15000);
-    setTimeout(pollUser, 3000);
+    const timeout = setTimeout(pollUser, 3000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
   }, []);
 
   //Efecto para notificaciones push
@@ -109,19 +181,7 @@ function App() {
       
       <InstallPWA />
 
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/editor/:plan" element={<Editor />} />
-        <Route path="/login" element={<Auth />} />
-        <Route path="/register" element={<Auth />} />
-        <Route path="/upgrade" element={<Upgrade />} />
-        <Route path="/support" element={<Support />} />
-        <Route path="/tools" element={<Tools />} />
-        <Route path="/pago/exitoso" element={<PaymentSuccess />} />
-        <Route path="/panel" element={<AdminPanel />} />
-        <Route path="*" element={<NotFound />} />
-      </Routes>
+      <AppRoutes />
     </Router>
   );
 }

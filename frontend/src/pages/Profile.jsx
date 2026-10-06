@@ -48,22 +48,30 @@ export default function Profile() {
 
   useEffect(() => {
     let isMounted = true;
-    try {
-      const stored = localStorage.getItem('user');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        setUser(parsed);
-        if (parsed.passwordSetupRequired) setIsChangingPassword(true);
-        setProfileForm({
-          firstName: parsed.firstName || '',
-          lastName: parsed.lastName || '',
-          phone: parsed.phone || '',
-          country: parsed.country || '',
-        });
+    const syncFromStorage = () => {
+      try {
+        const stored = localStorage.getItem('user');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          setUser(parsed);
+          if (parsed.passwordSetupRequired) setIsChangingPassword(true);
+          setProfileForm({
+            firstName: parsed.firstName || '',
+            lastName: parsed.lastName || '',
+            phone: parsed.phone || '',
+            country: parsed.country || '',
+          });
+        } else {
+          setUser(null);
+        }
+      } catch {
+        setUser(null);
       }
-    } catch {
-      setUser(null);
-    }
+    };
+
+    syncFromStorage();
+    window.addEventListener('storage', syncFromStorage);
+    window.addEventListener('authChange', syncFromStorage);
 
     if (localStorage.getItem('token')) {
       api.get('/user/me')
@@ -71,16 +79,20 @@ export default function Profile() {
           if (!isMounted) return;
           setUser(data);
           localStorage.setItem('user', JSON.stringify(data));
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new Event('authChange'));
           setProfileForm({
             firstName: data.firstName || '',
             lastName: data.lastName || '',
             phone: data.phone || '',
             country: data.country || '',
           });
-          setIsChangingPassword(Boolean(data.passwordSetupRequired));
+          if (data.passwordSetupRequired) {
+            setIsChangingPassword(true);
+          }
         })
         .catch((err) => {
-          if (isMounted) {
+          if (isMounted && err.response?.status !== 401) {
             toast.error(err.response?.data?.detail || t('profile.error_loading_profile'));
           }
         });
@@ -88,6 +100,8 @@ export default function Profile() {
 
     return () => {
       isMounted = false;
+      window.removeEventListener('storage', syncFromStorage);
+      window.removeEventListener('authChange', syncFromStorage);
     };
   }, []);
 
@@ -117,6 +131,8 @@ export default function Profile() {
       const res = await api.put('/user/me', profileForm);
       if (res.data.status === 'success') {
         localStorage.setItem('user', JSON.stringify(res.data.user));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
         setUser(res.data.user);
         setIsEditingProfile(false);
         toast.success(t('profile.updated') || 'Perfil actualizado', { icon: '✅' });
@@ -156,10 +172,11 @@ export default function Profile() {
         ? await api.post('/auth/set-password', { new_password: pwd })
         : await api.post('/auth/change-password', passwordForm);
       if (res.data.status === 'success') {
-        if (res.data.user) {
-          setUser(res.data.user);
-          localStorage.setItem('user', JSON.stringify(res.data.user));
-        }
+        const updatedUser = res.data.user || { ...user, passwordSetupRequired: false };
+        setUser(updatedUser);
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
         setIsChangingPassword(false);
         setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
         toast.success(t('profile.password_updated') || 'Contraseña actualizada', { icon: '🔐' });
@@ -465,7 +482,7 @@ export default function Profile() {
           </motion.div>
         )}
 
-        {isChangingPassword && (
+        {(isChangingPassword || user.passwordSetupRequired) && (
           <motion.div
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm"
@@ -497,17 +514,17 @@ export default function Profile() {
                 )}
                 <div className="relative">
                   <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('profile.new_password')}</label>
-                  <input required minLength={8} type={showNewPassword ? "text" : "password"} value={passwordForm.new_password} onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})} className="w-full p-3 pr-10 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm" />
+                  <input required minLength={8} type={showNewPassword ? "text" : "password"} placeholder="••••••••" value={passwordForm.new_password} onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})} className="w-full p-3 pr-10 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm" />
                   <button type="button" onClick={() => setShowNewPassword(!showNewPassword)} className="absolute right-3 top-[34px] text-slate-500 hover:text-on-surface focus:outline-none">
                     <span className="material-symbols-outlined text-[20px]">{showNewPassword ? 'visibility_off' : 'visibility'}</span>
                   </button>
                 </div>
-                {passwordForm.new_password.length > 0 && (() => {
+                {(user.passwordSetupRequired || passwordForm.new_password.length > 0) && (() => {
                   const reqs = [
-                    { ok: passwordForm.new_password.length >= 8,          label: t('auth.pwd_min_length') || 'Mínimo 8 caracteres' },
-                    { ok: /[A-Z]/.test(passwordForm.new_password),        label: t('auth.pwd_uppercase') || '1 letra mayúscula' },
-                    { ok: /[0-9]/.test(passwordForm.new_password),        label: t('auth.pwd_number') || '1 número' },
-                    { ok: /[^A-Za-z0-9]/.test(passwordForm.new_password), label: t('auth.pwd_special') || '1 caracter especial' },
+                    { ok: passwordForm.new_password.length >= 8,          label: t('auth.pwd_min_length') },
+                    { ok: /[A-Z]/.test(passwordForm.new_password),        label: t('auth.pwd_uppercase') },
+                    { ok: /[0-9]/.test(passwordForm.new_password),        label: t('auth.pwd_number') },
+                    { ok: /[^A-Za-z0-9]/.test(passwordForm.new_password), label: t('auth.pwd_special') },
                   ];
                   const allOk = reqs.every(r => r.ok);
                   return (
@@ -520,7 +537,7 @@ export default function Profile() {
                       transition: 'all 0.2s',
                     }}>
                       <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: allOk ? '#16a34a' : '#6b7280', marginBottom: '6px' }}>
-                        {allOk ? `🔒 ${t('auth.pwd_secure') || 'Contraseña segura'}` : (t('auth.pwd_requirements') || 'Requisitos')}
+                        {allOk ? `✅ ${t('auth.pwd_secure')}` : t('auth.pwd_requirements')}
                       </p>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                         {reqs.map((r, i) => (
@@ -536,11 +553,12 @@ export default function Profile() {
                   );
                 })()}
                 {user.passwordSetupRequired && (
-                  <div>
+                  <div className="relative">
                     <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('auth.confirm_password')}</label>
                     <input
                       required
-                      type="password"
+                      type={showNewPassword ? "text" : "password"}
+                      placeholder="••••••••"
                       value={passwordForm.confirm_password}
                       onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
                       className="w-full p-3 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm"

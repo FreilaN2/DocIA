@@ -78,6 +78,11 @@ def sync_env_file():
     db_port = os.getenv("DB_PORT") or existing.get("DB_PORT", "3306")
     existing["DB_PORT"] = db_port
 
+    if not existing.get("SECRET_KEY"):
+        import hashlib
+        seed = f"docai-jwt-secret-{db_name}-{db_user}-{db_pass}"
+        existing["SECRET_KEY"] = "docai-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
+
     try:
         with open(env_file, "w", encoding="utf-8") as f:
             for k, v in existing.items():

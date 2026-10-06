@@ -28,6 +28,35 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// Interceptor de respuesta para limpiar sesiones fantasma cuando el token es inválido o expiró (401)
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = error.config?.url || '';
+    const isAuthAttempt =
+      requestUrl.includes('/login') ||
+      requestUrl.includes('/register') ||
+      requestUrl.includes('/auth/google');
+
+    if (error.response?.status === 401 && !isAuthAttempt) {
+      const hadSession = Boolean(localStorage.getItem('token') || localStorage.getItem('user'));
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+
+      if (hadSession) {
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
+
+        const protectedPaths = ['/profile', '/editor/pro', '/pago/exitoso'];
+        if (protectedPaths.some((p) => window.location.pathname.startsWith(p))) {
+          window.location.replace('/login');
+        }
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Create a separate instance for Admin Panel to isolate sessions
 export const adminApi = axios.create({
   baseURL: IS_PRODUCTION 
@@ -47,5 +76,20 @@ adminApi.interceptors.request.use((config) => {
   }
   return config;
 });
+
+adminApi.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const requestUrl = error.config?.url || '';
+    const isAuthAttempt = requestUrl.includes('/login');
+
+    if ((error.response?.status === 401 || error.response?.status === 403) && !isAuthAttempt) {
+      localStorage.removeItem('admin_token');
+      localStorage.removeItem('admin_user');
+      window.dispatchEvent(new Event('storage'));
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

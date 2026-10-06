@@ -312,6 +312,8 @@ export default function Auth() {
       if (response.data.status === 'success') {
         localStorage.setItem('token', response.data.access_token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
 
         if (!isLogin) {
           toast.success(t('auth.account_created'), {
@@ -319,8 +321,12 @@ export default function Auth() {
             style: { borderRadius: '12px', background: '#333', color: '#fff' },
           });
         }
-        const userPlan = response.data.user.plan === 'pro' ? 'pro' : 'free';
-        navigate(`/editor/${userPlan}`);
+        if (response.data.user.passwordSetupRequired) {
+          navigate('/profile', { replace: true });
+        } else {
+          const userPlan = response.data.user.plan === 'pro' ? 'pro' : 'free';
+          navigate(`/editor/${userPlan}`);
+        }
       }
     } catch (err) {
       setError(err.response?.data?.detail || t('auth.unexpected_error'));
@@ -336,14 +342,17 @@ export default function Auth() {
       if (response.data.status === 'success') {
         localStorage.setItem('token', response.data.access_token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
         if (response.data.user.passwordSetupRequired) {
           toast.success(isLogin ? t('auth.welcome') : t('auth.account_created'), {
             style: { background: '#1a1512', color: '#fff', borderRadius: '15px' },
           });
-          navigate('/profile');
+          navigate('/profile', { replace: true });
         } else {
           toast.success(t('auth.welcome'), { style: { background: '#1a1512', color: '#fff', borderRadius: '15px' }, icon: '🚀' });
-          navigate('/editor/free');
+          const userPlan = response.data.user.plan === 'pro' ? 'pro' : 'free';
+          navigate(`/editor/${userPlan}`);
         }
       }
     } catch (err) {

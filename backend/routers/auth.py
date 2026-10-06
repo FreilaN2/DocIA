@@ -83,18 +83,7 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
         "status": "success",
         "access_token": access_token,
         "token_type": "bearer",
-        "user": {
-            "id": new_user.id,
-            "email": new_user.email,
-            "firstName": new_user.first_name,
-            "lastName": new_user.last_name,
-            "phone": new_user.phone,
-            "country": new_user.country,
-            "plan": new_user.plan.name if new_user.plan else "free",
-            "isAdmin": new_user.is_admin,
-            "createdAt": new_user.created_at.isoformat() if getattr(new_user, 'created_at', None) else None,
-            "lastLoginAt": None,
-        },
+        "user": _get_user_dict(new_user, db),
     }
 
 
@@ -216,9 +205,19 @@ def change_password(
         raise HTTPException(status_code=400, detail="Los usuarios registrados con Google no tienen contraseña.")
     if not verify_password(data.current_password, current_user.password_hash):
         raise HTTPException(status_code=400, detail="La contraseña actual es incorrecta.")
-    if len(data.new_password) < 6:
-        raise HTTPException(status_code=400, detail="La nueva contraseña debe tener al menos 6 caracteres.")
+    password = data.new_password
+    if (
+        len(password) < 8
+        or not any(char.isupper() for char in password)
+        or not any(char.isdigit() for char in password)
+        or not any(not char.isalnum() for char in password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial.",
+        )
 
-    current_user.password_hash = get_password_hash(data.new_password)
+    current_user.password_hash = get_password_hash(password)
+    current_user.password_setup_required = False
     db.commit()
-    return {"status": "success", "message": "Contraseña actualizada correctamente"}
+    return {"status": "success", "message": "Contraseña actualizada correctamente", "user": _get_user_dict(current_user, db)}

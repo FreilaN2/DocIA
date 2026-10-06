@@ -37,23 +37,19 @@ if not os.getenv("SECRET_KEY"):
 def _get_secret_key() -> str:
     """
     Obtiene y valida la SECRET_KEY.
-    En producción DEBE estar configurada en variables de entorno.
-    El fallback solo es aceptable en desarrollo local.
+    Usa una clave determinista de respaldo si no está definida en el entorno
+    para evitar invalidar las sesiones JWT al reiniciar el backend.
     """
-    secret = os.getenv("SECRET_KEY")
+    secret = (os.getenv("SECRET_KEY") or "").strip()
     
     if not secret:
-        # Solo permitir fallback en desarrollo explícito
-        if os.getenv("ENVIRONMENT", "development") == "production":
-            raise ValueError(
-                "SECRET_KEY no configurada en entorno de producción. "
-                "Configúrala en variables de entorno."
-            )
+        import hashlib
+        seed = f"docai-jwt-secret-{os.getenv('DB_NAME', 'docai_db')}-{os.getenv('DB_USER', 'root')}-{os.getenv('DB_PASS', 'docai')}"
+        secret = "docai-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
         logger.warning(
-            "⚠️  SECRET_KEY no configurada. Usando clave de desarrollo. "
-            "NO USAR EN PRODUCCIÓN."
+            "⚠️  SECRET_KEY no configurada en variables de entorno. "
+            "Usando clave determinista persistente para mantener sesiones tras reinicios."
         )
-        secret = "docai-dev-key-change-in-production-" + os.urandom(16).hex()
     
     # FIX #7: Validar longitud mínima para seguridad
     if len(secret) < 32:
@@ -74,7 +70,7 @@ ALGORITHM: str = "HS256"
 
 # Duraciones de tokens pre-calculadas
 ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 7  # 1 semana
-ACCESS_TOKEN_DEFAULT_EXPIRE: timedelta = timedelta(minutes=15)
+ACCESS_TOKEN_DEFAULT_EXPIRE: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 ACCESS_TOKEN_FULL_EXPIRE: timedelta = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 REFRESH_TOKEN_EXPIRE: timedelta = timedelta(days=30)  # Para futuro uso
 

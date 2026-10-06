@@ -194,6 +194,7 @@
     "change_password_title": "Cambiar Contraseña",
     "setup_password_title": "Configura tu contraseña",
     "setup_password_desc": "Tu cuenta de Google ya está creada. Define y confirma una contraseña para terminar la configuración de tu cuenta.",
+    "setup_password_required_toast": "Debes configurar tu contraseña antes de continuar usando el sistema.",
     "current_password": "Contraseña Actual",
     "new_password": "Nueva Contraseña",
     "update_password": "Actualizar Contraseña",

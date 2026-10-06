@@ -117,7 +117,7 @@ export default function AdminPanel() {
           adminApi.get('/admin/pagos')
             .then(resp => setPagos(resp.data))
             .catch(err => {
-              if (err.response?.status === 403) {
+              if (err.response?.status === 403 || err.response?.status === 401) {
                 setIsAdmin(false);
                 localStorage.removeItem('admin_token');
                 localStorage.removeItem('admin_user');
@@ -199,9 +199,11 @@ export default function AdminPanel() {
       setPagos(resp.data);
       fetchHistorial();
     } catch (err) {
-      if (err.response?.status === 403) {
+      if (err.response?.status === 403 || err.response?.status === 401) {
         toast.error('Sesión expirada o acceso denegado.');
         setIsAdmin(false);
+        localStorage.removeItem('admin_token');
+        localStorage.removeItem('admin_user');
       } else {
         toast.error('Error cargando pagos pendientes');
       }
