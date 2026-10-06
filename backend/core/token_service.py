@@ -9,12 +9,12 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-TOKENS_PER_GROQ_UNIT = 100  # 1 Token DocAI = 100 tokens reales de Groq
+TOKENS_PER_GEMINI_UNIT = 100  # 1 Token DocAI = 100 tokens reales de GEMINI
 
 
-def groq_tokens_to_docai(groq_tokens: int) -> int:
-    """Convierte tokens reales de Groq a tokens DocAI (redondeando hacia arriba)."""
-    return max(1, -(-groq_tokens // TOKENS_PER_GROQ_UNIT))  # ceil division
+def gemini_tokens_to_docai(gemini_tokens: int) -> int:
+    """Convierte tokens reales de GEMINI a tokens DocAI (redondeando hacia arriba)."""
+    return max(1, -(-gemini_tokens // TOKENS_PER_GEMINI_UNIT))  # ceil division
 
 
 def get_or_create_balance(user_id: int, db: Session) -> TokenBalance:
@@ -87,14 +87,14 @@ def get_available_tokens(user_id: int, db: Session) -> dict:
     }
 
 
-def consume_tokens(user_id: int, groq_tokens_used: int, document_name: str, db: Session) -> dict:
+def consume_tokens(user_id: int, gemini_tokens_used: int, document_name: str, db: Session) -> dict:
     """
     Descuenta los tokens consumidos del saldo del usuario.
     Primero consume los tokens mensuales; si se agotan, usa los extras.
     Retorna el nuevo saldo.
     """
     balance = check_and_renew_monthly_tokens(user_id, db)
-    docai_tokens = groq_tokens_to_docai(groq_tokens_used)
+    docai_tokens = gemini_tokens_to_docai(gemini_tokens_used)
 
     remaining = docai_tokens
     source_used = "monthly"

@@ -23,22 +23,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-from core.groq_pool import pool, MODELO_LIGERO, MODELO_PESADO
+from core.gemini_pool import pool, MODELO_LIGERO, MODELO_PESADO
 from core.apa_rules import clasificar_parrafo_reglas, _extraer_rel_imagen
 
 logger = logging.getLogger(__name__)
-
-OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "").strip()
-OPENROUTER_MODEL = (
-    os.getenv("OPENROUTER_MODEL", "").strip()
-    or "poolside/laguna-s-2.1:free"
-)
-AI_PROVIDER = os.getenv(
-    "AI_PROVIDER", "openrouter" if OPENROUTER_API_KEY else "groq"
-).strip().lower()
-
-if AI_PROVIDER not in {"openrouter", "groq"}:
-    raise ValueError("AI_PROVIDER debe ser 'openrouter' o 'groq'.")
 
 # ═══════════════════════════════════════════════════════════
 # CONSTANTES PRECOMPILADAS (FIX #1 y #2)
@@ -90,17 +78,10 @@ _BASE_STATS = {
 
 # ── Configuración (constantes de módulo) ────────────────────────────────────
 UMBRAL_MODELO_SCOUT = 80   # Párrafos: si el doc tiene más, se usa el modelo pesado
-BATCH_SIZE = 10            # Párrafos por lote de clasificación
-DELAY_ENTRE_LOTES = 1.0    # Segundos de respiro entre peticiones al proveedor IA
+BATCH_SIZE = 40            # Párrafos por lote de clasificación
+DELAY_ENTRE_LOTES = 4.0    # Segundos de respiro entre peticiones al proveedor IA
 MAX_RETRIES = 3            # Intentos máximos por lote
-MAX_COMPLETION_TOKENS = 512
-OPENROUTER_REASONING_TOKENS = 64
-OPENROUTER_STRUCTURED_MODEL = "google/gemma-4-31b-it:free"
-OPENROUTER_JSON_MODELS = {
-    OPENROUTER_STRUCTURED_MODEL,
-    "poolside/laguna-s-2.1:free",
-}
-OPENROUTER_NO_TOP_P_MODELS = {"poolside/laguna-s-2.1:free"}
+MAX_COMPLETION_TOKENS = 8192
 
 
 # ═══════════════════════════════════════════════════════════
@@ -169,14 +150,11 @@ def _prompt_para_lote(lista_textos: list[str], json_output: bool = False) -> str
     return template.format(**kwargs)
 
 
-@lru_cache(maxsize=2)
 def _seleccionar_modelo_cached(total_parrafos: int, umbral: int) -> str:
     """
     FIX #7: Selección de modelo cacheada.
     Evita logs repetitivos para el mismo número de párrafos.
     """
-    if AI_PROVIDER == "openrouter":
-        return OPENROUTER_MODEL
     if total_parrafos > umbral:
         return MODELO_PESADO
     return MODELO_LIGERO
@@ -206,7 +184,7 @@ def clasificar_lote_ia(
 ) -> tuple[list[str], int]:
     """
     Clasifica un lote de párrafos con la IA.
-    Retorna (lista_etiquetas, tokens_groq_consumidos).
+    Retorna (lista_etiquetas, tokens_gemini_consumidos).
 
     Fallback chain:
       1. Modelo solicitado (via pool)
@@ -218,11 +196,10 @@ def clasificar_lote_ia(
 
     prompt = _prompt_para_lote(
         lista_textos,
-        json_output=AI_PROVIDER == "openrouter" and modelo in OPENROUTER_JSON_MODELS,
+        json_output=True,
     )
 
-    # OpenRouter usa un único modelo configurado; Groq conserva su selección dual.
-    modelos = (modelo,) if AI_PROVIDER == "openrouter" else (
+    modelos = (
         modelo,
         MODELO_LIGERO if modelo == MODELO_PESADO else MODELO_PESADO,
     )
@@ -240,172 +217,6 @@ def clasificar_lote_ia(
     ], 0
 
 
-def _intentar_con_openrouter(
-    lista_textos: list[str], prompt: str, modelo: str
-) -> tuple[list[str], int] | None:
-    if not OPENROUTER_API_KEY:
-        logger.error("Falta OPENROUTER_API_KEY mientras AI_PROVIDER=openrouter.")
-        return None
-
-    url = "https://openrouter.ai/api/v1/chat/completions"
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    payload = {
-        "model": modelo,
-        "messages": [
-            {"role": "system", "content": PROMPT_INSTRUCTIONS},
-            {"role": "user", "content": prompt},
-        ],
-        "temperature": 0.0,
-        "top_p": 1.0,
-        "max_tokens": MAX_COMPLETION_TOKENS,
-        "reasoning": {
-            "max_tokens": OPENROUTER_REASONING_TOKENS,
-            "exclude": True,
-        },
-    }
-    if modelo in OPENROUTER_NO_TOP_P_MODELS:
-        payload.pop("top_p")
-        payload["reasoning"] = {"enabled": False, "exclude": True}
-    if modelo == OPENROUTER_STRUCTURED_MODEL:
-        payload.pop("reasoning")
-        payload["response_format"] = {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "paragraph_classifications",
-                "strict": True,
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "labels": {
-                            "type": "array",
-                            "items": {
-                                "type": "string",
-                                "enum": sorted(_ETIQUETAS_VALIDAS),
-                            },
-                        }
-                    },
-                    "required": ["labels"],
-                    "additionalProperties": False,
-                },
-            },
-        }
-
-    for attempt in range(MAX_RETRIES):
-        try:
-            response = requests.post(url, headers=headers, json=payload, timeout=60)
-            if response.status_code == 429:
-                logger.warning(
-                    f"OpenRouter limitó el modelo '{modelo}'. "
-                    f"Intento {attempt + 1}/{MAX_RETRIES}."
-                )
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(2 ** attempt)
-                    continue
-                return None
-
-            response.raise_for_status()
-            data = response.json()
-            if not isinstance(data, dict):
-                logger.error("OpenRouter devolvió una respuesta JSON inválida para '%s'.", modelo)
-                return None
-            if "error" in data:
-                api_error = data["error"]
-                error_message = (
-                    api_error.get("message", "error sin descripción")
-                    if isinstance(api_error, dict)
-                    else str(api_error)
-                )
-                logger.error(
-                    "OpenRouter devolvió un error para '%s': %s",
-                    modelo,
-                    error_message,
-                )
-                transient = response.status_code >= 500 or any(
-                    marker in error_message.lower()
-                    for marker in (
-                        "overloaded",
-                        "temporarily unavailable",
-                        "internal server error",
-                    )
-                )
-                if transient and attempt < MAX_RETRIES - 1:
-                    time.sleep(2 ** attempt)
-                    continue
-                return None
-
-            choices = data.get("choices") or []
-            if not choices or not isinstance(choices[0], dict):
-                logger.error(
-                    "OpenRouter no devolvió opciones para '%s' (finish_reason=%s).",
-                    modelo,
-                    data.get("finish_reason", "desconocido"),
-                )
-                return None
-
-            message = choices[0].get("message")
-            if not isinstance(message, dict):
-                logger.error("OpenRouter devolvió un mensaje inválido para '%s'.", modelo)
-                return None
-            content = message.get("content")
-            if not isinstance(content, str) or not content.strip():
-                logger.error("OpenRouter devolvió una respuesta sin contenido.")
-                return None
-
-            usage = data.get("usage")
-            if not isinstance(usage, dict):
-                usage = {}
-            tokens_usados = int(usage.get("total_tokens") or 0)
-            if modelo in OPENROUTER_JSON_MODELS:
-                try:
-                    structured = json.loads(content)
-                    etiquetas = structured.get("labels", [])
-                except (json.JSONDecodeError, AttributeError):
-                    etiquetas = []
-                if (
-                    not isinstance(etiquetas, list)
-                    or any(
-                        not isinstance(etiqueta, str)
-                        or etiqueta not in _ETIQUETAS_VALIDAS
-                        for etiqueta in etiquetas
-                    )
-                ):
-                    etiquetas = []
-            else:
-                etiquetas = _extraer_etiquetas(content.upper())
-
-            if len(etiquetas) != len(lista_textos):
-                logger.warning(
-                    "Respuesta inesperada de OpenRouter. "
-                    f"Esperadas: {len(lista_textos)}, obtenidas: {len(etiquetas)}."
-                )
-                if attempt < MAX_RETRIES - 1:
-                    time.sleep(2 ** attempt)
-                    continue
-                return None
-
-            return etiquetas[:len(lista_textos)], tokens_usados
-        except requests.RequestException as error:
-            status_code = error.response.status_code if error.response else None
-            logger.error(
-                "Error de OpenRouter (HTTP %s, modelo '%s'): %s",
-                status_code or "sin respuesta",
-                modelo,
-                error,
-            )
-            if status_code and status_code < 500:
-                return None
-        except (KeyError, IndexError, TypeError, ValueError) as error:
-            logger.error(f"Respuesta inválida de OpenRouter para '{modelo}': {error}")
-
-        if attempt < MAX_RETRIES - 1:
-            time.sleep(2 ** attempt)
-
-    return None
-
-
 def _intentar_con_modelo(
     lista_textos: list[str], prompt: str, modelo: str
 ) -> tuple[list[str], int] | None:
@@ -418,8 +229,6 @@ def _intentar_con_modelo(
     
     Retorna (etiquetas, tokens) si tiene éxito, None si falla el proveedor.
     """
-    if AI_PROVIDER == "openrouter":
-        return _intentar_con_openrouter(lista_textos, prompt, modelo)
 
     for attempt in range(MAX_RETRIES):
         result = pool.get_best_key(modelo)
@@ -437,21 +246,37 @@ def _intentar_con_modelo(
                 ],
                 temperature=0.0,
                 top_p=1.0,
-                max_completion_tokens=MAX_COMPLETION_TOKENS,
+                max_tokens=MAX_COMPLETION_TOKENS,
+                response_format={"type": "json_object"},
             )
 
-            tokens_usados = response.usage.total_tokens if response.usage else 0
-            pool.register_usage(key_id, modelo, tokens_usados)
+            pool.register_usage(key_id, modelo)
 
-            resultado_raw = response.choices[0].message.content.strip().upper()
-            etiquetas = _extraer_etiquetas(resultado_raw)
+            content = response.choices[0].message.content
+            # Limpiar posible formato markdown de JSON
+            content_clean = content.strip()
+            if content_clean.startswith("```json"):
+                content_clean = content_clean[7:]
+            if content_clean.endswith("```"):
+                content_clean = content_clean[:-3]
+            content_clean = content_clean.strip()
+
+            try:
+                import json
+                structured = json.loads(content_clean)
+                etiquetas = structured.get("labels", [])
+            except Exception:
+                etiquetas = []
+            
+            if not isinstance(etiquetas, list):
+                etiquetas = []
 
             # Validar cantidad de etiquetas
             if len(etiquetas) != len(lista_textos):
                 logger.warning(
                     f"⚠️  Respuesta inesperada del modelo. "
                     f"Esperadas: {len(lista_textos)}, obtenidas: {len(etiquetas)}. "
-                    f"Raw: {resultado_raw[:100]!r}"
+                    f"Raw: {content[:200]!r}"
                 )
                 # Fallback a reglas para este lote específico
                 return (
@@ -478,7 +303,7 @@ def _intentar_con_modelo(
                 return None
 
             # Otros errores
-            logger.error(f"❌ Error en Groq (key #{key_id}, modelo '{modelo}'): {e}")
+            logger.error(f"❌ Error en Gemini (key #{key_id}, modelo '{modelo}'): {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
@@ -501,14 +326,14 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
-    total_groq_tokens = 0
+    total_gemini_tokens = 0
 
     textos_validos, indices_originales, imagen_items = _extraer_textos(doc_paragraphs)
     total_validos = len(textos_validos)
 
     if total_validos == 0 and not imagen_items:
         logger.warning("⚠️  No se encontraron párrafos con texto para procesar.")
-        return {"stats": stats, "detalles": [], "groq_tokens": 0}
+        return {"stats": stats, "detalles": [], "gemini_tokens": 0}
 
     modelo = seleccionar_modelo(total_validos)
     logger.info(f"🤖 Clasificación por lotes — {total_validos} párrafos — modelo: {modelo}")
@@ -524,7 +349,7 @@ def procesar_con_ia(doc_paragraphs) -> dict:
         etiquetas_lote, tokens_lote = clasificar_lote_ia(
             lote_textos, modelo, posicion_inicial=i
         )
-        total_groq_tokens += tokens_lote
+        total_gemini_tokens += tokens_lote
 
         for j, categoria in enumerate(etiquetas_lote):
             idx_original = indices_originales[i + j]
@@ -543,8 +368,8 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     todos = detalles + imagen_items
     todos.sort(key=lambda x: x["id"])
 
-    logger.info(f"✅ Total tokens Groq consumidos: {total_groq_tokens}")
-    return {"stats": stats, "detalles": todos, "groq_tokens": total_groq_tokens}
+    logger.info(f"✅ Total tokens Gemini consumidos: {total_gemini_tokens}")
+    return {"stats": stats, "detalles": todos, "gemini_tokens": total_gemini_tokens}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -576,7 +401,7 @@ async def procesar_con_ia_stream(
     # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
-    total_groq_tokens = 0
+    total_gemini_tokens = 0
 
     # Evento de inicio
     yield {
@@ -593,7 +418,7 @@ async def procesar_con_ia_stream(
             "progreso": 100,
             "stats": stats,
             "detalles": [],
-            "groq_tokens": 0,
+            "gemini_tokens": 0,
         }
         return
 
@@ -603,11 +428,11 @@ async def procesar_con_ia_stream(
         lote_textos = textos_validos[i : i + BATCH_SIZE]
         num_lote = i // BATCH_SIZE + 1
 
-        # Ejecutar la llamada sincrónica a Groq en un thread pool
+        # Ejecutar la llamada sincrónica a Gemini en un thread pool
         etiquetas_lote, tokens_lote = await loop.run_in_executor(
             None, clasificar_lote_ia, lote_textos, modelo, i
         )
-        total_groq_tokens += tokens_lote
+        total_gemini_tokens += tokens_lote
 
         # Construir detalles del lote
         lote_detalles: list[dict] = []
@@ -649,7 +474,7 @@ async def procesar_con_ia_stream(
         "progreso": 100,
         "stats": stats,
         "detalles": todos,
-        "groq_tokens": total_groq_tokens,
+        "gemini_tokens": total_gemini_tokens,
     }
 
 
@@ -695,4 +520,4 @@ def _extraer_textos(doc_paragraphs) -> tuple[list[str], list[int], list[dict]]:
         textos.append(texto)
         indices.append(index)
 
-    return textos, indices, imagen_items
+    return textos, indices, imagen_items

@@ -19,11 +19,12 @@ import os
 import threading
 import logging
 import time
+import json
 from datetime import datetime, timedelta, UTC
 from typing import Optional, Any
 from types import MappingProxyType
 
-from groq import Groq
+from openai import OpenAI
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
@@ -32,20 +33,20 @@ logger = logging.getLogger(__name__)
 # FIX #1: Carga condicional de dotenv (solo si no hay keys)
 # ═══════════════════════════════════════════════════════════
 
-if not os.getenv("GROQ_API_KEY_1"):
+if not os.getenv("GEMINI_API_KEY_1"):
     load_dotenv()
 
 # ═══════════════════════════════════════════════════════════
 # MODELOS Y LÍMITES (constantes inmutables)
 # ═══════════════════════════════════════════════════════════
 
-MODELO_LIGERO: str = "llama-3.3-70b-versatile"
-MODELO_PESADO: str = "meta-llama/llama-4-scout-17b-16e-instruct"
+MODELO_LIGERO: str = "gemini-3.5-flash-lite"
+MODELO_PESADO: str = "gemini-3.5-flash-lite"
 
-# FIX #9: Límites como constante inmutable
+# FIX #9: Límites como constante inmutable (Límites reales de Gemini Free Tier)
 _LIMITES_DICT: dict[str, dict[str, int]] = {
-    MODELO_LIGERO: {"tokens_min": 12_000, "tokens_dia": 100_000},
-    MODELO_PESADO: {"tokens_min": 30_000, "tokens_dia": 500_000},
+    MODELO_LIGERO: {"requests_min": 15, "requests_dia": 1500},
+    MODELO_PESADO: {"requests_min": 15, "requests_dia": 1500},
 }
 LIMITES: MappingProxyType = MappingProxyType(_LIMITES_DICT)
 
@@ -56,14 +57,17 @@ _MODELOS: tuple[str, str] = (MODELO_LIGERO, MODELO_PESADO)
 # CONFIGURACIÓN
 # ═══════════════════════════════════════════════════════════
 
-COOLING_SECONDS: int = int(os.getenv("GROQ_COOLING_SECONDS", "60"))
+COOLING_SECONDS: int = int(os.getenv("Gemini_COOLING_SECONDS", "60"))
 
 # FIX #8: Número máximo de keys configurable
-MAX_KEYS: int = int(os.getenv("GROQ_MAX_KEYS", "8"))
+MAX_KEYS: int = int(os.getenv("Gemini_MAX_KEYS", "8"))
 
 # Timeouts pre-calculados
 _ONE_MINUTE: timedelta = timedelta(minutes=1)
 _COOLING_DELTA: timedelta = timedelta(seconds=COOLING_SECONDS)
+
+# Archivo de estado persistente
+_STATE_FILE: str = os.path.join(os.path.dirname(__file__), "gemini_state.json")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -72,7 +76,7 @@ _COOLING_DELTA: timedelta = timedelta(seconds=COOLING_SECONDS)
 
 class KeyState:
     """
-    Estado individual de una API Key de Groq.
+    Estado individual de una API Key de Gemini.
     
     FIX #7: Type hints completos.
     FIX #12: cooling_until usa float (timestamp) en lugar de datetime | None.
@@ -87,7 +91,11 @@ class KeyState:
     def __init__(self, key_id: int, api_key: str) -> None:
         self.key_id: int = key_id
         self.api_key: str = api_key
-        self.client: Groq = Groq(api_key=api_key)
+        # Usamos el cliente de OpenAI apuntando al endpoint de Gemini
+        self.client: OpenAI = OpenAI(
+            api_key=api_key,
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
+        )
 
         # Contadores separados por modelo
         self.used_today: dict[str, int] = {
@@ -133,11 +141,11 @@ class KeyState:
         limites = LIMITES[modelo]
         
         # ¿Superó el límite diario?
-        if self.used_today[modelo] >= limites["tokens_dia"]:
+        if self.used_today[modelo] >= limites["requests_dia"]:
             return False
         
         # ¿Superó el límite por minuto?
-        if self.used_minute[modelo] >= limites["tokens_min"]:
+        if self.used_minute[modelo] >= limites["requests_min"]:
             return False
 
         return True
@@ -148,13 +156,13 @@ class KeyState:
         
         FIX #6: Sin .get() innecesario (usamos acceso directo al dict).
         """
-        return max(0, LIMITES[modelo]["tokens_dia"] - self.used_today[modelo])
+        return max(0, LIMITES[modelo]["requests_dia"] - self.used_today[modelo])
 
     def __repr__(self) -> str:
         return (
             f"<Key {self.key_id} | "
-            f"70b: {self.used_today[MODELO_LIGERO]}/{LIMITES[MODELO_LIGERO]['tokens_dia']} | "
-            f"scout: {self.used_today[MODELO_PESADO]}/{LIMITES[MODELO_PESADO]['tokens_dia']}>"
+            f"70b: {self.used_today[MODELO_LIGERO]}/{LIMITES[MODELO_LIGERO]['requests_dia']} | "
+            f"scout: {self.used_today[MODELO_PESADO]}/{LIMITES[MODELO_PESADO]['requests_dia']}>"
         )
 
 
@@ -162,9 +170,9 @@ class KeyState:
 # FIX #13: Pool principal con caché de disponibles
 # ═══════════════════════════════════════════════════════════
 
-class GroqKeyPool:
+class GeminiKeyPool:
     """
-    Singleton que gestiona el pool de API keys de Groq.
+    Singleton que gestiona el pool de API keys de Gemini.
     Thread-safe: usa un lock interno para operaciones de lectura/escritura.
     
     FIX #13: Mantiene caché de keys disponibles por modelo
@@ -176,11 +184,51 @@ class GroqKeyPool:
         self.keys: list[KeyState] = []
         self._last_day: datetime = datetime.now(UTC).date()
         
-        # FIX #13: Caché de disponibles (invalida en cada mutación)
         self._available_cache: dict[str, list[KeyState]] = {}
         self._cache_valid: bool = False
         
         self._load_keys()
+        self._load_state()
+
+    def _load_state(self) -> None:
+        """Carga el estado de consumo desde el archivo JSON si existe."""
+        if os.path.exists(_STATE_FILE):
+            try:
+                with open(_STATE_FILE, "r", encoding="utf-8") as f:
+                    state = json.load(f)
+                
+                last_day_str = state.get("last_day")
+                today_str = self._last_day.isoformat()
+                
+                # Solo cargar el uso si corresponde al día de hoy
+                if last_day_str == today_str:
+                    key_usage = state.get("keys", {})
+                    for k in self.keys:
+                        k_id = str(k.key_id)
+                        if k_id in key_usage:
+                            k.used_today = key_usage[k_id].get("used_today", k.used_today)
+                            k.used_minute = key_usage[k_id].get("used_minute", k.used_minute)
+                else:
+                    logger.info("El state JSON es de un día anterior. Empezando de cero.")
+            except Exception as e:
+                logger.error(f"Error cargando gemini_state.json: {e}")
+
+    def _save_state(self) -> None:
+        """Guarda el estado actual de consumo en el archivo JSON."""
+        try:
+            state = {
+                "last_day": self._last_day.isoformat(),
+                "keys": {}
+            }
+            for k in self.keys:
+                state["keys"][str(k.key_id)] = {
+                    "used_today": k.used_today,
+                    "used_minute": k.used_minute
+                }
+            with open(_STATE_FILE, "w", encoding="utf-8") as f:
+                json.dump(state, f, indent=2)
+        except Exception as e:
+            logger.error(f"Error guardando gemini_state.json: {e}")
 
     def _load_keys(self) -> None:
         """
@@ -192,16 +240,16 @@ class GroqKeyPool:
         self.keys = []
         
         for i in range(1, MAX_KEYS + 1):
-            key_value = os.getenv(f"GROQ_API_KEY_{i}", "").strip()
+            key_value = os.getenv(f"GEMINI_API_KEY_{i}", "").strip()
             if key_value:
                 state = KeyState(key_id=i, api_key=key_value)
                 self.keys.append(state)
-                logger.info(f"🔑 Groq Key #{i} cargada en el pool")
+                logger.info(f"🔑 Gemini Key #{i} cargada en el pool")
         
         if not self.keys:
             logger.warning(
-                "⚠️  Pool de Groq vacío. Define GROQ_API_KEY_1 a "
-                f"GROQ_API_KEY_{MAX_KEYS} en el .env"
+                "⚠️  Pool de Gemini vacío. Define GEMINI_API_KEY_1 a "
+                f"GEMINI_API_KEY_{MAX_KEYS} en el .env"
             )
         else:
             logger.info(f"✅ Pool inicializado con {len(self.keys)} keys")
@@ -211,9 +259,9 @@ class GroqKeyPool:
 
     # ── Operaciones públicas ─────────────────────────────────────────────────
 
-    def get_best_key(self, modelo: str) -> Optional[tuple[Groq, int]]:
+    def get_best_key(self, modelo: str) -> Optional[tuple[OpenAI, int]]:
         """
-        Retorna (cliente_groq, key_id) de la key con más cuota disponible
+        Retorna (cliente_Gemini, key_id) de la key con más cuota disponible
         para el modelo solicitado.
         
         FIX #4 y #13: Usa caché de disponibles cuando es posible.
@@ -247,19 +295,19 @@ class GroqKeyPool:
             )
             return mejor.client, mejor.key_id
 
-    def register_usage(self, key_id: int, modelo: str, tokens: int) -> None:
+    def register_usage(self, key_id: int, modelo: str) -> None:
         """
-        Registra el consumo de tokens para una key y modelo específicos.
-        
-        FIX #6: Sin .get() innecesario.
+        Registra el consumo de una petición para una key y modelo específicos.
         """
         with self._lock:
             for key in self.keys:
                 if key.key_id == key_id:
-                    key.used_today[modelo] += tokens
-                    key.used_minute[modelo] += tokens
+                    key.used_today[modelo] += 1
+                    key.used_minute[modelo] += 1
                     # Invalidar caché porque cambió el estado
                     self._invalidate_cache()
+                    # Guardar persistencia
+                    self._save_state()
                     break
 
     def mark_rate_limited(self, key_id: int, modelo: str) -> None:
@@ -284,30 +332,44 @@ class GroqKeyPool:
     def status(self) -> dict[str, Any]:
         """
         Retorna el estado del pool para diagnóstico.
-        
-        FIX #10: Optimizado sin crear objetos innecesarios.
         """
         with self._lock:
+            # Calcular tiempo restante hasta la medianoche UTC
+            now = datetime.now(UTC)
+            tomorrow = datetime.combine(now.date() + timedelta(days=1), datetime.min.time(), tzinfo=UTC)
+            reset_seconds = int((tomorrow - now).total_seconds())
+            
             keys_status = []
             for k in self.keys:
+                limit_ligero = LIMITES[MODELO_LIGERO]["requests_dia"]
+                limit_pesado = LIMITES[MODELO_PESADO]["requests_dia"]
+                used_ligero = k.used_today.get(MODELO_LIGERO, 0)
+                used_pesado = k.used_today.get(MODELO_PESADO, 0)
+                
+                pct_ligero = round((used_ligero / limit_ligero) * 100, 2) if limit_ligero > 0 else 0
+                pct_pesado = round((used_pesado / limit_pesado) * 100, 2) if limit_pesado > 0 else 0
+
                 keys_status.append({
                     "key_id": k.key_id,
                     "disponible_ligero": k.is_available(MODELO_LIGERO),
                     "disponible_pesado": k.is_available(MODELO_PESADO),
-                    "cuota_restante_70b": k.available_quota_today(MODELO_LIGERO),
-                    "cuota_restante_scout": k.available_quota_today(MODELO_PESADO),
-                    "enfriado_70b": k.cooling_until[MODELO_LIGERO] > time.time(),
-                    "enfriado_scout": k.cooling_until[MODELO_PESADO] > time.time(),
+                    "cuota_restante_ligero": k.available_quota_today(MODELO_LIGERO),
+                    "cuota_restante_pesado": k.available_quota_today(MODELO_PESADO),
+                    "consumo_pct_ligero": pct_ligero,
+                    "consumo_pct_pesado": pct_pesado,
+                    "enfriado_ligero": k.cooling_until.get(MODELO_LIGERO, 0) > time.time(),
+                    "enfriado_pesado": k.cooling_until.get(MODELO_PESADO, 0) > time.time(),
                 })
             
             return {
                 "total_keys": len(self.keys),
-                "total_disponibles_70b": sum(
+                "total_disponibles_ligero": sum(
                     1 for k in self.keys if k.is_available(MODELO_LIGERO)
                 ),
-                "total_disponibles_scout": sum(
+                "total_disponibles_pesado": sum(
                     1 for k in self.keys if k.is_available(MODELO_PESADO)
                 ),
+                "reset_in_seconds": reset_seconds,
                 "keys": keys_status,
             }
 
@@ -339,6 +401,7 @@ class GroqKeyPool:
                             key.used_today[modelo] = 0
                     self._last_day = today
                     self._invalidate_cache()
+                    self._save_state()
                     logger.info("🌅 Contadores diarios del pool reseteados")
 
     def _invalidate_cache(self) -> None:
@@ -351,4 +414,4 @@ class GroqKeyPool:
 # Instancia global (singleton thread-safe)
 # ═══════════════════════════════════════════════════════════
 
-pool: GroqKeyPool = GroqKeyPool()
+pool: GeminiKeyPool = GeminiKeyPool()

@@ -17,6 +17,10 @@ export default function AdminPanel() {
   const [pendingSearch, setPendingSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
 
+  // AI Status State
+  const [aiStatus, setAiStatus] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
   const [email, setEmail] = useState('');
@@ -108,19 +112,29 @@ export default function AdminPanel() {
     let interval;
     if (isAdmin) {
       interval = setInterval(() => {
-        adminApi.get('/admin/pagos')
-          .then(resp => setPagos(resp.data))
-          .catch(err => {
-            if (err.response?.status === 403) {
-              setIsAdmin(false);
-              localStorage.removeItem('admin_token');
-              localStorage.removeItem('admin_user');
-            }
-          });
-      }, 10000);
+        // Refrescar pagos si estamos en pendientes o por defecto
+        if (activeTab === 'pending') {
+          adminApi.get('/admin/pagos')
+            .then(resp => setPagos(resp.data))
+            .catch(err => {
+              if (err.response?.status === 403) {
+                setIsAdmin(false);
+                localStorage.removeItem('admin_token');
+                localStorage.removeItem('admin_user');
+              }
+            });
+        }
+        
+        // Refrescar consumo IA si estamos en la pestaña
+        if (activeTab === 'ai-status') {
+          adminApi.get('/admin/ai-status')
+            .then(resp => setAiStatus(resp.data))
+            .catch(err => console.error('Error auto-refrescando estado IA', err));
+        }
+      }, 5000); // 5 segundos para que se sienta muy fluido en tiempo real
     }
     return () => clearInterval(interval);
-  }, [isAdmin]);
+  }, [isAdmin, activeTab]);
 
   const handleAdminLogin = async (e) => {
     e.preventDefault();
@@ -159,9 +173,25 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (isAdmin) {
-      fetchHistorial(historyFilter);
+      if (activeTab === 'history') {
+        fetchHistorial(historyFilter);
+      } else if (activeTab === 'ai-status') {
+        fetchAiStatus();
+      }
     }
-  }, [historyFilter, isAdmin]);
+  }, [historyFilter, isAdmin, activeTab]);
+
+  const fetchAiStatus = async () => {
+    setAiLoading(true);
+    try {
+      const resp = await adminApi.get('/admin/ai-status');
+      setAiStatus(resp.data);
+    } catch (err) {
+      console.error('Error cargando estado de IA', err);
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const fetchPagos = async () => {
     try {
@@ -574,6 +604,17 @@ export default function AdminPanel() {
           >
             Administradores
           </button>
+          <button
+            onClick={() => setActiveTab('ai-status')}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1 ${
+              activeTab === 'ai-status' 
+                ? 'border-primary text-primary' 
+                : 'border-transparent text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm sm:text-base">memory</span>
+            Consumo IA
+          </button>
         </div>
 
         {/* Tab: Administradores */}
@@ -663,6 +704,117 @@ export default function AdminPanel() {
                 )}
               </button>
             </form>
+          </div>
+        ) : activeTab === 'ai-status' ? (
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
+              <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">memory</span>
+                Estado de las APIs de IA (Gemini)
+              </h2>
+              <button 
+                onClick={fetchAiStatus}
+                className="flex items-center gap-1 text-sm font-bold bg-surface-variant hover:bg-outline/20 text-on-surface px-4 py-2 rounded-xl transition-all shadow-sm"
+              >
+                <span className="material-symbols-outlined text-[18px]">refresh</span>
+                Refrescar Datos
+              </button>
+            </div>
+
+            {aiLoading && !aiStatus ? (
+              <div className="py-20 flex justify-center">
+                <Spinner className="h-10 w-10 text-primary" />
+              </div>
+            ) : aiStatus ? (
+              <>
+                {/* Stats Header */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                      <span className="material-symbols-outlined">key</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-on-surface-variant">Keys Configuradas</p>
+                      <p className="text-2xl font-black text-on-surface">{aiStatus.total_keys}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                      <span className="material-symbols-outlined">check_circle</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-on-surface-variant">Keys Disponibles</p>
+                      <p className="text-2xl font-black text-on-surface">{aiStatus.total_disponibles_ligero}</p>
+                    </div>
+                  </div>
+                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                    <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
+                      <span className="material-symbols-outlined">schedule</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-on-surface-variant">Reinicio de Cuotas</p>
+                      <p className="text-xl font-black text-on-surface tracking-tight">
+                        {Math.floor(aiStatus.reset_in_seconds / 3600)}h {Math.floor((aiStatus.reset_in_seconds % 3600) / 60)}m
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Keys Grid */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {aiStatus.keys.map((k, idx) => (
+                    <div key={idx} className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full ${k.enfriado_ligero ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></div>
+                          <h3 className="font-black text-lg text-on-surface">API Key #{k.key_id}</h3>
+                        </div>
+                        {k.enfriado_ligero && (
+                          <span className="text-xs font-bold px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg flex items-center gap-1 border border-red-200 dark:border-red-900/50">
+                            <span className="material-symbols-outlined text-[14px]">ac_unit</span>
+                            Enfriando
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="space-y-4">
+                        <div>
+                          <div className="flex justify-between text-sm mb-1.5">
+                            <span className="font-bold text-on-surface-variant flex items-center gap-1">
+                              <span className="material-symbols-outlined text-[16px]">data_usage</span>
+                              Consumo Diario
+                            </span>
+                            <span className="font-black text-on-surface">{k.consumo_pct_ligero}%</span>
+                          </div>
+                          <div className="w-full bg-slate-100 dark:bg-surface-variant rounded-full h-2.5 overflow-hidden shadow-inner">
+                            <div 
+                              className={`h-full rounded-full transition-all duration-1000 ${
+                                k.consumo_pct_ligero > 90 ? 'bg-red-500' : 
+                                k.consumo_pct_ligero > 70 ? 'bg-orange-500' : 
+                                'bg-primary'
+                              }`} 
+                              style={{ width: `${Math.min(k.consumo_pct_ligero, 100)}%` }}
+                            ></div>
+                          </div>
+                          <div className="flex justify-between items-center mt-2">
+                            <p className="text-xs text-on-surface-variant/70">
+                              Gemini 3.5 Flash Lite
+                            </p>
+                            <p className="text-xs font-bold text-on-surface-variant">
+                              {k.cuota_restante_ligero.toLocaleString()} peticiones restantes
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="py-10 text-center text-on-surface-variant font-bold">
+                No se pudo cargar el estado de las APIs.
+              </div>
+            )}
           </div>
         ) : activeTab === 'pending' ? (
           /* Tab: Pendientes */

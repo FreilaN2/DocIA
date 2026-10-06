@@ -29,15 +29,10 @@ services:
       # Entorno de ejecución
       - ENVIRONMENT=production
 
-      # APIs de Inteligencia Artificial (Groq)
-      - GROQ_API_KEY_1=${GROQ_API_KEY_1:-}
-      - GROQ_API_KEY_2=${GROQ_API_KEY_2:-}
-      - GROQ_API_KEY_3=${GROQ_API_KEY_3:-}
-      - GROQ_API_KEY_4=${GROQ_API_KEY_4:-}
-      - GROQ_API_KEY_5=${GROQ_API_KEY_5:-}
-      - GROQ_API_KEY_6=${GROQ_API_KEY_6:-}
-      - GROQ_API_KEY_7=${GROQ_API_KEY_7:-}
-      - GROQ_API_KEY_8=${GROQ_API_KEY_8:-}
+      # APIs de Inteligencia Artificial (Gemini)
+      - GEMINI_API_KEY_1=${GEMINI_API_KEY_1:-}
+      - GEMINI_API_KEY_2=${GEMINI_API_KEY_2:-}
+      - GEMINI_API_KEY_3=${GEMINI_API_KEY_3:-}
 
       # Pasarelas de Pago (PayPal y Binance)
       - PAYPAL_CLIENT_ID_LIVE=${PAYPAL_CLIENT_ID_LIVE:-}

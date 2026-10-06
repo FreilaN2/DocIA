@@ -131,3 +131,12 @@ async def create_admin(
     db.add(new_admin)
     db.commit()
     return {"status": "success", "message": "Usuario administrador creado exitosamente."}
+
+
+@router.get("/ai-status")
+async def get_ai_status(admin: User = Depends(get_admin_user)):
+    """
+    Retorna el estado de consumo de las APIs de IA (Gemini).
+    """
+    from core.gemini_pool import pool
+    return pool.status()
