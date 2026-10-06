@@ -63,6 +63,10 @@ class ChangePasswordRequest(BaseModel):
     new_password: str
 
 
+class SetPasswordRequest(BaseModel):
+    new_password: str
+
+
 # ─── Pagos ────────────────────────────────────────────────
 
 class SuscripcionRequest(BaseModel):

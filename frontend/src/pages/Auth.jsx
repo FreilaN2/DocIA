@@ -21,6 +21,11 @@ const countryList = [
 
 const inputBaseClasses = "w-full py-3 sm:py-4 pr-4 pl-10 sm:pl-12 h-[48px] sm:h-[52px] md:h-[56px] bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl focus:border-primary-container focus:bg-primary-container/10 outline-none text-sm transition-colors duration-200 text-on-surface placeholder:text-on-surface-variant/50";
 const labelBaseClasses = "text-[10px] sm:text-[11px] font-bold text-on-surface-variant uppercase tracking-widest ml-1 mb-1 block";
+const hasStrongPassword = (password) =>
+  password.length >= 8 &&
+  /[A-Z]/.test(password) &&
+  /[0-9]/.test(password) &&
+  /[^A-Za-z0-9]/.test(password);
 
 // ─── EyeBall OPTIMIZADO (recibe mouseX/mouseY del padre) ───
 const EyeBall = React.memo(({ size = 48, pupilSize = 16, maxDistance = 10, eyeColor = "white", pupilColor = "black", isBlinking = false, forceLookX, forceLookY, mouseX, mouseY }) => {
@@ -134,7 +139,7 @@ export default function Auth() {
   });
 
   const [showPassword, setShowPassword] = useState(false);
-  
+
   // ─── SOLO UN listener de mouse para TODOS los personajes ───
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
@@ -283,13 +288,7 @@ export default function Auth() {
         return;
       }
       // Validar requisitos de la contraseña
-      const pwdReqs = {
-        length:  formData.password.length >= 8,
-        upper:   /[A-Z]/.test(formData.password),
-        number:  /[0-9]/.test(formData.password),
-        special: /[^A-Za-z0-9]/.test(formData.password),
-      };
-      if (!pwdReqs.length || !pwdReqs.upper || !pwdReqs.number || !pwdReqs.special) {
+      if (!hasStrongPassword(formData.password)) {
         setError(t('auth.error_password_weak'));
         setLoading(false);
         return;
@@ -337,11 +336,18 @@ export default function Auth() {
       if (response.data.status === 'success') {
         localStorage.setItem('token', response.data.access_token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
-        toast.success(t('auth.welcome'), { style: { background: '#1a1512', color: '#fff', borderRadius: '15px' }, icon: '🚀' });
-        navigate('/editor/free');
+        if (response.data.user.passwordSetupRequired) {
+          toast.success(isLogin ? t('auth.welcome') : t('auth.account_created'), {
+            style: { background: '#1a1512', color: '#fff', borderRadius: '15px' },
+          });
+          navigate('/profile');
+        } else {
+          toast.success(t('auth.welcome'), { style: { background: '#1a1512', color: '#fff', borderRadius: '15px' }, icon: '🚀' });
+          navigate('/editor/free');
+        }
       }
     } catch (err) {
-      toast.error(t('auth.google_error'));
+      setError(err.response?.data?.detail || t('auth.google_error'));
     } finally {
       setLoading(false);
     }
@@ -620,10 +626,10 @@ export default function Auth() {
               {/* Indicador de requisitos de contraseña — solo en registro */}
               {!isLogin && formData.password.length > 0 && (() => {
                 const reqs = [
-                  { ok: formData.password.length >= 8,            label: t('auth.pwd_min_length') },
-                  { ok: /[A-Z]/.test(formData.password),          label: t('auth.pwd_uppercase') },
-                  { ok: /[0-9]/.test(formData.password),          label: t('auth.pwd_number') },
-                  { ok: /[^A-Za-z0-9]/.test(formData.password),   label: t('auth.pwd_special') },
+                  { ok: formData.password.length >= 8,           label: t('auth.pwd_min_length') },
+                  { ok: /[A-Z]/.test(formData.password),         label: t('auth.pwd_uppercase') },
+                  { ok: /[0-9]/.test(formData.password),         label: t('auth.pwd_number') },
+                  { ok: /[^A-Za-z0-9]/.test(formData.password),  label: t('auth.pwd_special') },
                 ];
                 const allOk = reqs.every(r => r.ok);
                 return (

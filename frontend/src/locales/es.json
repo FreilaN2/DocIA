@@ -192,9 +192,12 @@
     "select_country": "Selecciona tu país",
     "save_changes": "Guardar Cambios",
     "change_password_title": "Cambiar Contraseña",
+    "setup_password_title": "Configura tu contraseña",
+    "setup_password_desc": "Tu cuenta de Google ya está creada. Define y confirma una contraseña para terminar la configuración de tu cuenta.",
     "current_password": "Contraseña Actual",
     "new_password": "Nueva Contraseña",
     "update_password": "Actualizar Contraseña",
+    "setup_password_submit": "Guardar contraseña",
     "error_wrong_current_password": "La contraseña actual es incorrecta.",
     "error_changing_password": "Error al cambiar contraseña",
     "error_updating_profile": "Error al actualizar el perfil"

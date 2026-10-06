@@ -191,9 +191,12 @@
     "select_country": "Select your country",
     "save_changes": "Save Changes",
     "change_password_title": "Change Password",
+    "setup_password_title": "Set your password",
+    "setup_password_desc": "Your Google account has been created. Set and confirm a password to finish setting up your account.",
     "current_password": "Current Password",
     "new_password": "New Password",
     "update_password": "Update Password",
+    "setup_password_submit": "Save password",
     "error_wrong_current_password": "Current password is incorrect.",
     "error_changing_password": "Error changing password",
     "error_updating_profile": "Error updating profile"

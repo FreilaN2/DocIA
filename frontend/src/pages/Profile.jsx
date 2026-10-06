@@ -40,6 +40,7 @@ export default function Profile() {
   const [passwordForm, setPasswordForm] = useState({
     current_password: '',
     new_password: '',
+    confirm_password: '',
   });
 
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
@@ -51,6 +52,7 @@ export default function Profile() {
       if (stored) {
         const parsed = JSON.parse(stored);
         setUser(parsed);
+        if (parsed.passwordSetupRequired) setIsChangingPassword(true);
         setProfileForm({
           firstName: parsed.firstName || '',
           lastName: parsed.lastName || '',
@@ -103,6 +105,11 @@ export default function Profile() {
     setLoading(true);
 
     const pwd = passwordForm.new_password;
+    if (user.passwordSetupRequired && pwd !== passwordForm.confirm_password) {
+      toast.error(t('auth.error_passwords_mismatch'), { icon: '❌' });
+      setLoading(false);
+      return;
+    }
     const pwdReqs = {
       length: pwd.length >= 8,
       upper: /[A-Z]/.test(pwd),
@@ -117,10 +124,16 @@ export default function Profile() {
     }
 
     try {
-      const res = await api.post('/auth/change-password', passwordForm);
+      const res = user.passwordSetupRequired
+        ? await api.post('/auth/set-password', { new_password: pwd })
+        : await api.post('/auth/change-password', passwordForm);
       if (res.data.status === 'success') {
+        if (res.data.user) {
+          setUser(res.data.user);
+          localStorage.setItem('user', JSON.stringify(res.data.user));
+        }
         setIsChangingPassword(false);
-        setPasswordForm({ current_password: '', new_password: '' });
+        setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
         toast.success(t('profile.password_updated') || 'Contraseña actualizada', { icon: '🔐' });
       }
     } catch (err) {
@@ -433,18 +446,27 @@ export default function Profile() {
               initial={{ scale: 0.95, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.95, y: 20 }}
               className="bg-white dark:bg-[#1a1512] rounded-2xl sm:rounded-3xl p-6 sm:p-8 w-full max-w-md border border-slate-200 dark:border-outline-variant/30 shadow-2xl relative"
             >
-              <button onClick={() => setIsChangingPassword(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white">
-                <span className="material-symbols-outlined">close</span>
-              </button>
-              <h2 className="text-xl font-black mb-6 text-on-surface">{t('profile.change_password_title')}</h2>
+              {!user.passwordSetupRequired && (
+                <button onClick={() => setIsChangingPassword(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-white">
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              )}
+              <h2 className="text-xl font-black mb-2 text-on-surface">
+                {user.passwordSetupRequired ? t('profile.setup_password_title') : t('profile.change_password_title')}
+              </h2>
+              {user.passwordSetupRequired && (
+                <p className="text-sm text-on-surface-variant mb-6">{t('profile.setup_password_desc')}</p>
+              )}
               <form onSubmit={handleChangePassword} className="space-y-4">
-                <div className="relative">
-                  <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('profile.current_password')}</label>
-                  <input required type={showCurrentPassword ? "text" : "password"} value={passwordForm.current_password} onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})} className="w-full p-3 pr-10 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm" />
-                  <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-[34px] text-slate-500 hover:text-on-surface focus:outline-none">
-                    <span className="material-symbols-outlined text-[20px]">{showCurrentPassword ? 'visibility_off' : 'visibility'}</span>
-                  </button>
-                </div>
+                {!user.passwordSetupRequired && (
+                  <div className="relative">
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('profile.current_password')}</label>
+                    <input required type={showCurrentPassword ? "text" : "password"} value={passwordForm.current_password} onChange={e => setPasswordForm({...passwordForm, current_password: e.target.value})} className="w-full p-3 pr-10 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm" />
+                    <button type="button" onClick={() => setShowCurrentPassword(!showCurrentPassword)} className="absolute right-3 top-[34px] text-slate-500 hover:text-on-surface focus:outline-none">
+                      <span className="material-symbols-outlined text-[20px]">{showCurrentPassword ? 'visibility_off' : 'visibility'}</span>
+                    </button>
+                  </div>
+                )}
                 <div className="relative">
                   <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('profile.new_password')}</label>
                   <input required minLength={8} type={showNewPassword ? "text" : "password"} value={passwordForm.new_password} onChange={e => setPasswordForm({...passwordForm, new_password: e.target.value})} className="w-full p-3 pr-10 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm" />
@@ -485,9 +507,21 @@ export default function Profile() {
                     </div>
                   );
                 })()}
+                {user.passwordSetupRequired && (
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">{t('auth.confirm_password')}</label>
+                    <input
+                      required
+                      type="password"
+                      value={passwordForm.confirm_password}
+                      onChange={e => setPasswordForm({...passwordForm, confirm_password: e.target.value})}
+                      className="w-full p-3 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm"
+                    />
+                  </div>
+                )}
                 <button disabled={loading} type="submit" className="w-full py-3 mt-4 bg-primary-container text-white font-bold rounded-xl hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-2">
                   {loading ? <span className="material-symbols-outlined animate-spin">refresh</span> : <span className="material-symbols-outlined">lock_reset</span>}
-                  {t('profile.update_password')}
+                  {user.passwordSetupRequired ? t('profile.setup_password_submit') : t('profile.update_password')}
                 </button>
               </form>
             </motion.div>

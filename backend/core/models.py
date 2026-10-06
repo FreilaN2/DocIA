@@ -28,6 +28,7 @@ class User(Base):
     email = Column(String(150), unique=True, index=True, nullable=False)
     phone = Column(String(20), unique=True, nullable=True)
     password_hash = Column(String(255), nullable=False)
+    password_setup_required = Column(Boolean, default=False, nullable=False)
     
     # ── Campos de Seguridad y Facturación ──
     country = Column(String(100), nullable=True)           # Para validación con PayPal sin pedir dirección completa

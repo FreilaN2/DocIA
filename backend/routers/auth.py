@@ -17,7 +17,7 @@ from core.models import User, PagoMovilTransaction
 from core.auth import get_password_hash, verify_password, create_access_token
 from core.token_service import get_available_tokens
 from core.dependencies import get_current_user
-from core.schemas import UserCreate, UserLogin, GoogleAuthRequest, ChangePasswordRequest, UpdateProfileRequest
+from core.schemas import UserCreate, UserLogin, GoogleAuthRequest, ChangePasswordRequest, SetPasswordRequest, UpdateProfileRequest
 from core.limiter import limiter
 
 router = APIRouter()
@@ -48,6 +48,7 @@ def _get_user_dict(u: User, db: Session) -> dict:
         "createdAt": u.created_at.isoformat() if getattr(u, 'created_at', None) else None,
         "lastLoginAt": u.last_login_at.isoformat() if getattr(u, 'last_login_at', None) else None,
         "isAdmin": u.is_admin,
+        "passwordSetupRequired": u.password_setup_required,
         "tokens": tokens,
         "lastPaymentId": latest_pago.id if latest_pago else None,
         "lastPaymentStatus": latest_pago.status if latest_pago else None,
@@ -154,6 +155,7 @@ def auth_google(data: GoogleAuthRequest, db: Session = Depends(get_db)):
                 phone=None,
                 country="US",
                 password_hash=get_password_hash(os.urandom(24).hex()),
+                password_setup_required=True,
                 plan_id=1,
             )
             db.add(user)
@@ -170,10 +172,38 @@ def auth_google(data: GoogleAuthRequest, db: Session = Depends(get_db)):
             "token_type": "bearer",
             "user": _get_user_dict(user, db),
         }
+    except HTTPException:
+        raise
     except ValueError:
         raise HTTPException(status_code=400, detail="Token de Google inválido o expirado.")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error interno: {e}")
+
+
+@router.post("/auth/set-password")
+def set_password(
+    data: SetPasswordRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    password = data.new_password
+    if (
+        len(password) < 8
+        or not any(char.isupper() for char in password)
+        or not any(char.isdigit() for char in password)
+        or not any(not char.isalnum() for char in password)
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="La contraseña debe tener al menos 8 caracteres, una mayúscula, un número y un carácter especial.",
+        )
+    if not current_user.password_setup_required:
+        raise HTTPException(status_code=400, detail="Esta cuenta no requiere configurar una contraseña.")
+
+    current_user.password_hash = get_password_hash(password)
+    current_user.password_setup_required = False
+    db.commit()
+    return {"status": "success", "user": _get_user_dict(current_user, db)}
 
 
 @router.post("/auth/change-password")

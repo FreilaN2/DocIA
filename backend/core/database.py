@@ -91,6 +91,7 @@ def _run_safe_migrations(conn):
     _add_column_if_not_exists(conn, "users", "country", "VARCHAR(100)")
     _add_column_if_not_exists(conn, "users", "is_email_verified", "BOOLEAN DEFAULT FALSE")
     _add_column_if_not_exists(conn, "users", "is_active", "BOOLEAN DEFAULT TRUE")
+    _add_column_if_not_exists(conn, "users", "password_setup_required", "BOOLEAN DEFAULT FALSE")
     _add_column_if_not_exists(conn, "users", "last_login_at", "DATETIME")
     _add_column_if_not_exists(conn, "users", "last_login_ip", "VARCHAR(45)")
     _add_column_if_not_exists(conn, "users", "failed_login_attempts", "INT DEFAULT 0")
