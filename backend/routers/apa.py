@@ -27,7 +27,7 @@ from core.database import get_db
 from core.models import User
 from core.apa_rules import procesar_con_reglas
 from core.apa_ai import procesar_con_ia, procesar_con_ia_stream
-from core.token_service import get_available_tokens, consume_tokens, gemini_tokens_to_docai
+from core.token_service import get_available_tokens, consume_tokens, deepseek_tokens_to_docai
 from core.dependencies import get_current_user, get_optional_current_user, _decode_user_from_token
 from core.schemas import DatosFinales, ParrafoCorregido
 from core.storage import storage, upload_storage
@@ -135,7 +135,7 @@ async def procesar_apa_stream(
             if plan == "pro":
                 async for evento in procesar_con_ia_stream(doc.paragraphs):
                     if evento.get("tipo") == "finalizado":
-                        consume_tokens(current_user.id, evento.get("gemini_tokens", 0), filename, db)
+                        consume_tokens(current_user.id, evento.get("deepseek_tokens", 0), filename, db)
                         # No eliminamos input_path aquí: /generar-final/ lo necesita
                         # para copiar la portada con imágenes. El cron de limpieza
                         # (limpiar_archivos_antiguos) lo borrará después de 24h.
@@ -147,7 +147,7 @@ async def procesar_apa_stream(
             else:
                 resultado = procesar_con_reglas(doc.paragraphs)
                 yield f"data: {json.dumps({'tipo': 'inicio', 'total_lotes': 1, 'progreso': 0, 'modelo': 'reglas'}, ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'tipo': 'finalizado', 'progreso': 100, 'stats': resultado['stats'], 'detalles': resultado['detalles'], 'gemini_tokens': 0}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'tipo': 'finalizado', 'progreso': 100, 'stats': resultado['stats'], 'detalles': resultado['detalles'], 'deepseek_tokens': 0}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'tipo': 'error', 'mensaje': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -191,18 +191,18 @@ async def procesar_documento(
         if balance["total"] <= 0:
             raise HTTPException(status_code=402, detail="No tienes tokens disponibles.")
         resultado   = procesar_con_ia(doc.paragraphs)
-        gemini_tokens = resultado.get('gemini_tokens', 0)
-        consume_tokens(current_user.id, gemini_tokens, safe_name, db)
+        deepseek_tokens = resultado.get('deepseek_tokens', 0)
+        consume_tokens(current_user.id, deepseek_tokens, safe_name, db)
     else:
         resultado = procesar_con_reglas(doc.paragraphs)
-        resultado["gemini_tokens"] = 0
+        resultado["deepseek_tokens"] = 0
 
     return {
         "status": "success",
         "plan": plan,
         "resumen": resultado["stats"],
         "detalles": resultado["detalles"],
-        "tokens_consumed": gemini_tokens_to_docai(resultado.get("gemini_tokens", 0)),
+        "tokens_consumed": deepseek_tokens_to_docai(resultado.get("deepseek_tokens", 0)),
     }
 
 

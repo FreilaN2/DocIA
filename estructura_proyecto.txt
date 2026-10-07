@@ -28,7 +28,7 @@ C:.
 |   |   |   database.py
 |   |   |   dependencies.py
 |   |   |   document_builder.py
-|   |   |   groq_pool.py
+|   |   |   deepseek_pool.py
 |   |   |   limiter.py
 |   |   |   models.py
 |   |   |   paypal.py
@@ -48,7 +48,7 @@ C:.
 |   |           database.cpython-314.pyc
 |   |           dependencies.cpython-314.pyc
 |   |           document_builder.cpython-314.pyc
-|   |           groq_pool.cpython-314.pyc
+|   |           deepseek_pool.cpython-314.pyc
 |   |           limiter.cpython-314.pyc
 |   |           models.cpython-314.pyc
 |   |           paypal.cpython-314.pyc

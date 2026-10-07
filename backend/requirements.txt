@@ -26,7 +26,7 @@ lxml==6.1.0               # Dependencia de python-docx para parseo XML
 docx2pdf==0.1.8          # Convertir documentos .docx a PDF en Windows con Word instalado
 
 # --- Inteligencia Artificial ---
-openai>=1.0.0             # SDK oficial compatible con Gemini API
+openai>=1.0.0             # SDK oficial compatible con DeepSeek API
 # --- Utilidades ---
 python-dotenv==1.2.2      # Cargar variables de entorno desde .env
 tenacity==9.1.4           # Reintentos con backoff exponencial (usado en apa_ai.py)

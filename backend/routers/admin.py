@@ -136,7 +136,7 @@ async def create_admin(
 @router.get("/ai-status")
 async def get_ai_status(admin: User = Depends(get_admin_user)):
     """
-    Retorna el estado de consumo de las APIs de IA (Gemini).
+    Retorna el estado de consumo de la API de IA (DeepSeek).
     """
-    from core.gemini_pool import pool
+    from core.deepseek_pool import pool
     return pool.status()

@@ -1,6 +1,6 @@
 # DocAI — Formateador de Tesis con IA
 
-Aplicación web que analiza y formatea documentos `.docx` (tesis) según las **Normas APA 6ta y 7ma edición**, usando Google Gemini para clasificar semánticamente cada párrafo.
+Aplicación web que analiza y formatea documentos `.docx` (tesis) según las **Normas APA 6ta y 7ma edición**, usando DeepSeek IA para clasificar semánticamente cada párrafo.
 
 ---
 
@@ -25,7 +25,7 @@ DocAI/
 
 - **Python** 3.10 o superior
 - **Node.js** 18 o superior (incluye `npm`)
-- **API Key de Google Gemini** → [Obtener aquí](https://aistudio.google.com/app/apikey)
+- **API Key de DeepSeek** → [Obtener aquí](https://platform.deepseek.com/api_keys)
 
 ---
 
@@ -62,14 +62,14 @@ pip install -r requirements.txt
 | `python-multipart` | ≥ 0.0.9             | Soporte para subida de archivos (`multipart/form-data`) |
 | `python-dotenv`    | ≥ 1.0               | Carga de variables de entorno desde `.env`              |
 | `python-docx`      | ≥ 1.1               | Lectura y escritura de archivos `.docx`                 |
-| `google-genai`     | ≥ 0.8               | Cliente oficial de la API de Google Gemini                |
+| `openai`           | ≥ 1.0               | SDK compatible con la API de DeepSeek                     |
 
 ### 3. Configurar variables de entorno
 
 Edita el archivo `backend/.env` con tu API Key:
 
 ```env
-GROQ_API_KEY
+DEEPSEEK_API_KEY=tu_api_key_aqui
 DB_HOST=localhost
 DB_USER=root
 DB_PASS=
@@ -118,7 +118,7 @@ La aplicación estará disponible en: **http://localhost:5173**
 
 1. **Subir documento** — Selecciona un archivo `.docx` (tu tesis o trabajo académico).
 2. **Elegir edición APA** — Selecciona APA 6ta o 7ma edición.
-3. **Analizar con IA** — El backend clasifica cada párrafo con Google Gemini.
+3. **Analizar con IA** — El backend clasifica cada párrafo con DeepSeek IA.
 4. **Corregir etiquetas** — Revisa y ajusta manualmente la clasificación de cada párrafo.
 5. **Descargar** — Se genera y descarga un `.docx` con el formato APA aplicado correctamente.
 

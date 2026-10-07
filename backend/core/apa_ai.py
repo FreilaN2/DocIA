@@ -21,9 +21,9 @@ from typing import AsyncGenerator
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(encoding="utf-8-sig")
 
-from core.gemini_pool import pool, MODELO_LIGERO, MODELO_PESADO
+from core.deepseek_pool import pool, MODELO_LIGERO, MODELO_PESADO
 from core.apa_rules import clasificar_parrafo_reglas, _extraer_rel_imagen
 
 logger = logging.getLogger(__name__)
@@ -77,9 +77,9 @@ _BASE_STATS = {
 }
 
 # ── Configuración (constantes de módulo) ────────────────────────────────────
-UMBRAL_MODELO_SCOUT = 80   # Párrafos: si el doc tiene más, se usa el modelo pesado
+UMBRAL_MODELO_PESADO = 80  # Párrafos: si el doc tiene más, se usa el modelo pesado
 BATCH_SIZE = 40            # Párrafos por lote de clasificación
-DELAY_ENTRE_LOTES = 4.0    # Segundos de respiro entre peticiones al proveedor IA
+DELAY_ENTRE_LOTES = 1.0    # Segundos de respiro entre peticiones al proveedor IA
 MAX_RETRIES = 3            # Intentos máximos por lote
 MAX_COMPLETION_TOKENS = 8192
 
@@ -165,9 +165,9 @@ def seleccionar_modelo(total_parrafos: int) -> str:
     Elige el modelo IA según el tamaño del documento.
     Con logging solo la primera vez (gracias al caché interno).
     """
-    modelo = _seleccionar_modelo_cached(total_parrafos, UMBRAL_MODELO_SCOUT)
+    modelo = _seleccionar_modelo_cached(total_parrafos, UMBRAL_MODELO_PESADO)
     
-    if total_parrafos > UMBRAL_MODELO_SCOUT:
+    if total_parrafos > UMBRAL_MODELO_PESADO:
         logger.info(f"📊 Documento extenso ({total_parrafos} párrs.) → usando {modelo}")
     else:
         logger.info(f"📄 Documento corto ({total_parrafos} párrs.) → usando {modelo}")
@@ -184,7 +184,7 @@ def clasificar_lote_ia(
 ) -> tuple[list[str], int]:
     """
     Clasifica un lote de párrafos con la IA.
-    Retorna (lista_etiquetas, tokens_gemini_consumidos).
+    Retorna (lista_etiquetas, tokens_deepseek_consumidos).
 
     Fallback chain:
       1. Modelo solicitado (via pool)
@@ -199,10 +199,10 @@ def clasificar_lote_ia(
         json_output=True,
     )
 
-    modelos = (
+    modelos = tuple(dict.fromkeys((
         modelo,
         MODELO_LIGERO if modelo == MODELO_PESADO else MODELO_PESADO,
-    )
+    )))
     
     for modelo_actual in modelos:
         resultado = _intentar_con_modelo(lista_textos, prompt, modelo_actual)
@@ -263,7 +263,6 @@ def _intentar_con_modelo(
             content_clean = content_clean.strip()
 
             try:
-                import json
                 structured = json.loads(content_clean)
                 etiquetas = structured.get("labels", [])
             except Exception:
@@ -304,7 +303,7 @@ def _intentar_con_modelo(
                 return None
 
             # Otros errores
-            logger.error(f"❌ Error en Gemini (key #{key_id}, modelo '{modelo}'): {e}")
+            logger.error(f"❌ Error en DeepSeek (key #{key_id}, modelo '{modelo}'): {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
@@ -327,14 +326,14 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
-    total_gemini_tokens = 0
+    total_deepseek_tokens = 0
 
     textos_validos, indices_originales, imagen_items = _extraer_textos(doc_paragraphs)
     total_validos = len(textos_validos)
 
     if total_validos == 0 and not imagen_items:
         logger.warning("⚠️  No se encontraron párrafos con texto para procesar.")
-        return {"stats": stats, "detalles": [], "gemini_tokens": 0}
+        return {"stats": stats, "detalles": [], "deepseek_tokens": 0}
 
     modelo = seleccionar_modelo(total_validos)
     logger.info(f"🤖 Clasificación por lotes — {total_validos} párrafos — modelo: {modelo}")
@@ -350,7 +349,7 @@ def procesar_con_ia(doc_paragraphs) -> dict:
         etiquetas_lote, tokens_lote = clasificar_lote_ia(
             lote_textos, modelo, posicion_inicial=i
         )
-        total_gemini_tokens += tokens_lote
+        total_deepseek_tokens += tokens_lote
 
         for j, categoria in enumerate(etiquetas_lote):
             idx_original = indices_originales[i + j]
@@ -369,8 +368,8 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     todos = detalles + imagen_items
     todos.sort(key=lambda x: x["id"])
 
-    logger.info(f"✅ Total tokens Gemini consumidos: {total_gemini_tokens}")
-    return {"stats": stats, "detalles": todos, "gemini_tokens": total_gemini_tokens}
+    logger.info(f"✅ Total tokens DeepSeek consumidos: {total_deepseek_tokens}")
+    return {"stats": stats, "detalles": todos, "deepseek_tokens": total_deepseek_tokens}
 
 
 # ═══════════════════════════════════════════════════════════
@@ -402,7 +401,7 @@ async def procesar_con_ia_stream(
     # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
-    total_gemini_tokens = 0
+    total_deepseek_tokens = 0
 
     # Evento de inicio
     yield {
@@ -419,7 +418,7 @@ async def procesar_con_ia_stream(
             "progreso": 100,
             "stats": stats,
             "detalles": [],
-            "gemini_tokens": 0,
+            "deepseek_tokens": 0,
         }
         return
 
@@ -429,11 +428,11 @@ async def procesar_con_ia_stream(
         lote_textos = textos_validos[i : i + BATCH_SIZE]
         num_lote = i // BATCH_SIZE + 1
 
-        # Ejecutar la llamada sincrónica a Gemini en un thread pool
+        # Ejecutar la llamada sincrónica a DeepSeek en un thread pool
         etiquetas_lote, tokens_lote = await loop.run_in_executor(
             None, clasificar_lote_ia, lote_textos, modelo, i
         )
-        total_gemini_tokens += tokens_lote
+        total_deepseek_tokens += tokens_lote
 
         # Construir detalles del lote
         lote_detalles: list[dict] = []
@@ -475,7 +474,7 @@ async def procesar_con_ia_stream(
         "progreso": 100,
         "stats": stats,
         "detalles": todos,
-        "gemini_tokens": total_gemini_tokens,
+        "deepseek_tokens": total_deepseek_tokens,
     }
 
 

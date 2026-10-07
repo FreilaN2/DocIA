@@ -2,63 +2,76 @@ import os
 import requests
 from dotenv import load_dotenv
 
-load_dotenv()
+_ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
+load_dotenv(dotenv_path=_ENV_PATH, override=True, encoding="utf-8-sig")
 
-KEYS = [os.getenv(f"GROQ_API_KEY_{i}") for i in range(1, 9)]
-MODELS = ["llama-3.3-70b-versatile", "meta-llama/llama-4-scout-17b-16e-instruct"]
+KEYS = [os.getenv("DEEPSEEK_API_KEY")] + [os.getenv(f"DEEPSEEK_API_KEY_{i}") for i in range(1, 9)]
+MODELS = ["deepseek-chat"]
+
 
 def check_key(key, index):
     if not key:
-        print(f"Key {index}: Not found in .env")
         return
-    
-    print(f"\n--- Checking Key {index} ---")
-    # Mostrar solo el inicio y fin de la key por seguridad
-    safe_key = f"{key[:8]}...{key[-4:]}"
+
+    print(f"\n--- Checking DeepSeek Key #{index} ---")
+    safe_key = f"{key[:6]}...{key[-4:]}" if len(key) > 10 else "***"
     print(f"Key preview: {safe_key}")
-    
+
     headers = {
         "Authorization": f"Bearer {key}",
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
     }
-    
+
+    # Consultar saldo en DeepSeek
+    try:
+        bal_res = requests.get(
+            "https://api.deepseek.com/user/balance",
+            headers=headers,
+            timeout=15,
+        )
+        if bal_res.status_code == 200:
+            data = bal_res.json()
+            is_available = data.get("is_available", False)
+            balance_infos = data.get("balance_infos", [])
+            print(f"  Disponible: {is_available}")
+            for b in balance_infos:
+                print(f"  Saldo ({b.get('currency')}): {b.get('total_balance')}")
+    except Exception as e:
+        print(f"  No se pudo consultar el saldo: {e}")
+
     for model in MODELS:
         payload = {
             "model": model,
             "messages": [{"role": "user", "content": "hi"}],
-            "max_tokens": 1
+            "max_tokens": 1,
         }
-        
+
         try:
             res = requests.post(
-                "https://api.groq.com/openai/v1/chat/completions", 
-                headers=headers, 
-                json=payload, 
-                timeout=15
+                "https://api.deepseek.com/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=15,
             )
-            
+
             if res.status_code == 200:
-                rem_tokens = res.headers.get("x-ratelimit-remaining-tokens", "Unknown")
-                limit_tokens = res.headers.get("x-ratelimit-limit-tokens", "Unknown")
-                rem_req = res.headers.get("x-ratelimit-remaining-requests", "Unknown")
-                print(f"  [{model}]")
-                print(f"    Tokens min: {rem_tokens} restantes de {limit_tokens} límite por min")
-                print(f"    Peticiones: {rem_req} restantes por min")
+                print(f"  [{model}] -> OK (200)")
             elif res.status_code == 429:
-                rem_tokens = res.headers.get("x-ratelimit-remaining-tokens", "0")
-                limit_tokens = res.headers.get("x-ratelimit-limit-tokens", "Unknown")
-                reset_time = res.headers.get("x-ratelimit-reset", "Unknown")
                 print(f"  [{model}] -> ¡LÍMITE ALCANZADO (429)!")
-                print(f"    Tokens restantes: {rem_tokens}/{limit_tokens}. Reset en: {reset_time}")
             else:
-                print(f"  [{model}] -> Error {res.status_code}: {res.json().get('error', {}).get('message', res.text)}")
+                print(f"  [{model}] -> Error {res.status_code}: {res.text}")
         except Exception as e:
             print(f"  [{model}] -> Error de conexión: {e}")
 
+
 if __name__ == "__main__":
     print("==============================================")
-    print(" Consultando tokens de Groq (8 API Keys)")
+    print(" Verificando API Key de DeepSeek")
     print("==============================================")
-    for i, key in enumerate(KEYS, start=1):
-        check_key(key, i)
+    valid_keys = [k.strip() for k in KEYS if k and k.strip()]
+    if not valid_keys:
+        print("No se encontró DEEPSEEK_API_KEY en .env")
+    else:
+        for i, key in enumerate(dict.fromkeys(valid_keys), start=1):
+            check_key(key, i)
     print("\nProceso finalizado.")

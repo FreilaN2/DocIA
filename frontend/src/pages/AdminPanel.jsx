@@ -712,7 +712,7 @@ export default function AdminPanel() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
               <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
                 <span className="material-symbols-outlined text-primary">memory</span>
-                Estado de las APIs de IA (Gemini)
+                Estado de la API de IA (DeepSeek)
               </h2>
               <button 
                 onClick={fetchAiStatus}
@@ -800,7 +800,7 @@ export default function AdminPanel() {
                           </div>
                           <div className="flex justify-between items-center mt-2">
                             <p className="text-xs text-on-surface-variant/70">
-                              Gemini 3.5 Flash Lite
+                              DeepSeek Chat (V3)
                             </p>
                             <p className="text-xs font-bold text-on-surface-variant">
                               {k.cuota_restante_ligero.toLocaleString()} peticiones restantes

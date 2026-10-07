@@ -29,7 +29,7 @@ from routers import auth, apa, pagos, admin, notifications
 
 # ─── Configuración global ─────────────────────────────────
 
-load_dotenv()
+load_dotenv(dotenv_path=os.path.join(BASE_DIR, ".env"), override=True, encoding="utf-8-sig")
 
 logging.basicConfig(
     level=logging.INFO,

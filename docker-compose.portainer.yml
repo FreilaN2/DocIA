@@ -29,10 +29,8 @@ services:
       # Entorno de ejecución
       - ENVIRONMENT=production
 
-      # APIs de Inteligencia Artificial (Gemini)
-      - GEMINI_API_KEY_1=${GEMINI_API_KEY_1:-}
-      - GEMINI_API_KEY_2=${GEMINI_API_KEY_2:-}
-      - GEMINI_API_KEY_3=${GEMINI_API_KEY_3:-}
+      # API de Inteligencia Artificial (DeepSeek)
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
 
       # Pasarelas de Pago (PayPal y Binance)
       - PAYPAL_CLIENT_ID_LIVE=${PAYPAL_CLIENT_ID_LIVE:-}

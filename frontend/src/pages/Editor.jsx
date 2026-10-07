@@ -668,7 +668,7 @@ export default function Editor() {
                     </div>
                     <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-400 font-bold px-1">
                       <span>
-                        {modeloUsado.includes('scout') ? '🚀 Modelo Avanzado' : modeloUsado.includes('70b') ? '⚡ Modelo Estándar' : '🔧 Motor de reglas'}
+                        {modeloUsado && modeloUsado !== 'reglas' ? '🚀 DeepSeek IA' : '🔧 Motor de reglas'}
                       </span>
                       {tiempoRestante !== null && tiempoRestante > 0 && (
                         <span>~{tiempoRestante}s restantes</span>
