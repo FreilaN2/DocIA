@@ -140,3 +140,68 @@ async def get_ai_status(admin: User = Depends(get_admin_user)):
     """
     from core.deepseek_pool import pool
     return pool.status()
+
+
+@router.get("/ai-consumption")
+async def get_ai_consumption(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+    limit: int = Query(100, ge=1, le=500),
+    search: Optional[str] = Query(None),
+):
+    """
+    Retorna el historial de consumo de tokens DeepSeek / DocAI por documento,
+    así como los totales acumulados (KPIs) para análisis administrativo.
+    """
+    from core.models import TokenTransaction
+    from sqlalchemy import func
+
+    # Métricas agregadas globales
+    summary = db.query(
+        func.count(TokenTransaction.id).label("total_docs"),
+        func.coalesce(func.sum(TokenTransaction.deepseek_total_tokens), 0).label("total_deepseek_tokens"),
+        func.coalesce(func.sum(TokenTransaction.tokens_consumed), 0).label("total_docai_tokens"),
+        func.coalesce(func.sum(TokenTransaction.estimated_cost_usd), 0.0).label("total_cost_usd"),
+        func.coalesce(func.avg(TokenTransaction.deepseek_total_tokens), 0).label("avg_deepseek_per_doc"),
+    ).first()
+
+    # Consulta de registros detallados
+    query = db.query(TokenTransaction).join(User, TokenTransaction.user_id == User.id)
+    if search:
+        search_filter = f"%{search}%"
+        query = query.filter(
+            (User.email.ilike(search_filter)) | 
+            (TokenTransaction.document_name.ilike(search_filter))
+        )
+
+    records = query.order_by(TokenTransaction.created_at.desc()).limit(limit).all()
+
+    items = []
+    for r in records:
+        items.append({
+            "id": r.id,
+            "user_id": r.user_id,
+            "user_email": r.user.email if r.user else "Desconocido",
+            "document_name": r.document_name,
+            "tokens_consumed": r.tokens_consumed,
+            "deepseek_total_tokens": r.deepseek_total_tokens or 0,
+            "deepseek_prompt_tokens": r.deepseek_prompt_tokens or 0,
+            "deepseek_completion_tokens": r.deepseek_completion_tokens or 0,
+            "total_paragraphs": r.total_paragraphs or 0,
+            "total_words": r.total_words or 0,
+            "model_used": r.model_used or "deepseek-chat",
+            "source": r.source,
+            "estimated_cost_usd": float(r.estimated_cost_usd or 0.0),
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+        })
+
+    return {
+        "summary": {
+            "total_docs": summary.total_docs or 0,
+            "total_deepseek_tokens": int(summary.total_deepseek_tokens or 0),
+            "total_docai_tokens": int(summary.total_docai_tokens or 0),
+            "total_cost_usd": float(summary.total_cost_usd or 0.0),
+            "avg_deepseek_per_doc": int(summary.avg_deepseek_per_doc or 0),
+        },
+        "history": items,
+    }

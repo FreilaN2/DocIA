@@ -33,5 +33,12 @@ def get_frontend_dir() -> str:
     Cacheada con lru_cache para evitar os.path.exists() en cada request.
     """
     cpanel = "/home2/teleredt/public_html/docai.teleredtv.com"
-    local  = os.path.join(BASE_DIR, "dist")
-    return cpanel if os.path.exists(os.path.join(cpanel, "index.html")) else local
+    if os.path.exists(os.path.join(cpanel, "index.html")):
+        return cpanel
+
+    # Prioridad en local: frontend/dist
+    frontend_dist = os.path.join(os.path.dirname(BASE_DIR), "frontend", "dist")
+    if os.path.exists(os.path.join(frontend_dist, "index.html")):
+        return frontend_dist
+
+    return os.path.join(BASE_DIR, "dist")

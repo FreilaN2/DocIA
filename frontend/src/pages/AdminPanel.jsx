@@ -17,9 +17,13 @@ export default function AdminPanel() {
   const [pendingSearch, setPendingSearch] = useState('');
   const [historySearch, setHistorySearch] = useState('');
 
-  // AI Status State
+  // AI Status & Consumption State
   const [aiStatus, setAiStatus] = useState(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiConsumption, setAiConsumption] = useState(null);
+  const [aiConsumptionLoading, setAiConsumptionLoading] = useState(false);
+  const [aiSearch, setAiSearch] = useState('');
+  const [aiViewMode, setAiViewMode] = useState('history'); // 'history' | 'keys'
 
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
@@ -163,7 +167,9 @@ export default function AdminPanel() {
     setHistoryLoading(true);
     try {
       const resp = await adminApi.get(`/admin/pagos?status=${filter}`);
-      setHistorialPagos(resp.data);
+      if (Array.isArray(resp.data)) {
+        setHistorialPagos(resp.data);
+      }
     } catch (err) {
       console.error('Error cargando historial', err);
     } finally {
@@ -177,6 +183,7 @@ export default function AdminPanel() {
         fetchHistorial(historyFilter);
       } else if (activeTab === 'ai-status') {
         fetchAiStatus();
+        fetchAiConsumption(aiSearch);
       }
     }
   }, [historyFilter, isAdmin, activeTab]);
@@ -193,10 +200,26 @@ export default function AdminPanel() {
     }
   };
 
+  const fetchAiConsumption = async (searchQuery = '') => {
+    setAiConsumptionLoading(true);
+    try {
+      const params = {};
+      if (searchQuery) params.search = searchQuery;
+      const resp = await adminApi.get('/admin/ai-consumption', { params });
+      setAiConsumption(resp.data);
+    } catch (err) {
+      console.error('Error cargando historial de consumo IA', err);
+    } finally {
+      setAiConsumptionLoading(false);
+    }
+  };
+
   const fetchPagos = async () => {
     try {
       const resp = await adminApi.get('/admin/pagos');
-      setPagos(resp.data);
+      if (Array.isArray(resp.data)) {
+        setPagos(resp.data);
+      }
       fetchHistorial();
     } catch (err) {
       if (err.response?.status === 403 || err.response?.status === 401) {
@@ -255,14 +278,14 @@ export default function AdminPanel() {
     }
   };
 
-  const filteredPagos = pagos.filter(p => 
-    p.user_email.toLowerCase().includes(pendingSearch.toLowerCase()) || 
-    p.reference_number.toLowerCase().includes(pendingSearch.toLowerCase())
+  const filteredPagos = (Array.isArray(pagos) ? pagos : []).filter(p => 
+    (p.user_email || '').toLowerCase().includes(pendingSearch.toLowerCase()) || 
+    (p.reference_number || '').toLowerCase().includes(pendingSearch.toLowerCase())
   );
 
-  const filteredHistory = historialPagos.filter(p => 
-    p.user_email.toLowerCase().includes(historySearch.toLowerCase()) || 
-    p.reference_number.toLowerCase().includes(historySearch.toLowerCase())
+  const filteredHistory = (Array.isArray(historialPagos) ? historialPagos : []).filter(p => 
+    (p.user_email || '').toLowerCase().includes(historySearch.toLowerCase()) || 
+    (p.reference_number || '').toLowerCase().includes(historySearch.toLowerCase())
   );
 
   // ─── Loading State ───
@@ -710,112 +733,320 @@ export default function AdminPanel() {
         ) : activeTab === 'ai-status' ? (
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4 gap-4">
-              <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
-                <span className="material-symbols-outlined text-primary">memory</span>
-                Estado de la API de IA (DeepSeek)
-              </h2>
+              <div>
+                <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">analytics</span>
+                  Monitoreo de Consumo IA (DeepSeek vs DocAI)
+                </h2>
+                <p className="text-xs sm:text-sm text-on-surface-variant font-medium mt-0.5">
+                  Estadísticas históricas de llamadas a la API, tokens descontados a usuarios Pro y costos reales.
+                </p>
+              </div>
               <button 
-                onClick={fetchAiStatus}
-                className="flex items-center gap-1 text-sm font-bold bg-surface-variant hover:bg-outline/20 text-on-surface px-4 py-2 rounded-xl transition-all shadow-sm"
+                onClick={() => {
+                  fetchAiStatus();
+                  fetchAiConsumption(aiSearch);
+                }}
+                disabled={aiLoading || aiConsumptionLoading}
+                className="flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-surface-variant hover:bg-outline/20 text-on-surface px-4 py-2.5 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[18px]">refresh</span>
-                Refrescar Datos
+                <span className={`material-symbols-outlined text-[18px] ${(aiLoading || aiConsumptionLoading) ? 'animate-spin' : ''}`}>
+                  refresh
+                </span>
+                Refrescar Métricas
               </button>
             </div>
 
-            {aiLoading && !aiStatus ? (
-              <div className="py-20 flex justify-center">
-                <Spinner className="h-10 w-10 text-primary" />
+            {/* Tarjetas de Resumen Global (KPIs) */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              {/* KPI 1: Tokens DeepSeek Reales */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-orange-100 dark:bg-orange-950/40 flex items-center justify-center text-primary flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">bolt</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-on-surface-variant">Tokens DeepSeek Consumidos</p>
+                  <p className="text-xl sm:text-2xl font-black text-on-surface">
+                    {aiConsumption?.summary?.total_deepseek_tokens ? aiConsumption.summary.total_deepseek_tokens.toLocaleString() : '0'}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-on-surface-variant/70 font-semibold">
+                    ~{aiConsumption?.summary?.avg_deepseek_per_doc ? aiConsumption.summary.avg_deepseek_per_doc.toLocaleString() : 0} por documento
+                  </p>
+                </div>
               </div>
-            ) : aiStatus ? (
+
+              {/* KPI 2: Tokens DocAI Cobrados */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/40 flex items-center justify-center text-amber-600 dark:text-amber-400 flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">token</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-on-surface-variant">Tokens DocAI Facturados</p>
+                  <p className="text-xl sm:text-2xl font-black text-on-surface">
+                    {aiConsumption?.summary?.total_docai_tokens ? aiConsumption.summary.total_docai_tokens.toLocaleString() : '0'}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-on-surface-variant/70 font-semibold">
+                    1 DocAI = 100 DeepSeek
+                  </p>
+                </div>
+              </div>
+
+              {/* KPI 3: Costo Real DeepSeek API */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">payments</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-on-surface-variant">Costo Acumulado DeepSeek</p>
+                  <p className="text-xl sm:text-2xl font-black text-on-surface text-emerald-600 dark:text-emerald-400">
+                    ${(aiConsumption?.summary?.total_cost_usd || 0).toFixed(4)} <span className="text-xs">USD</span>
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-on-surface-variant/70 font-semibold">
+                    Gasto directo de la API
+                  </p>
+                </div>
+              </div>
+
+              {/* KPI 4: Documentos Procesados con IA */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 sm:p-5 flex items-center gap-4 shadow-sm">
+                <div className="w-12 h-12 rounded-2xl bg-blue-100 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-400 flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">description</span>
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-on-surface-variant">Documentos IA Procesados</p>
+                  <p className="text-xl sm:text-2xl font-black text-on-surface">
+                    {aiConsumption?.summary?.total_docs || '0'}
+                  </p>
+                  <p className="text-[10px] sm:text-xs text-on-surface-variant/70 font-semibold">
+                    Usuarios Pro
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-Navegación dentro de Consumo IA */}
+            <div className="flex gap-2 border-b border-outline/20 pb-2">
+              <button
+                onClick={() => setAiViewMode('history')}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+                  aiViewMode === 'history'
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">history_edu</span>
+                Historial de Documentos
+              </button>
+              <button
+                onClick={() => setAiViewMode('keys')}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
+                  aiViewMode === 'keys'
+                    ? 'bg-primary text-white shadow-md shadow-primary/20'
+                    : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
+                }`}
+              >
+                <span className="material-symbols-outlined text-base">key</span>
+                Estado de Claves API & Rotación ({aiStatus?.total_keys || 0})
+              </button>
+            </div>
+
+            {/* Vista 1: Historial de Documentos y Consumo */}
+            {aiViewMode === 'history' && (
+              <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 shadow-sm">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 sm:mb-6 gap-3 sm:gap-4">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-black text-on-surface">
+                      Registro Detallado por Usuario y Documento
+                    </h3>
+                    <p className="text-xs text-on-surface-variant">
+                      Tokens reales consumidos por DeepSeek vs Tokens cobrados a DocAI.
+                    </p>
+                  </div>
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      fetchAiConsumption(aiSearch);
+                    }}
+                    className="relative w-full sm:w-72"
+                  >
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                    <input 
+                      type="text" 
+                      placeholder="Buscar por usuario o documento..." 
+                      value={aiSearch}
+                      onChange={(e) => setAiSearch(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary text-slate-800 dark:text-white placeholder-slate-400 transition-all"
+                    />
+                  </form>
+                </div>
+
+                {aiConsumptionLoading && !aiConsumption ? (
+                  <div className="flex justify-center py-12">
+                    <Spinner className="h-8 w-8 border-primary" />
+                  </div>
+                ) : !aiConsumption?.history?.length ? (
+                  <div className="text-center py-12 text-on-surface-variant bg-surface-variant/20 rounded-xl border border-dashed border-outline/30">
+                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">analytics</span>
+                    <p className="font-bold text-sm sm:text-base">
+                      {aiSearch ? 'No se encontraron documentos con ese criterio' : 'Aún no hay documentos procesados con IA'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                    <table className="w-full text-left border-collapse min-w-[750px]">
+                      <thead>
+                        <tr className="border-b border-outline/20 text-xs text-on-surface-variant uppercase tracking-wider">
+                          <th className="pb-3 px-3 font-black">Fecha</th>
+                          <th className="pb-3 px-3 font-black">Usuario</th>
+                          <th className="pb-3 px-3 font-black">Documento</th>
+                          <th className="pb-3 px-3 font-black">Párrafos / Palabras</th>
+                          <th className="pb-3 px-3 font-black">Tokens DeepSeek</th>
+                          <th className="pb-3 px-3 font-black">Tokens DocAI</th>
+                          <th className="pb-3 px-3 font-black">Costo USD</th>
+                        </tr>
+                      </thead>
+                      <tbody className="text-xs sm:text-sm divide-y divide-outline/10">
+                        {(aiConsumption?.history || []).map(item => (
+                          <tr key={item.id} className="hover:bg-surface-variant/20 transition-colors">
+                            <td className="py-3 px-3 font-medium text-on-surface text-xs whitespace-nowrap">
+                              {item.created_at ? new Date(item.created_at).toLocaleDateString() : 'N/A'}<br />
+                              <span className="text-on-surface-variant">{item.created_at ? new Date(item.created_at).toLocaleTimeString() : ''}</span>
+                            </td>
+                            <td className="py-3 px-3 font-bold text-on-surface">
+                              {item.user_email}
+                            </td>
+                            <td className="py-3 px-3 max-w-xs truncate" title={item.document_name}>
+                              <span className="font-semibold text-on-surface">{item.document_name}</span>
+                              <div className="text-[10px] text-slate-400">{item.model_used}</div>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className="font-bold text-on-surface">{item.total_paragraphs}</span> párr. <br />
+                              <span className="text-[11px] text-on-surface-variant">~{item.total_words?.toLocaleString()} palabras</span>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <div className="font-black text-primary">
+                                {item.deepseek_total_tokens?.toLocaleString()}
+                              </div>
+                              <div className="text-[10px] text-on-surface-variant">
+                                in: {item.deepseek_prompt_tokens} | out: {item.deepseek_completion_tokens}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 whitespace-nowrap">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-orange-100 dark:bg-orange-950/40 text-primary-container font-black text-xs">
+                                {item.tokens_consumed} tokens
+                              </span>
+                              <div className="text-[10px] text-on-surface-variant mt-0.5">
+                                origen: {item.source}
+                              </div>
+                            </td>
+                            <td className="py-3 px-3 font-bold text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                              ${item.estimated_cost_usd?.toFixed(5)}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Vista 2: Estado de Keys y Cuotas Diarias */}
+            {aiViewMode === 'keys' && (
               <>
-                {/* Stats Header */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
-                      <span className="material-symbols-outlined">key</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-on-surface-variant">Keys Configuradas</p>
-                      <p className="text-2xl font-black text-on-surface">{aiStatus.total_keys}</p>
-                    </div>
+                {aiLoading && !aiStatus ? (
+                  <div className="py-20 flex justify-center">
+                    <Spinner className="h-10 w-10 text-primary" />
                   </div>
-                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
-                      <span className="material-symbols-outlined">check_circle</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-on-surface-variant">Keys Disponibles</p>
-                      <p className="text-2xl font-black text-on-surface">{aiStatus.total_disponibles_ligero}</p>
-                    </div>
-                  </div>
-                  <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
-                    <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
-                      <span className="material-symbols-outlined">schedule</span>
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-on-surface-variant">Reinicio de Cuotas</p>
-                      <p className="text-xl font-black text-on-surface tracking-tight">
-                        {Math.floor(aiStatus.reset_in_seconds / 3600)}h {Math.floor((aiStatus.reset_in_seconds % 3600) / 60)}m
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Keys Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {aiStatus.keys.map((k, idx) => (
-                    <div key={idx} className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
-                      <div className="flex justify-between items-start mb-4">
-                        <div className="flex items-center gap-2">
-                          <div className={`w-3 h-3 rounded-full ${k.enfriado_ligero ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></div>
-                          <h3 className="font-black text-lg text-on-surface">API Key #{k.key_id}</h3>
+                ) : aiStatus ? (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                      <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                          <span className="material-symbols-outlined">key</span>
                         </div>
-                        {k.enfriado_ligero && (
-                          <span className="text-xs font-bold px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg flex items-center gap-1 border border-red-200 dark:border-red-900/50">
-                            <span className="material-symbols-outlined text-[14px]">ac_unit</span>
-                            Enfriando
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="space-y-4">
                         <div>
-                          <div className="flex justify-between text-sm mb-1.5">
-                            <span className="font-bold text-on-surface-variant flex items-center gap-1">
-                              <span className="material-symbols-outlined text-[16px]">data_usage</span>
-                              Consumo Diario
-                            </span>
-                            <span className="font-black text-on-surface">{k.consumo_pct_ligero}%</span>
-                          </div>
-                          <div className="w-full bg-slate-100 dark:bg-surface-variant rounded-full h-2.5 overflow-hidden shadow-inner">
-                            <div 
-                              className={`h-full rounded-full transition-all duration-1000 ${
-                                k.consumo_pct_ligero > 90 ? 'bg-red-500' : 
-                                k.consumo_pct_ligero > 70 ? 'bg-orange-500' : 
-                                'bg-primary'
-                              }`} 
-                              style={{ width: `${Math.min(k.consumo_pct_ligero, 100)}%` }}
-                            ></div>
-                          </div>
-                          <div className="flex justify-between items-center mt-2">
-                            <p className="text-xs text-on-surface-variant/70">
-                              DeepSeek Chat (V3)
-                            </p>
-                            <p className="text-xs font-bold text-on-surface-variant">
-                              {k.cuota_restante_ligero.toLocaleString()} peticiones restantes
-                            </p>
-                          </div>
+                          <p className="text-sm font-bold text-on-surface-variant">Keys Configuradas</p>
+                          <p className="text-2xl font-black text-on-surface">{aiStatus.total_keys}</p>
+                        </div>
+                      </div>
+                      <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                        <div className="w-12 h-12 rounded-full bg-green-100 dark:bg-green-900/30 flex items-center justify-center text-green-600 dark:text-green-400">
+                          <span className="material-symbols-outlined">check_circle</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-on-surface-variant">Keys Disponibles</p>
+                          <p className="text-2xl font-black text-on-surface">{aiStatus.total_disponibles_ligero}</p>
+                        </div>
+                      </div>
+                      <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 flex items-center gap-4 shadow-sm">
+                        <div className="w-12 h-12 rounded-full bg-orange-100 dark:bg-orange-900/30 flex items-center justify-center text-orange-600 dark:text-orange-400">
+                          <span className="material-symbols-outlined">schedule</span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-bold text-on-surface-variant">Reinicio de Cuotas</p>
+                          <p className="text-xl font-black text-on-surface tracking-tight">
+                            {Math.floor(aiStatus.reset_in_seconds / 3600)}h {Math.floor((aiStatus.reset_in_seconds % 3600) / 60)}m
+                          </p>
                         </div>
                       </div>
                     </div>
-                  ))}
-                </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {(aiStatus?.keys || []).map((k, idx) => (
+                        <div key={idx} className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-5 shadow-sm relative overflow-hidden group hover:shadow-md transition-shadow">
+                          <div className="flex justify-between items-start mb-4">
+                            <div className="flex items-center gap-2">
+                              <div className={`w-3 h-3 rounded-full ${k.enfriado_ligero ? 'bg-red-500 animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.6)]' : 'bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]'}`}></div>
+                              <h3 className="font-black text-lg text-on-surface">API Key #{k.key_id}</h3>
+                            </div>
+                            {k.enfriado_ligero && (
+                              <span className="text-xs font-bold px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 rounded-lg flex items-center gap-1 border border-red-200 dark:border-red-900/50">
+                                <span className="material-symbols-outlined text-[14px]">ac_unit</span>
+                                Enfriando
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="space-y-4">
+                            <div>
+                              <div className="flex justify-between text-sm mb-1.5">
+                                <span className="font-bold text-on-surface-variant flex items-center gap-1">
+                                  <span className="material-symbols-outlined text-[16px]">data_usage</span>
+                                  Consumo Diario
+                                </span>
+                                <span className="font-black text-on-surface">{k.consumo_pct_ligero}%</span>
+                              </div>
+                              <div className="w-full bg-slate-100 dark:bg-surface-variant rounded-full h-2.5 overflow-hidden shadow-inner">
+                                <div 
+                                  className={`h-full rounded-full transition-all duration-1000 ${
+                                    k.consumo_pct_ligero > 90 ? 'bg-red-500' : 
+                                    k.consumo_pct_ligero > 70 ? 'bg-orange-500' : 
+                                    'bg-primary'
+                                  }`} 
+                                  style={{ width: `${Math.min(k.consumo_pct_ligero, 100)}%` }}
+                                ></div>
+                              </div>
+                              <div className="flex justify-between items-center mt-2">
+                                <p className="text-xs text-on-surface-variant/70">
+                                  DeepSeek Chat (V3)
+                                </p>
+                                <p className="text-xs font-bold text-on-surface-variant">
+                                  {k.cuota_restante_ligero.toLocaleString()} peticiones restantes
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div className="py-10 text-center text-on-surface-variant font-bold">
+                    No se pudo cargar el estado de las APIs.
+                  </div>
+                )}
               </>
-            ) : (
-              <div className="py-10 text-center text-on-surface-variant font-bold">
-                No se pudo cargar el estado de las APIs.
-              </div>
             )}
           </div>
         ) : activeTab === 'pending' ? (

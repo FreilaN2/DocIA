@@ -62,11 +62,19 @@ app.add_middleware(
 
 # ─── Routers ──────────────────────────────────────────────
 
+# Routers directos
 app.include_router(auth.router)
 app.include_router(apa.router)
 app.include_router(pagos.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
+
+# Routers con prefijo /api (compatibilidad con frontend compilado en producción y proxies)
+app.include_router(auth.router, prefix="/api")
+app.include_router(apa.router, prefix="/api")
+app.include_router(pagos.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
+app.include_router(notifications.router, prefix="/api")
 
 
 # ─── Startup ──────────────────────────────────────────────
@@ -150,6 +158,7 @@ def diagnostico_db(
 # ─── Packs (endpoint público) ─────────────────────────────
 
 @app.get("/packs")
+@app.get("/api/packs")
 async def listar_packs(db: Session = Depends(get_db)):
     from core.models import TokenPack
     packs = db.query(TokenPack).filter(TokenPack.is_active == True).all()
@@ -185,6 +194,11 @@ async def workbox_files(filename: str):
 
 @app.get("/{catchall:path}")
 def serve_react_app(catchall: str):
+    # Si la petición es para una ruta de API (/api/...) que no fue capturada por ningún router,
+    # responder con 404 JSON para que Axios no reciba HTML y lance errores de formato en React.
+    if catchall.startswith("api/") or catchall == "api":
+        raise HTTPException(status_code=404, detail="Endpoint de API no encontrado.")
+
     frontend  = get_frontend_dir()
     file_path = os.path.join(frontend, catchall)
 

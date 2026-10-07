@@ -98,6 +98,15 @@ def _run_safe_migrations(conn):
     _add_column_if_not_exists(conn, "users", "account_locked_until", "DATETIME")
     _add_column_if_not_exists(conn, "users", "is_admin", "BOOLEAN DEFAULT FALSE")
 
+    # Métricas y auditoría de consumo DeepSeek en token_transactions
+    _add_column_if_not_exists(conn, "token_transactions", "deepseek_prompt_tokens", "INT DEFAULT 0")
+    _add_column_if_not_exists(conn, "token_transactions", "deepseek_completion_tokens", "INT DEFAULT 0")
+    _add_column_if_not_exists(conn, "token_transactions", "deepseek_total_tokens", "INT DEFAULT 0")
+    _add_column_if_not_exists(conn, "token_transactions", "total_paragraphs", "INT DEFAULT 0")
+    _add_column_if_not_exists(conn, "token_transactions", "total_words", "INT DEFAULT 0")
+    _add_column_if_not_exists(conn, "token_transactions", "model_used", "VARCHAR(50) DEFAULT NULL")
+    _add_column_if_not_exists(conn, "token_transactions", "estimated_cost_usd", "DECIMAL(10, 6) DEFAULT 0.0")
+
     try:
         conn.execute(text("CREATE UNIQUE INDEX idx_unique_users_phone ON users(phone)"))
         conn.commit()

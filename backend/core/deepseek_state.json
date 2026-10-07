@@ -3,10 +3,10 @@
   "keys": {
     "1": {
       "used_today": {
-        "deepseek-chat": 3
+        "deepseek-chat": 27
       },
       "used_minute": {
-        "deepseek-chat": 3
+        "deepseek-chat": 9
       }
     }
   }

@@ -102,7 +102,19 @@ class TokenTransaction(Base):
     tokens_consumed = Column(Integer, nullable=False)
     document_name = Column(String(255))
     source = Column(Enum('monthly', 'extra', name='token_source'), nullable=False)
+
+    # Métricas y auditoría de consumo DeepSeek
+    deepseek_prompt_tokens = Column(Integer, default=0)
+    deepseek_completion_tokens = Column(Integer, default=0)
+    deepseek_total_tokens = Column(Integer, default=0)
+    total_paragraphs = Column(Integer, default=0)
+    total_words = Column(Integer, default=0)
+    model_used = Column(String(50), nullable=True)
+    estimated_cost_usd = Column(DECIMAL(10, 6), default=0.0)
+
     created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+
+    user = relationship("User")
 
 # ─────────────────────────────────────────────
 # SUSCRIPCIONES PAGADAS

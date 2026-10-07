@@ -251,6 +251,11 @@ def _intentar_con_modelo(
             )
 
             tokens_usados = response.usage.total_tokens if response.usage else 0
+            usage_dict = {
+                "total": tokens_usados,
+                "prompt": response.usage.prompt_tokens if response.usage else 0,
+                "completion": response.usage.completion_tokens if response.usage else 0,
+            }
             pool.register_usage(key_id, modelo)
 
             content = response.choices[0].message.content
@@ -281,10 +286,10 @@ def _intentar_con_modelo(
                 # Fallback a reglas para este lote específico
                 return (
                     [clasificar_parrafo_reglas(txt) for txt in lista_textos],
-                    tokens_usados
+                    usage_dict
                 )
 
-            return etiquetas[:len(lista_textos)], tokens_usados
+            return etiquetas[:len(lista_textos)], usage_dict
 
         except Exception as e:
             error_str = str(e)
@@ -300,16 +305,50 @@ def _intentar_con_modelo(
                     # Backoff exponencial: 2s, 4s, 8s...
                     time.sleep(2 ** attempt)
                     continue
-                return None
+                return [clasificar_parrafo_reglas(txt) for txt in lista_textos], {"total": 0, "prompt": 0, "completion": 0}
 
             # Otros errores
             logger.error(f"❌ Error en DeepSeek (key #{key_id}, modelo '{modelo}'): {e}")
             if attempt < MAX_RETRIES - 1:
                 time.sleep(2 ** attempt)
                 continue
-            return None
+            return [clasificar_parrafo_reglas(txt) for txt in lista_textos], {"total": 0, "prompt": 0, "completion": 0}
 
-    return None
+    return [clasificar_parrafo_reglas(txt) for txt in lista_textos], {"total": 0, "prompt": 0, "completion": 0}
+
+
+# ═══════════════════════════════════════════════════════════
+# ESTIMACIÓN PREVIA DE TOKENS
+# ═══════════════════════════════════════════════════════════
+
+def estimar_tokens_documento(textos: list[str]) -> dict:
+    """
+    Calcula una estimación certera de tokens DeepSeek y DocAI requeridos
+    para analizar los párrafos del documento antes de ejecutar la IA.
+    """
+    total_parrafos = len(textos)
+    total_palabras = sum(len(txt.split()) for txt in textos)
+
+    # 1 palabra en español ≈ 1.35 tokens
+    # Cada lote de 40 párrafos tiene ~150 tokens de overhead del prompt del sistema
+    num_lotes = max(1, (total_parrafos + BATCH_SIZE - 1) // BATCH_SIZE) if total_parrafos > 0 else 1
+    prompt_tokens_est = round(total_palabras * 1.35) + (num_lotes * 150)
+
+    # Cada párrafo genera ~2 tokens de respuesta estructurada en JSON
+    completion_tokens_est = total_parrafos * 2
+
+    total_deepseek_est = prompt_tokens_est + completion_tokens_est
+    from core.token_service import deepseek_tokens_to_docai
+    docai_tokens_est = deepseek_tokens_to_docai(total_deepseek_est)
+
+    return {
+        "total_paragraphs": total_parrafos,
+        "total_words": total_palabras,
+        "estimated_deepseek_tokens": total_deepseek_est,
+        "estimated_prompt_tokens": prompt_tokens_est,
+        "estimated_completion_tokens": completion_tokens_est,
+        "estimated_docai_tokens": docai_tokens_est,
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -320,20 +359,28 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     """
     Procesa sincrónicamente todos los párrafos del documento.
     Compatible con el endpoint POST /procesar-apa/ existente.
-    
-    FIX #2: Usa _BASE_STATS.copy() en lugar de recrear el dict manualmente.
     """
-    # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
     total_deepseek_tokens = 0
+    prompt_deepseek_tokens = 0
+    completion_deepseek_tokens = 0
 
     textos_validos, indices_originales, imagen_items = _extraer_textos(doc_paragraphs)
     total_validos = len(textos_validos)
 
     if total_validos == 0 and not imagen_items:
         logger.warning("⚠️  No se encontraron párrafos con texto para procesar.")
-        return {"stats": stats, "detalles": [], "deepseek_tokens": 0}
+        return {
+            "stats": stats, 
+            "detalles": [], 
+            "deepseek_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_paragraphs": 0,
+            "total_words": 0,
+            "modelo": "ninguno",
+        }
 
     modelo = seleccionar_modelo(total_validos)
     logger.info(f"🤖 Clasificación por lotes — {total_validos} párrafos — modelo: {modelo}")
@@ -346,10 +393,15 @@ def procesar_con_ia(doc_paragraphs) -> dict:
 
         logger.info(f"🔍 Lote {num_lote} ({inicio_lote}–{fin_lote})...")
 
-        etiquetas_lote, tokens_lote = clasificar_lote_ia(
+        etiquetas_lote, usage_lote = clasificar_lote_ia(
             lote_textos, modelo, posicion_inicial=i
         )
-        total_deepseek_tokens += tokens_lote
+        if isinstance(usage_lote, dict):
+            total_deepseek_tokens += usage_lote.get("total", 0)
+            prompt_deepseek_tokens += usage_lote.get("prompt", 0)
+            completion_deepseek_tokens += usage_lote.get("completion", 0)
+        else:
+            total_deepseek_tokens += (usage_lote or 0)
 
         for j, categoria in enumerate(etiquetas_lote):
             idx_original = indices_originales[i + j]
@@ -369,7 +421,17 @@ def procesar_con_ia(doc_paragraphs) -> dict:
     todos.sort(key=lambda x: x["id"])
 
     logger.info(f"✅ Total tokens DeepSeek consumidos: {total_deepseek_tokens}")
-    return {"stats": stats, "detalles": todos, "deepseek_tokens": total_deepseek_tokens}
+    total_palabras = sum(len(txt.split()) for txt in textos_validos)
+    return {
+        "stats": stats, 
+        "detalles": todos, 
+        "deepseek_tokens": total_deepseek_tokens,
+        "prompt_tokens": prompt_deepseek_tokens,
+        "completion_tokens": completion_deepseek_tokens,
+        "total_paragraphs": total_validos,
+        "total_words": total_palabras,
+        "modelo": modelo,
+    }
 
 
 # ═══════════════════════════════════════════════════════════
@@ -382,26 +444,18 @@ async def procesar_con_ia_stream(
     """
     Procesa párrafos con IA y hace yield de un evento por cada lote procesado.
     Diseñado para ser consumido por el endpoint SSE de FastAPI.
-
-    FIX #3: time.sleep() → asyncio.sleep() para no bloquear el event loop.
-    FIX #2: Usa _BASE_STATS.copy() para stats iniciales.
-
-    Eventos emitidos:
-      - tipo='inicio'      → metadatos del procesamiento
-      - tipo='lote'        → resultado parcial de cada lote
-      - tipo='finalizado'  → stats completos + todos los detalles
     """
     textos_validos, indices_originales, imagen_items = _extraer_textos(doc_paragraphs)
     total_validos = len(textos_validos)
     
-    # Cálculo optimizado de total_lotes (evita ceil division innecesaria)
     total_lotes = (total_validos + BATCH_SIZE - 1) // BATCH_SIZE if total_validos > 0 else 1
     modelo = seleccionar_modelo(total_validos)
 
-    # FIX #2: Copiar stats base pre-definido
     stats = _BASE_STATS.copy()
     detalles: list[dict] = []
     total_deepseek_tokens = 0
+    prompt_deepseek_tokens = 0
+    completion_deepseek_tokens = 0
 
     # Evento de inicio
     yield {
@@ -419,6 +473,11 @@ async def procesar_con_ia_stream(
             "stats": stats,
             "detalles": [],
             "deepseek_tokens": 0,
+            "prompt_tokens": 0,
+            "completion_tokens": 0,
+            "total_paragraphs": 0,
+            "total_words": 0,
+            "modelo": modelo,
         }
         return
 
@@ -429,10 +488,15 @@ async def procesar_con_ia_stream(
         num_lote = i // BATCH_SIZE + 1
 
         # Ejecutar la llamada sincrónica a DeepSeek en un thread pool
-        etiquetas_lote, tokens_lote = await loop.run_in_executor(
+        etiquetas_lote, usage_lote = await loop.run_in_executor(
             None, clasificar_lote_ia, lote_textos, modelo, i
         )
-        total_deepseek_tokens += tokens_lote
+        if isinstance(usage_lote, dict):
+            total_deepseek_tokens += usage_lote.get("total", 0)
+            prompt_deepseek_tokens += usage_lote.get("prompt", 0)
+            completion_deepseek_tokens += usage_lote.get("completion", 0)
+        else:
+            total_deepseek_tokens += (usage_lote or 0)
 
         # Construir detalles del lote
         lote_detalles: list[dict] = []
@@ -461,20 +525,24 @@ async def procesar_con_ia_stream(
             "etiquetas": [d["categoria"] for d in lote_detalles],
         }
 
-        # FIX #3: asyncio.sleep() en lugar de time.sleep()
-        # No bloquea el event loop de FastAPI
         if i + BATCH_SIZE < total_validos:
             await asyncio.sleep(DELAY_ENTRE_LOTES)
 
     # Evento final con todos los resultados (incluye imágenes)
     todos = detalles + imagen_items
     todos.sort(key=lambda x: x["id"])
+    total_palabras = sum(len(txt.split()) for txt in textos_validos)
     yield {
         "tipo": "finalizado",
         "progreso": 100,
         "stats": stats,
         "detalles": todos,
         "deepseek_tokens": total_deepseek_tokens,
+        "prompt_tokens": prompt_deepseek_tokens,
+        "completion_tokens": completion_deepseek_tokens,
+        "total_paragraphs": total_validos,
+        "total_words": total_palabras,
+        "modelo": modelo,
     }
 
 

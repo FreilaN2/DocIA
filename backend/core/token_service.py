@@ -87,11 +87,20 @@ def get_available_tokens(user_id: int, db: Session) -> dict:
     }
 
 
-def consume_tokens(user_id: int, deepseek_tokens_used: int, document_name: str, db: Session) -> dict:
+def consume_tokens(
+    user_id: int, 
+    deepseek_tokens_used: int, 
+    document_name: str, 
+    db: Session,
+    deepseek_prompt_tokens: int = 0,
+    deepseek_completion_tokens: int = 0,
+    total_paragraphs: int = 0,
+    total_words: int = 0,
+    model_used: str = None,
+) -> dict:
     """
-    Descuenta los tokens consumidos del saldo del usuario.
-    Primero consume los tokens mensuales; si se agotan, usa los extras.
-    Retorna el nuevo saldo.
+    Descuenta los tokens consumidos del saldo del usuario y registra
+    la auditoría completa del consumo de la API de DeepSeek.
     """
     balance = check_and_renew_monthly_tokens(user_id, db)
     docai_tokens = deepseek_tokens_to_docai(deepseek_tokens_used)
@@ -115,20 +124,43 @@ def consume_tokens(user_id: int, deepseek_tokens_used: int, document_name: str, 
         else:
             balance.extra_tokens = 0
             source_used = "extra"
-            remaining = 0  # Se permiten llegar a 0, no negativo
+            remaining = 0  # Se permite llegar a 0, no negativo
 
-    db.add(TokenTransaction(
+    # Cálculo del costo real DeepSeek (en USD: $0.14/1M prompt, $0.28/1M completion)
+    if deepseek_prompt_tokens or deepseek_completion_tokens:
+        cost_usd = (deepseek_prompt_tokens * 0.14 + deepseek_completion_tokens * 0.28) / 1_000_000.0
+    else:
+        cost_usd = (deepseek_tokens_used * 0.20) / 1_000_000.0
+
+    tx = TokenTransaction(
         user_id=user_id,
         tokens_consumed=docai_tokens,
         document_name=document_name,
         source=source_used,
-    ))
+        deepseek_prompt_tokens=deepseek_prompt_tokens,
+        deepseek_completion_tokens=deepseek_completion_tokens,
+        deepseek_total_tokens=deepseek_tokens_used,
+        total_paragraphs=total_paragraphs,
+        total_words=total_words,
+        model_used=model_used or "deepseek-chat",
+        estimated_cost_usd=round(cost_usd, 6),
+    )
+    db.add(tx)
     db.commit()
     db.refresh(balance)
 
     total_remaining = balance.monthly_tokens + balance.extra_tokens
-    logger.info(f"💳 Usuario {user_id}: -{docai_tokens} DocAI tokens. Saldo: {total_remaining}")
-    return {"consumed": docai_tokens, "remaining": total_remaining}
+    logger.info(
+        f"💳 Usuario {user_id}: -{docai_tokens} DocAI tokens "
+        f"({deepseek_tokens_used} DeepSeek tokens, ~${cost_usd:.5f} USD). "
+        f"Saldo restante: {total_remaining}"
+    )
+    return {
+        "consumed": docai_tokens, 
+        "remaining": total_remaining, 
+        "deepseek_tokens": deepseek_tokens_used,
+        "cost_usd": cost_usd,
+    }
 
 
 def assign_monthly_tokens(user_id: int, tokens_per_month: int, db: Session):

@@ -48,6 +48,8 @@ export default function Editor() {
   const [isDragging, setIsDragging] = useState(false);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(null);
+  const [fileMetrics, setFileMetrics] = useState(null);
+  const [analyzingFile, setAnalyzingFile] = useState(false);
   const [progreso, setProgreso] = useState(0);
   const [loteActual, setLoteActual] = useState(0);
   const [totalLotes, setTotalLotes] = useState(0);
@@ -189,14 +191,39 @@ export default function Editor() {
     }
   }, [shouldShowAds]);
 
+  const handleFileSelect = async (selectedFile) => {
+    if (!selectedFile || !selectedFile.name.toLowerCase().endsWith('.docx')) {
+      alert(t('editor.invalid_docx_alert'));
+      return;
+    }
+    setFile(selectedFile);
+    setResult(null);
+    setFileMetrics(null);
+    setUploadId(null);
+    setErrorProceso(null);
+    setAnalyzingFile(true);
+
+    try {
+      const formData = new FormData();
+      const safeName = selectedFile.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9.\-_]/g, '_');
+      const safeFile = new File([selectedFile], safeName, { type: selectedFile.type });
+      formData.append('file', safeFile);
+
+      const resp = await api.post('/upload-documento/', formData);
+      setUploadId(resp.data.upload_id);
+      if (resp.data.metrics) {
+        setFileMetrics(resp.data.metrics);
+      }
+    } catch (err) {
+      console.warn('Error estimando métricas del archivo:', err);
+    } finally {
+      setAnalyzingFile(false);
+    }
+  };
+
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
-    if (selectedFile && selectedFile.name.toLowerCase().endsWith('.docx')) {
-      setFile(selectedFile);
-      setResult(null);
-    } else {
-      alert(t('editor.invalid_docx_alert'));
-    }
+    if (selectedFile) handleFileSelect(selectedFile);
   };
 
   const handleDragOver = (e) => { e.preventDefault(); setIsDragging(true); };
@@ -205,12 +232,7 @@ export default function Editor() {
     e.preventDefault();
     setIsDragging(false);
     const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile && droppedFile.name.toLowerCase().endsWith('.docx')) {
-      setFile(droppedFile);
-      setResult(null);
-    } else {
-      alert(t('editor.drop_invalid_docx_alert'));
-    }
+    if (droppedFile) handleFileSelect(droppedFile);
   };
 
   const handleUpload = async () => {
@@ -224,18 +246,21 @@ export default function Editor() {
     setErrorProceso(null);
 
     try {
-      const formData = new FormData();
-      const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9.\-_]/g, '_');
-      const safeFile = new File([file], safeName, { type: file.type });
-      formData.append('file', safeFile);
-      const uploadResp = await api.post('/upload-documento/', formData);
-      const { upload_id } = uploadResp.data;
-      setUploadId(upload_id);
+      let currentUploadId = uploadId;
+      if (!currentUploadId) {
+        const formData = new FormData();
+        const safeName = file.name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9.\-_]/g, '_');
+        const safeFile = new File([file], safeName, { type: file.type });
+        formData.append('file', safeFile);
+        const uploadResp = await api.post('/upload-documento/', formData);
+        currentUploadId = uploadResp.data.upload_id;
+        setUploadId(currentUploadId);
+      }
 
       const baseURL = api.defaults.baseURL || '';
       const apiPrefix = import.meta.env.PROD ? '/api' : '';
       const query = new URLSearchParams({
-        upload_id,
+        upload_id: currentUploadId,
         edicion,
         plan,
         token: token || '',
@@ -415,7 +440,7 @@ export default function Editor() {
     ? Math.round(((tokenBalance.monthly_tokens + tokenBalance.extra_tokens) / TOKEN_MAX_PRO) * 100)
     : 0;
   const hasTokens = tokenBalance && (tokenBalance.monthly_tokens + tokenBalance.extra_tokens) > 0;
-  const noTokensForPro = isPro && tokenBalance !== null && !hasTokens;
+  const noTokensForPro = isPro && (fileMetrics ? !fileMetrics.has_enough_tokens : (tokenBalance !== null && !hasTokens));
 
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden">
@@ -659,6 +684,118 @@ export default function Editor() {
                       </p>
                     )}
                   </label>
+                )}
+
+                {/* Indicador de análisis previo */}
+                {analyzingFile && (
+                  <div className="mt-4 p-4 rounded-2xl bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/40 flex items-center justify-center gap-3 text-primary-container text-xs sm:text-sm font-bold animate-pulse">
+                    <Spinner className="w-4 h-4 text-primary-container" />
+                    <span>Analizando documento y estimando tokens de DeepSeek...</span>
+                  </div>
+                )}
+
+                {/* Tarjeta de estimación de métricas y tokens */}
+                {fileMetrics && !analyzingFile && !loading && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="mt-4 sm:mt-5 p-4 sm:p-5 rounded-2xl border bg-white/80 dark:bg-surface/80 backdrop-blur-sm border-slate-200 dark:border-outline-variant/30 shadow-sm"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 dark:border-outline-variant/20">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-primary-container text-xl sm:text-2xl">
+                          {isPro ? 'token' : 'auto_stories'}
+                        </span>
+                        <div>
+                          <h4 className="text-xs sm:text-sm font-black text-on-surface">
+                            {isPro ? 'Estimación de Consumo IA' : 'Detalles del Documento'}
+                          </h4>
+                          <p className="text-[10px] sm:text-xs text-slate-400 font-bold truncate max-w-xs sm:max-w-md">
+                            {file?.name}
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/40 text-primary-container w-fit">
+                        {isPro ? 'DeepSeek V3' : 'Motor APA Reglas'}
+                      </span>
+                    </div>
+
+                    {/* Grilla de Métricas */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-3">
+                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl">
+                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                          Párrafos
+                        </p>
+                        <p className="text-sm sm:text-base font-black text-on-surface">
+                          {fileMetrics.total_paragraphs}
+                        </p>
+                      </div>
+                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl">
+                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                          Palabras
+                        </p>
+                        <p className="text-sm sm:text-base font-black text-on-surface">
+                          ~{fileMetrics.total_words?.toLocaleString()}
+                        </p>
+                      </div>
+                      {isPro ? (
+                        <>
+                          <div className="p-2.5 sm:p-3 bg-orange-50/70 dark:bg-orange-950/30 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                            <p className="text-[9px] sm:text-[10px] font-black text-primary-container uppercase tracking-wider">
+                              DeepSeek Tokens
+                            </p>
+                            <p className="text-sm sm:text-base font-black text-primary-container">
+                              ~{fileMetrics.estimated_deepseek_tokens?.toLocaleString()}
+                            </p>
+                          </div>
+                          <div className="p-2.5 sm:p-3 bg-orange-50/70 dark:bg-orange-950/30 rounded-xl border border-orange-100 dark:border-orange-900/30">
+                            <p className="text-[9px] sm:text-[10px] font-black text-primary-container uppercase tracking-wider">
+                              Costo DocAI
+                            </p>
+                            <p className="text-sm sm:text-base font-black text-primary-container">
+                              {fileMetrics.estimated_docai_tokens} tokens
+                            </p>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="col-span-2 p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl flex items-center gap-2">
+                          <span className="material-symbols-outlined text-green-500 text-base">check_circle</span>
+                          <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-on-surface-variant">
+                            Gratis (procesamiento con reglas sin IA)
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Barra de Saldo para Pro */}
+                    {isPro && (
+                      <div className={`p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-bold ${
+                        fileMetrics.has_enough_tokens 
+                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40' 
+                          : 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40'
+                      }`}>
+                        <div className="flex items-center gap-1.5">
+                          <span className="material-symbols-outlined text-base">
+                            {fileMetrics.has_enough_tokens ? 'verified' : 'warning'}
+                          </span>
+                          <span>
+                            {fileMetrics.has_enough_tokens
+                              ? `Saldo disponible: ${fileMetrics.user_tokens_available} tokens (Saldo restante: ${fileMetrics.tokens_after_process} tokens)`
+                              : `Saldo insuficiente: Tienes ${fileMetrics.user_tokens_available} tokens, requieres ${fileMetrics.estimated_docai_tokens} tokens.`}
+                          </span>
+                        </div>
+                        {!fileMetrics.has_enough_tokens && (
+                          <Link 
+                            to="/upgrade" 
+                            className="px-3 py-1 rounded-lg bg-rose-600 text-white font-black text-[11px] hover:bg-rose-700 transition-colors no-underline whitespace-nowrap self-end sm:self-auto"
+                          >
+                            Recargar Tokens
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                  </motion.div>
                 )}
 
                 {/* Barra de progreso */}

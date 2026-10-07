@@ -13,6 +13,7 @@ import subprocess
 import tempfile
 import shutil
 import time
+import sys
 from typing import AsyncGenerator, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile
@@ -26,7 +27,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.models import User
 from core.apa_rules import procesar_con_reglas
-from core.apa_ai import procesar_con_ia, procesar_con_ia_stream
+from core.apa_ai import procesar_con_ia, procesar_con_ia_stream, estimar_tokens_documento, _extraer_textos
 from core.token_service import get_available_tokens, consume_tokens, deepseek_tokens_to_docai
 from core.dependencies import get_current_user, get_optional_current_user, _decode_user_from_token
 from core.schemas import DatosFinales, ParrafoCorregido
@@ -74,12 +75,13 @@ async def limpiar_archivos_antiguos():
 # ─── Endpoints ────────────────────────────────────────────
 
 @router.post("/upload-documento/")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 async def upload_documento(
     request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: User = Depends(get_optional_current_user),
+    db: Session = Depends(get_db),
 ):
     background_tasks.add_task(limpiar_archivos_antiguos)
 
@@ -96,7 +98,40 @@ async def upload_documento(
 
     upload_storage.set(upload_id, (input_path, safe_name))
     logger.info(f"Upload #{upload_id}: {safe_name} ({len(contents)} bytes)")
-    return {"upload_id": upload_id, "filename": safe_name}
+
+    # Análisis y estimación de consumo de tokens para el documento
+    metrics = {
+        "total_paragraphs": 0,
+        "total_words": 0,
+        "estimated_deepseek_tokens": 0,
+        "estimated_prompt_tokens": 0,
+        "estimated_completion_tokens": 0,
+        "estimated_docai_tokens": 0,
+        "user_tokens_available": 0,
+        "has_enough_tokens": True,
+        "tokens_after_process": 0,
+    }
+
+    try:
+        doc = Document(io.BytesIO(contents))
+        textos_validos, _, _ = _extraer_textos(doc.paragraphs)
+        metrics = estimar_tokens_documento(textos_validos)
+        
+        user_balance = 0
+        if current_user:
+            user_balance = get_available_tokens(current_user.id, db)["total"]
+        
+        metrics["user_tokens_available"] = user_balance
+        metrics["has_enough_tokens"] = user_balance >= metrics["estimated_docai_tokens"]
+        metrics["tokens_after_process"] = max(0, user_balance - metrics["estimated_docai_tokens"])
+    except Exception as e:
+        logger.warning(f"Error calculando estimación de tokens para {safe_name}: {e}")
+
+    return {
+        "upload_id": upload_id, 
+        "filename": safe_name,
+        "metrics": metrics,
+    }
 
 
 @router.get("/procesar-apa/stream")
@@ -135,7 +170,17 @@ async def procesar_apa_stream(
             if plan == "pro":
                 async for evento in procesar_con_ia_stream(doc.paragraphs):
                     if evento.get("tipo") == "finalizado":
-                        consume_tokens(current_user.id, evento.get("deepseek_tokens", 0), filename, db)
+                        consume_tokens(
+                            user_id=current_user.id,
+                            deepseek_tokens_used=evento.get("deepseek_tokens", 0),
+                            document_name=filename,
+                            db=db,
+                            deepseek_prompt_tokens=evento.get("prompt_tokens", 0),
+                            deepseek_completion_tokens=evento.get("completion_tokens", 0),
+                            total_paragraphs=evento.get("total_paragraphs", 0),
+                            total_words=evento.get("total_words", 0),
+                            model_used=evento.get("modelo", "deepseek-chat"),
+                        )
                         # No eliminamos input_path aquí: /generar-final/ lo necesita
                         # para copiar la portada con imágenes. El cron de limpieza
                         # (limpiar_archivos_antiguos) lo borrará después de 24h.
@@ -212,6 +257,82 @@ async def mis_tokens(
     current_user: User = Depends(get_current_user),
 ):
     return {"status": "success", **get_available_tokens(current_user.id, db)}
+
+
+def _convertir_docx_a_pdf(out_docx: str, out_pdf: str) -> None:
+    """
+    Convierte un archivo DOCX a PDF.
+    1. Intenta LibreOffice (entorno Linux/Docker/Servidores de producción).
+    2. Si LibreOffice no está instalado y estamos en Windows, utiliza Microsoft Word COM (win32com).
+    """
+    soffice = _get_soffice_path_cached()
+    if soffice:
+        try:
+            tmp_dir = tempfile.mkdtemp()
+            result = subprocess.run(
+                [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp_dir,
+                 os.path.abspath(out_docx)],
+                capture_output=True, text=True, timeout=60,
+            )
+            if result.returncode == 0:
+                generated = os.path.join(tmp_dir, os.path.splitext(os.path.basename(out_docx))[0] + ".pdf")
+                if os.path.exists(generated):
+                    shutil.move(generated, out_pdf)
+                    shutil.rmtree(tmp_dir, ignore_errors=True)
+                    logger.info("Conversión a PDF con LibreOffice exitosa.")
+                    return
+            logger.warning(f"LibreOffice no produjo el archivo PDF esperado: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            raise HTTPException(status_code=500, detail="La conversión a PDF con LibreOffice tardó demasiado.")
+        except Exception as e:
+            logger.warning(f"Error en conversión con LibreOffice: {e}")
+
+    # Fallback en Windows usando Microsoft Word vía COM
+    if sys.platform == "win32":
+        try:
+            logger.info("Convirtiendo DOCX a PDF usando Microsoft Word COM en Windows...")
+            import pythoncom
+            import win32com.client
+
+            pythoncom.CoInitialize()
+            word = None
+            doc_com = None
+            try:
+                word = win32com.client.DispatchEx("Word.Application")
+                word.Visible = False
+                word.DisplayAlerts = False
+                abs_docx = os.path.abspath(out_docx)
+                abs_pdf = os.path.abspath(out_pdf)
+                doc_com = word.Documents.Open(abs_docx)
+                # 17 = wdExportFormatPDF
+                doc_com.SaveAs(abs_pdf, FileFormat=17)
+            finally:
+                if doc_com is not None:
+                    try:
+                        doc_com.Close(SaveChanges=False)
+                    except Exception:
+                        pass
+                if word is not None:
+                    try:
+                        word.Quit()
+                    except Exception:
+                        pass
+                pythoncom.CoUninitialize()
+
+            if os.path.exists(out_pdf):
+                logger.info(f"Conversión a PDF exitosa con Microsoft Word: {out_pdf}")
+                return
+        except Exception as e:
+            logger.error(f"Error en conversión con Microsoft Word COM: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al convertir a PDF con Microsoft Word: {e}"
+            )
+
+    raise HTTPException(
+        status_code=500,
+        detail="No se pudo convertir a PDF: ni LibreOffice ni Microsoft Word están disponibles en el servidor."
+    )
 
 
 @router.post("/generar-final/")
@@ -475,29 +596,8 @@ async def generar_final(
             except Exception:
                 pass
 
-        soffice = _get_soffice_path_cached()
-        if not soffice:
-            raise HTTPException(status_code=500, detail="LibreOffice no está instalado en el servidor.")
-
-        try:
-            tmp_dir = tempfile.mkdtemp()
-            result  = subprocess.run(
-                [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp_dir,
-                 os.path.abspath(out_docx)],
-                capture_output=True, text=True, timeout=60,
-            )
-            if result.returncode != 0:
-                raise RuntimeError(f"LibreOffice falló: {result.stderr}")
-            generated = os.path.join(tmp_dir, os.path.splitext(os.path.basename(out_docx))[0] + ".pdf")
-            if not os.path.exists(generated):
-                raise RuntimeError("LibreOffice no generó el PDF esperado.")
-            shutil.move(generated, out_pdf)
-            shutil.rmtree(tmp_dir, ignore_errors=True)
-            output_path = out_pdf
-        except subprocess.TimeoutExpired:
-            raise HTTPException(status_code=500, detail="La conversión a PDF tardó demasiado.")
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"No se pudo convertir a PDF: {e}")
+        await asyncio.to_thread(_convertir_docx_a_pdf, out_docx, out_pdf)
+        output_path = out_pdf
 
     file_id = str(uuid.uuid4())
     storage.set(file_id, output_path)
