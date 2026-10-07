@@ -1,18 +1,119 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
-// Banner estándar (soporta múltiples tamaños inyectando el script dentro de un iframe)
-export function AdBanner({ optionsKey, width, height }) {
+/**
+ * Determina si el usuario actual tiene plan Premium (Pro o Admin)
+ * comprobando de forma segura en localStorage.
+ */
+export function isPremiumUser() {
+  try {
+    const userStr = localStorage.getItem('user');
+    if (!userStr) return false;
+    const user = JSON.parse(userStr);
+    return user?.plan === 'pro' || user?.isAdmin === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Hook reactivo para detectar cambios en el estado Premium del usuario.
+ */
+export function useIsPremium() {
+  const [isPremium, setIsPremium] = useState(isPremiumUser);
+
+  useEffect(() => {
+    const check = () => setIsPremium(isPremiumUser());
+    check();
+    window.addEventListener('storage', check);
+    window.addEventListener('authChange', check);
+    return () => {
+      window.removeEventListener('storage', check);
+      window.removeEventListener('authChange', check);
+    };
+  }, []);
+
+  return isPremium;
+}
+
+/**
+ * Limpieza profunda de cualquier elemento publicitario remanente en el DOM
+ * (para cuando un usuario inicia sesión o accede a una vista Premium).
+ */
+export function cleanupAds() {
+  try {
+    // 1. Eliminar scripts inyectados
+    document.querySelectorAll(
+      'script[src*="profitableratecpmnetwork"], script[src*="highrevenueformat"], script[src*="effectivecpmnetwork"], script[src*="highperformanceformat"]'
+    ).forEach(el => el.remove());
+
+    // 2. Eliminar iframes o contenedores flotantes inyectados en body
+    document.querySelectorAll(
+      'iframe[src*="profitableratecpmnetwork"], iframe[src*="highrevenueformat"], iframe[src*="effectivecpmnetwork"], [data-docai-pushed]'
+    ).forEach(el => el.remove());
+
+    // 3. Eliminar estilos de override
+    const styleTag = document.getElementById('docai-ad-override');
+    if (styleTag && styleTag.parentNode) {
+      styleTag.parentNode.removeChild(styleTag);
+    }
+  } catch (e) {
+    // Silencioso
+  }
+}
+
+/**
+ * Configuración oficial de Adsterra para DocAI
+ */
+export const AD_CONFIG = {
+  BANNER_160x300: {
+    key: '24a6e6653b1b0309553375faf4aeb1e3',
+    width: 160,
+    height: 300,
+  },
+  BANNER_468x60: {
+    key: 'a9a5d00a37e85b3cc14bf03988c2fd2b',
+    width: 468,
+    height: 60,
+  },
+  BANNER_160x600: {
+    key: 'c15e9b8930c739532302d4d56850443e',
+    width: 160,
+    height: 600,
+  },
+  BANNER_320x50: {
+    key: 'fcb577830dd336a4f57c44ec27eb9e47',
+    width: 320,
+    height: 50,
+  },
+  BANNER_728x90: {
+    key: '7f2d1fbdf33a701cb4736f739bc34dd3',
+    width: 728,
+    height: 90,
+  },
+  SOCIAL_BAR_SRC: 'https://pl29658531.profitableratecpmnetwork.com/2e/eb/73/2eeb736ae1d49b0e2537b3cb22166326.js',
+  POPUNDER_SRC: 'https://pl29658532.profitableratecpmnetwork.com/d6/5a/d1/d65ad12bdfb8d4bda7b6ba55eb9a51e5.js',
+  NATIVE_SRC: 'https://pl29658533.profitableratecpmnetwork.com/61343cf17420892297b59ec025c118e5/invoke.js',
+  NATIVE_CONTAINER_ID: 'container-61343cf17420892297b59ec025c118e5',
+};
+
+// ═══════════════════════════════════════════════════════════════
+// COMPONENTE: AdBanner (Iframe aislado para banners estándar)
+// ═══════════════════════════════════════════════════════════════
+export function AdBanner({ optionsKey, width, height, className = '' }) {
+  const isPremium = useIsPremium();
   const iframeRef = useRef(null);
 
   useEffect(() => {
+    if (isPremium) return;
+
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
+    const htmlContent = `
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body { 
@@ -26,7 +127,7 @@ export function AdBanner({ optionsKey, width, height }) {
             }
             @media (max-width: 640px) {
               body {
-                transform: scale(0.9);
+                transform: scale(0.95);
                 transform-origin: center center;
               }
             }
@@ -42,20 +143,27 @@ export function AdBanner({ optionsKey, width, height }) {
               'params' : {}
             };
           </script>
-          <script type="text/javascript" src="https://www.highperformanceformat.com/${optionsKey}/invoke.js"></script>
+          <script type="text/javascript" src="https://www.highrevenueformat.com/${optionsKey}/invoke.js"></script>
         </body>
       </html>
-    `);
-    doc.close();
-  }, [optionsKey, width, height]);
+    `;
 
-  // Calcular si el banner es más ancho que la pantalla
-  const isWide = width > 500;
+    try {
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(htmlContent);
+        doc.close();
+      }
+    } catch (err) {
+      console.warn('AdBanner write error:', err);
+    }
+  }, [optionsKey, width, height, isPremium]);
+
+  if (isPremium) return null;
 
   return (
-    <div className={`flex justify-center items-center w-full my-2 sm:my-3 md:my-4 overflow-hidden rounded-md opacity-90 hover:opacity-100 transition-opacity ${
-      isWide ? 'hidden sm:flex' : ''
-    }`}>
+    <div className={`flex justify-center items-center w-full my-2 overflow-hidden rounded-md opacity-90 hover:opacity-100 transition-opacity ${className}`}>
       <iframe
         ref={iframeRef}
         width={width}
@@ -76,51 +184,91 @@ export function AdBanner({ optionsKey, width, height }) {
   );
 }
 
-// Banner Nativo
-export function AdNative() {
+// Subcomponentes específicos de tamaño para facilitar su uso
+export function AdBanner160x600(props) {
+  return <AdBanner {...AD_CONFIG.BANNER_160x600} {...props} />;
+}
+
+export function AdBanner160x300(props) {
+  return <AdBanner {...AD_CONFIG.BANNER_160x300} {...props} />;
+}
+
+export function AdBanner728x90(props) {
+  return <AdBanner {...AD_CONFIG.BANNER_728x90} {...props} />;
+}
+
+export function AdBanner468x60(props) {
+  return <AdBanner {...AD_CONFIG.BANNER_468x60} {...props} />;
+}
+
+export function AdBanner320x50(props) {
+  return <AdBanner {...AD_CONFIG.BANNER_320x50} {...props} />;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// COMPONENTE: AdNative (Banner Nativo / Cuadrícula de recomendaciones)
+// ═══════════════════════════════════════════════════════════════
+export function AdNative({ className = '' }) {
+  const isPremium = useIsPremium();
   const iframeRef = useRef(null);
 
   useEffect(() => {
+    if (isPremium) return;
+
     const iframe = iframeRef.current;
     if (!iframe) return;
 
-    const doc = iframe.contentWindow.document;
-    doc.open();
-    doc.write(`
+    const htmlContent = `
+      <!DOCTYPE html>
       <html>
         <head>
+          <meta charset="utf-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">
           <style>
             body { 
               margin: 0; 
               padding: 0; 
-              background: transparent;
+              background: transparent; 
               overflow-x: hidden;
+              font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             }
-            #container-61343cf17420892297b59ec025c118e5 {
+            #${AD_CONFIG.NATIVE_CONTAINER_ID} {
               max-width: 100%;
+              width: 100%;
               overflow: hidden;
             }
           </style>
         </head>
         <body>
-          <script async="async" data-cfasync="false" src="https://pl29658533.effectivecpmnetwork.com/61343cf17420892297b59ec025c118e5/invoke.js"></script>
-          <div id="container-61343cf17420892297b59ec025c118e5"></div>
+          <script async="async" data-cfasync="false" src="${AD_CONFIG.NATIVE_SRC}"></script>
+          <div id="${AD_CONFIG.NATIVE_CONTAINER_ID}"></div>
         </body>
       </html>
-    `);
-    doc.close();
-  }, []);
+    `;
+
+    try {
+      const doc = iframe.contentWindow?.document || iframe.contentDocument;
+      if (doc) {
+        doc.open();
+        doc.write(htmlContent);
+        doc.close();
+      }
+    } catch (err) {
+      console.warn('AdNative write error:', err);
+    }
+  }, [isPremium]);
+
+  if (isPremium) return null;
 
   return (
-    <div className="flex justify-center items-center w-full my-4 sm:my-6 bg-surface-variant/30 dark:bg-surface-variant/20 rounded-xl overflow-hidden p-1.5 sm:p-2">
+    <div className={`flex justify-center items-center w-full my-4 sm:my-6 bg-surface-variant/30 dark:bg-surface-variant/20 rounded-xl overflow-hidden p-1.5 sm:p-2 ${className}`}>
       <iframe
         ref={iframeRef}
         style={{ 
           border: 'none', 
           overflow: 'hidden', 
           width: '100%', 
-          minHeight: '250px',
+          minHeight: '230px',
           maxHeight: '400px',
         }}
         scrolling="no"
@@ -130,16 +278,25 @@ export function AdNative() {
   );
 }
 
-// Scripts Globales (Popunder y Social Bar)
+// ═══════════════════════════════════════════════════════════════
+// COMPONENTE: AdGlobal (Social Bar + Popunder)
+// ═══════════════════════════════════════════════════════════════
 export function AdGlobal() {
+  const isPremium = useIsPremium();
+
   useEffect(() => {
-    // 1. Crear una hoja de estilos global específica para los elementos rebeldes
+    // Si el usuario es premium, limpiar inmediatamente cualquier resto
+    if (isPremium) {
+      cleanupAds();
+      return;
+    }
+
+    // 1. Hoja de estilos global para que la Social Bar no tape la Navbar de DocAI
     const styleId = 'docai-ad-override';
     let styleTag = document.getElementById(styleId);
     if (!styleTag) {
       styleTag = document.createElement('style');
       styleTag.id = styleId;
-      // Cualquier elemento marcado será forzado a bajar con máxima prioridad CSS
       styleTag.innerHTML = `
         [data-docai-pushed="true"] {
           top: 85px !important;
@@ -161,11 +318,14 @@ export function AdGlobal() {
       document.head.appendChild(styleTag);
     }
 
-    // 2. Polling para buscar el Social Bar en cuanto se renderice
+    // 2. Polling para ajustar dinámicamente la posición del Social Bar
     const intervalId = setInterval(() => {
-      // Buscar elementos añadidos directamente al root o al body
-      const floatingNodes = document.querySelectorAll('body > div, body > iframe, html > div, body > *');
+      if (isPremiumUser()) {
+        cleanupAds();
+        return;
+      }
 
+      const floatingNodes = document.querySelectorAll('body > div, body > iframe, html > div, body > *');
       floatingNodes.forEach(el => {
         try {
           if (el.hasAttribute('data-docai-pushed') || el.id === 'root') return;
@@ -174,28 +334,24 @@ export function AdGlobal() {
           const className = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
           const id = (typeof el.id === 'string') ? el.id.toLowerCase() : '';
 
-          // Excluir elementos legítimos de nuestra app (navbar, toasts, modales)
           if (
             className.includes('nav') || 
             id.includes('nav') || 
             className.includes('toast') ||
             className.includes('modal') ||
-            className.includes('fixed') && className.includes('inset-0')
+            (className.includes('fixed') && className.includes('inset-0'))
           ) return;
 
-          // Si es un contenedor fijo flotante
           if (style.position === 'fixed' || style.position === 'absolute') {
             const zIndex = parseInt(style.zIndex, 10);
             const rect = el.getBoundingClientRect();
 
-            // Si tiene z-index alto o indefinido, y está tocando el techo de la página
             if (
               (zIndex > 100 || isNaN(zIndex) || style.zIndex === 'auto') && 
               rect.top <= 25 && 
               rect.height > 10 &&
-              rect.height < window.innerHeight * 0.8 // No empujar modales grandes
+              rect.height < window.innerHeight * 0.8
             ) {
-              // Marcarlo para que la regla CSS !important se le aplique al instante
               el.setAttribute('data-docai-pushed', 'true');
             }
           }
@@ -203,26 +359,30 @@ export function AdGlobal() {
       });
     }, 300);
 
-    // 3. Inyectar los scripts de la red
-    const script1 = document.createElement('script');
-    script1.src = "https://pl29658531.effectivecpmnetwork.com/2e/eb/73/2eeb736ae1d49b0e2537b3cb22166326.js";
-    script1.async = true;
-    script1.defer = true;
-    document.body.appendChild(script1);
+    // 3. Inyectar Social Bar y Popunder
+    let script1 = document.querySelector(`script[src="${AD_CONFIG.SOCIAL_BAR_SRC}"]`);
+    if (!script1) {
+      script1 = document.createElement('script');
+      script1.src = AD_CONFIG.SOCIAL_BAR_SRC;
+      script1.async = true;
+      script1.defer = true;
+      document.body.appendChild(script1);
+    }
 
-    const script2 = document.createElement('script');
-    script2.src = "https://pl29658532.effectivecpmnetwork.com/d6/5a/d1/d65ad12bdfb8d4bda7b6ba55eb9a51e5.js";
-    script2.async = true;
-    script2.defer = true;
-    document.body.appendChild(script2);
+    let script2 = document.querySelector(`script[src="${AD_CONFIG.POPUNDER_SRC}"]`);
+    if (!script2) {
+      script2 = document.createElement('script');
+      script2.src = AD_CONFIG.POPUNDER_SRC;
+      script2.async = true;
+      script2.defer = true;
+      document.body.appendChild(script2);
+    }
 
     return () => {
       clearInterval(intervalId);
-      if (styleTag && styleTag.parentNode) styleTag.parentNode.removeChild(styleTag);
-      if (script1 && script1.parentNode) script1.parentNode.removeChild(script1);
-      if (script2 && script2.parentNode) script2.parentNode.removeChild(script2);
+      cleanupAds();
     };
-  }, []);
+  }, [isPremium]);
 
   return null;
 }

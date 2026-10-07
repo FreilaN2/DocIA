@@ -9,7 +9,17 @@ import PlanBadge from '../components/PlanBadge';
 import ParagraphCard from '../components/ParagraphCard';
 import DocumentPreview from '../components/DocumentPreview';
 import Footer from '../components/Footer';
-import { AdBanner, AdNative, AdGlobal } from '../components/Ads';
+import { 
+  AdBanner, 
+  AdBanner160x600, 
+  AdBanner160x300, 
+  AdBanner728x90, 
+  AdBanner468x60, 
+  AdBanner320x50, 
+  AdNative, 
+  AdGlobal, 
+  useIsPremium 
+} from '../components/Ads';
 
 export default function Editor() {
   const { plan } = useParams();
@@ -48,7 +58,9 @@ export default function Editor() {
 
   const token = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
-  const isPro = plan === 'pro';
+  const isPremium = useIsPremium();
+  const isPro = plan === 'pro' || isPremium;
+  const shouldShowAds = !isPro && !isPremium;
 
   const Spinner = ({ className = "w-5 h-5 sm:w-6 sm:h-6" }) => (
     <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -63,12 +75,9 @@ export default function Editor() {
     if (token && storedUser) {
       try {
         const userData = JSON.parse(storedUser);
-        if (userData.plan === 'pro') {
+        if (userData.plan === 'pro' || userData.isAdmin) {
           api.get('/tokens/balance').then(r => {
             setTokenBalance(r.data);
-            if (!isPro && r.data.total > 0) {
-              navigate('/editor/pro', { replace: true });
-            }
           }).catch(() => setTokenBalance(null));
         } else {
           setTokenBalance(null);
@@ -77,11 +86,18 @@ export default function Editor() {
     }
   };
 
+  // Redirección inmediata: si un usuario es Premium pero la ruta es /editor/free, llevar a /editor/pro sin mostrar jamás publicidad
+  useEffect(() => {
+    if (isPremium && plan !== 'pro') {
+      navigate('/editor/pro', { replace: true });
+    }
+  }, [isPremium, plan, navigate]);
+
   useEffect(() => {
     fetchTokens();
     window.addEventListener('storage', fetchTokens);
     return () => window.removeEventListener('storage', fetchTokens);
-  }, [isPro, navigate]);
+  }, [isPro, isPremium, navigate]);
 
   useEffect(() => {
     if (isPro) {
@@ -90,7 +106,7 @@ export default function Editor() {
         return;
       }
       const userData = JSON.parse(storedUser);
-      if (userData.plan !== 'pro') {
+      if (userData.plan !== 'pro' && !userData.isAdmin) {
         navigate('/upgrade', { replace: true });
         return;
       }
@@ -136,7 +152,7 @@ export default function Editor() {
   }, [isPro, token, storedUser, navigate]);
 
   useEffect(() => {
-    if (!isPro) {
+    if (shouldShowAds) {
       const checkAdBlock = async () => {
         let isBlocked = false;
         
@@ -166,9 +182,12 @@ export default function Editor() {
         }
       };
       
-      setTimeout(checkAdBlock, 1000);
+      const timer = setTimeout(checkAdBlock, 1000);
+      return () => clearTimeout(timer);
+    } else {
+      setAdBlockDetected(false);
     }
-  }, [isPro]);
+  }, [shouldShowAds]);
 
   const handleFileChange = (e) => {
     const selectedFile = e.target.files[0];
@@ -401,26 +420,26 @@ export default function Editor() {
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden">
       <Navbar />
-      {!isPro && <AdGlobal />}
+      {shouldShowAds && <AdGlobal />}
 
-      {/* Skyscraper Izquierdo - Desktop grande */}
-      {!isPro && (
+      {/* Skyscraper Izquierdo - Desktop grande (160x600) */}
+      {shouldShowAds && (
         <div className="hidden 2xl:block fixed left-4 top-[60%] -translate-y-1/2 z-0 opacity-80 hover:opacity-100 transition-opacity">
-          <AdBanner optionsKey="c15e9b8930c739532302d4d56850443e" width={160} height={600} />
+          <AdBanner160x600 />
         </div>
       )}
       
-      {/* Skyscraper Derecho - Desktop grande */}
-      {!isPro && (
+      {/* Skyscraper Derecho - Desktop grande (160x300) */}
+      {shouldShowAds && (
         <div className="hidden 2xl:block fixed right-4 top-[60%] -translate-y-1/2 z-0 opacity-80 hover:opacity-100 transition-opacity">
-          <AdBanner optionsKey="24a6e6653b1b0309553375faf4aeb1e3" width={160} height={300} />
+          <AdBanner160x300 />
         </div>
       )}
 
-      {/* Sticky Mobile Banner */}
-      {!isPro && (
-        <div className="block lg:hidden fixed bottom-0 left-0 w-full z-50 bg-background/90 backdrop-blur border-t border-outline-variant/30 pt-2 pb-[env(safe-area-inset-bottom)]">
-          <AdBanner optionsKey="fcb577830dd336a4f57c44ec27eb9e47" width={320} height={50} />
+      {/* Sticky Mobile Banner (320x50) */}
+      {shouldShowAds && (
+        <div className="block lg:hidden fixed bottom-0 left-0 w-full z-40 bg-background/90 backdrop-blur border-t border-outline-variant/30 pt-2 pb-[env(safe-area-inset-bottom)]">
+          <AdBanner320x50 />
         </div>
       )}
 
@@ -431,10 +450,10 @@ export default function Editor() {
       </div>
 
       <main className="pt-20 sm:pt-24 md:pt-32 pb-24 sm:pb-28 md:pb-32 px-4 sm:px-6 md:px-8 lg:px-gutter max-w-4xl mx-auto flex flex-col gap-6 sm:gap-8 relative z-10">
-        {/* Banner superior - Desktop */}
-        {!isPro && (
+        {/* Banner superior - Desktop (728x90) */}
+        {shouldShowAds && (
           <div className="hidden lg:flex w-full justify-center mb-2">
-            <AdBanner optionsKey="7f2d1fbdf33a701cb4736f739bc34dd3" width={728} height={90} />
+            <AdBanner728x90 />
           </div>
         )}
         
@@ -443,20 +462,9 @@ export default function Editor() {
           initial={{ opacity: 0, x: -20 }} 
           animate={{ opacity: 1, x: 0 }} 
           transition={{ duration: 0.4 }} 
-          className="flex flex-col sm:flex-row items-center justify-between sm:justify-end gap-3 sm:gap-4 mb-2 sm:mb-4 w-full"
+          className="flex flex-col sm:flex-row items-center justify-end gap-3 sm:gap-4 mb-2 sm:mb-4 w-full"
         >
-          {!isPro && (
-            <a 
-              href="https://www.effectivecpmnetwork.com/xyfpimwm?key=9076051f47ffea6fc9c501efa2c56965" 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="text-xs font-black px-3 sm:px-4 py-2 rounded-xl bg-orange-100 dark:bg-orange-900/30 text-primary-container hover:bg-orange-200 dark:hover:bg-orange-900/50 transition-colors flex items-center gap-1.5 sm:gap-2 no-underline w-full sm:w-auto justify-center sm:mr-auto"
-            >
-              <span className="material-symbols-outlined text-sm">favorite</span> 
-              <span className="whitespace-nowrap">Apoyar DocAI</span>
-            </a>
-          )}
-          <PlanBadge plan={plan} />
+          <PlanBadge plan={isPro ? 'pro' : 'free'} />
         </motion.div>
 
         {/* Token Balance Bar */}
@@ -587,11 +595,16 @@ export default function Editor() {
                   </div>
                 </div>
 
-                {/* Banner publicitario en upload */}
-                {!isPro && (
-                  <div className="hidden sm:flex justify-center w-full mb-6 sm:mb-8">
-                    <AdBanner optionsKey="a9a5d00a37e85b3cc14bf03988c2fd2b" width={468} height={60} />
-                  </div>
+                {/* Banner publicitario en upload (468x60 en desktop/tablet, 320x50 en móviles) */}
+                {shouldShowAds && (
+                  <>
+                    <div className="hidden sm:flex justify-center w-full mb-6 sm:mb-8">
+                      <AdBanner468x60 />
+                    </div>
+                    <div className="flex sm:hidden justify-center w-full mb-4">
+                      <AdBanner320x50 />
+                    </div>
+                  </>
                 )}
 
                 {/* Dropzone o Advertencia de AdBlock */}
@@ -792,11 +805,16 @@ export default function Editor() {
                   )}
                 </AnimatePresence>
 
-                {/* Banner en resultados */}
-                {!isPro && (
-                  <div className="flex justify-center w-full mb-6 sm:mb-8">
-                    <AdBanner optionsKey="2711704c965197e3293a4588dedc1480" width={300} height={250} />
-                  </div>
+                {/* Banner publicitario en resultados (468x60 en desktop/tablet, 320x50 en móviles) */}
+                {shouldShowAds && (
+                  <>
+                    <div className="hidden sm:flex justify-center w-full mb-6 sm:mb-8">
+                      <AdBanner468x60 />
+                    </div>
+                    <div className="flex sm:hidden justify-center w-full mb-4">
+                      <AdBanner320x50 />
+                    </div>
+                  </>
                 )}
 
                 {/* Opciones de descarga */}
@@ -908,7 +926,7 @@ export default function Editor() {
         }
       `}</style>
       
-      {!isPro && (
+      {shouldShowAds && (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 lg:px-gutter mb-8 sm:mb-12">
           <AdNative />
         </div>
