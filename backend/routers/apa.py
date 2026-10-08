@@ -170,7 +170,7 @@ async def procesar_apa_stream(
             if plan == "pro":
                 async for evento in procesar_con_ia_stream(doc.paragraphs):
                     if evento.get("tipo") == "finalizado":
-                        tokens_consumed = consume_tokens(
+                        res_tokens = consume_tokens(
                             user_id=current_user.id,
                             deepseek_tokens_used=evento.get("deepseek_tokens", 0),
                             document_name=filename,
@@ -181,7 +181,7 @@ async def procesar_apa_stream(
                             total_words=evento.get("total_words", 0),
                             model_used=evento.get("modelo", "deepseek-chat"),
                         )
-                        evento["tokens_consumed"] = tokens_consumed
+                        evento["tokens_consumed"] = res_tokens.get("consumed", 0) if isinstance(res_tokens, dict) else res_tokens
                         # No eliminamos input_path aquí: /generar-final/ lo necesita
                         # para copiar la portada con imágenes. El cron de limpieza
                         # (limpiar_archivos_antiguos) lo borrará después de 24h.

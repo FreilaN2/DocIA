@@ -216,6 +216,11 @@ export default function Editor() {
       }
     } catch (err) {
       console.warn('Error estimando métricas del archivo:', err);
+      if (err.response?.status === 413) {
+        setErrorProceso('El archivo supera el tamaño máximo permitido por el servidor proxy (413).');
+      } else {
+        setErrorProceso(err.response?.data?.detail || 'No se pudo pre-analizar el archivo.');
+      }
     } finally {
       setAnalyzingFile(false);
     }
