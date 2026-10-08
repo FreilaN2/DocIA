@@ -13,4 +13,4 @@ SUBSCRIPTION_PRICES: dict[int, float] = {
 }
 
 # Tokens asignados por mes en el plan Pro
-TOKENS_PER_MONTH_PRO: int = 500
+TOKENS_PER_MONTH_PRO: int = 10000

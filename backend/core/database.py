@@ -155,7 +155,7 @@ def init_db():
         if db.query(Plan).count() == 0:
             db.add_all([
                 Plan(name="free", price=0.0, tokens_per_month=0, has_ai_analysis=False, has_watermark=False),
-                Plan(name="pro", price=12.0, tokens_per_month=1000, has_ai_analysis=True, has_watermark=False),
+                Plan(name="pro", price=12.0, tokens_per_month=10000, has_ai_analysis=True, has_watermark=False),
             ])
             db.commit()
             logger.info("✅ Planes iniciales insertados.")
