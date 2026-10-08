@@ -48,6 +48,9 @@ services:
 
       # Secret Key para PyJWT
       - SECRET_KEY=${SECRET_KEY:-}
+
+      # URL Front-End (Para redirección de PayPal)
+      - FRONTEND_URL=${FRONTEND_URL:-https://docia.qzz.io}
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/processed:/app/processed
