@@ -151,9 +151,32 @@ def run_migrations_and_seeds():
         sys.exit(1)
 
 
+def clean_temp_dirs():
+    """
+    Limpia cualquier archivo residual en uploads/ y processed/ al iniciar el contenedor.
+    """
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    removed = 0
+    for folder in ("uploads", "processed"):
+        folder_path = os.path.join(base_dir, folder)
+        if not os.path.exists(folder_path):
+            continue
+        for fname in os.listdir(folder_path):
+            fpath = os.path.join(folder_path, fname)
+            if os.path.isfile(fpath) and not fname.startswith("."):
+                try:
+                    os.remove(fpath)
+                    removed += 1
+                except Exception as e:
+                    logger.warning(f"No se pudo borrar {fpath}: {e}")
+    if removed:
+        logger.info(f"🧹 Se eliminaron {removed} archivos temporales residuales de ejecuciones previas.")
+
+
 if __name__ == "__main__":
     logger.info("🤖 Iniciando proceso de inicialización DocAI Backend...")
     sync_env_file()
+    clean_temp_dirs()
     wait_and_create_db()
     run_migrations_and_seeds()
     logger.info("✨ Inicialización completada exitosamente.")
