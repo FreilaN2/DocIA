@@ -25,7 +25,7 @@ from core.config import BASE_DIR, get_frontend_dir
 from core.limiter import limiter
 from core.dependencies import get_admin_user
 from core.models import User
-from routers import auth, apa, pagos, admin, notifications
+from routers import auth, apa, pagos, admin, notifications, coupons
 
 # ─── Configuración global ─────────────────────────────────
 
@@ -68,6 +68,7 @@ app.include_router(apa.router)
 app.include_router(pagos.router)
 app.include_router(admin.router)
 app.include_router(notifications.router)
+app.include_router(coupons.router)
 
 # Routers con prefijo /api (compatibilidad con frontend compilado en producción y proxies)
 app.include_router(auth.router, prefix="/api")
@@ -75,6 +76,7 @@ app.include_router(apa.router, prefix="/api")
 app.include_router(pagos.router, prefix="/api")
 app.include_router(admin.router, prefix="/api")
 app.include_router(notifications.router, prefix="/api")
+app.include_router(coupons.router, prefix="/api")
 
 
 # ─── Startup ──────────────────────────────────────────────

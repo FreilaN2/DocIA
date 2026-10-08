@@ -13,12 +13,13 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction
+from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
 from core.token_service import assign_monthly_tokens, add_extra_tokens
+from core.referral_service import grant_referral_reward_if_eligible
 from core.constants import SUBSCRIPTION_PRICES, TOKENS_PER_MONTH_PRO
-from core.schemas import AdminPagoActionRequest, CreateAdminRequest
+from core.schemas import AdminPagoActionRequest, CreateAdminRequest, CouponCreate
 
 router = APIRouter(prefix="/admin")
 
@@ -86,6 +87,13 @@ async def aprobar_pago(
 
     pago.status = 'approved'
     db.commit()
+
+    # Si el usuario fue invitado por un referido y es su primera compra, otorgar 1000 tokens
+    try:
+        grant_referral_reward_if_eligible(user.id, db)
+    except Exception as e:
+        logger.warning(f"Error otorgando recompensa de referido en aprobar_pago: {e}")
+
     return {"status": "success", "message": "Pago aprobado y beneficios asignados al usuario."}
 
 
@@ -205,3 +213,141 @@ async def get_ai_consumption(
         },
         "history": items,
     }
+
+
+# ─── Gestión de Cupones ───────────────────────────────────
+
+@router.get("/coupons")
+async def listar_cupones(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Retorna la lista de todos los cupones creados con sus estadísticas de uso."""
+    now = datetime.now(timezone.utc)
+    coupons = db.query(Coupon).order_by(Coupon.created_at.desc()).all()
+
+    result = []
+    for c in coupons:
+        is_expired = bool(c.expires_at and c.expires_at.replace(tzinfo=timezone.utc) < now)
+        is_depleted = bool(c.max_uses > 0 and c.current_uses >= c.max_uses)
+
+        result.append({
+            "id": c.id,
+            "code": c.code,
+            "description": c.description,
+            "coupon_type": c.coupon_type,
+            "discount_value": float(c.discount_value),
+            "tokens_value": c.tokens_value,
+            "min_purchase_amount": float(c.min_purchase_amount),
+            "max_uses": c.max_uses,
+            "current_uses": c.current_uses,
+            "max_uses_per_user": c.max_uses_per_user,
+            "is_active": c.is_active,
+            "is_expired": is_expired,
+            "is_depleted": is_depleted,
+            "starts_at": c.starts_at.isoformat() if c.starts_at else None,
+            "expires_at": c.expires_at.isoformat() if c.expires_at else None,
+            "created_at": c.created_at.isoformat() if c.created_at else None,
+        })
+
+    return result
+
+
+@router.post("/coupons")
+async def crear_cupon(
+    data: CouponCreate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Crea un nuevo cupón de descuento o de recarga de tokens."""
+    clean_code = data.code.strip().upper()
+    if not clean_code:
+        raise HTTPException(status_code=400, detail="El código de cupón no puede estar vacío.")
+
+    existing = db.query(Coupon).filter(Coupon.code == clean_code).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Ya existe un cupón con el código '{clean_code}'.")
+
+    if data.coupon_type not in ('discount_percent', 'discount_fixed', 'tokens'):
+        raise HTTPException(status_code=400, detail="Tipo de cupón no válido.")
+
+    if data.coupon_type == 'discount_percent':
+        if data.discount_value <= 0 or data.discount_value > 100:
+            raise HTTPException(status_code=400, detail="El porcentaje de descuento debe estar entre 1% y 100%.")
+    elif data.coupon_type == 'discount_fixed':
+        if data.discount_value <= 0:
+            raise HTTPException(status_code=400, detail="El monto de descuento debe ser mayor a 0.")
+    elif data.coupon_type == 'tokens':
+        if data.tokens_value <= 0:
+            raise HTTPException(status_code=400, detail="La cantidad de tokens debe ser mayor a 0.")
+
+    parsed_expires_at = None
+    if data.expires_at:
+        try:
+            # Soportar formatos 'YYYY-MM-DD' o ISO
+            parsed_expires_at = datetime.fromisoformat(data.expires_at.replace("Z", "+00:00"))
+        except Exception:
+            raise HTTPException(status_code=400, detail="Formato de fecha de expiración no válido (usa YYYY-MM-DD).")
+
+    nuevo_cupon = Coupon(
+        code=clean_code,
+        description=data.description.strip() if data.description else None,
+        coupon_type=data.coupon_type,
+        discount_value=data.discount_value,
+        tokens_value=data.tokens_value,
+        min_purchase_amount=data.min_purchase_amount,
+        max_uses=data.max_uses,
+        current_uses=0,
+        max_uses_per_user=data.max_uses_per_user or 1,
+        is_active=True,
+        expires_at=parsed_expires_at,
+    )
+    db.add(nuevo_cupon)
+    db.commit()
+    db.refresh(nuevo_cupon)
+
+    return {
+        "status": "success",
+        "message": f"Cupón '{clean_code}' creado exitosamente.",
+        "coupon_id": nuevo_cupon.id,
+    }
+
+
+@router.put("/coupons/{coupon_id}/toggle")
+async def alternar_estado_cupon(
+    coupon_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Activa o desactiva un cupón existente."""
+    coupon = db.query(Coupon).filter(Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado.")
+
+    coupon.is_active = not coupon.is_active
+    db.commit()
+    estado = "activado" if coupon.is_active else "desactivado"
+    return {"status": "success", "message": f"Cupón '{coupon.code}' {estado}.", "is_active": coupon.is_active}
+
+
+@router.delete("/coupons/{coupon_id}")
+async def eliminar_cupon(
+    coupon_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Elimina un cupón o lo desactiva si ya tiene usos para mantener auditoría."""
+    coupon = db.query(Coupon).filter(Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado.")
+
+    # Si ya tiene redenciones, desactivarlo para no borrar historial
+    has_redemptions = db.query(CouponRedemption).filter(CouponRedemption.coupon_id == coupon_id).count() > 0
+    if has_redemptions:
+        coupon.is_active = False
+        db.commit()
+        return {"status": "success", "message": f"El cupón '{coupon.code}' tenía usos registrados y fue desactivado."}
+
+    db.delete(coupon)
+    db.commit()
+    return {"status": "success", "message": f"Cupón '{coupon.code}' eliminado correctamente."}

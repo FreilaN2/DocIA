@@ -57,6 +57,7 @@ export default function PaymentSuccess() {
       const payload = { order_id: orderId };
       if (pending.type === 'pack') payload.pack_id = pending.pack_id;
       if (pending.type === 'subscription') payload.months = pending.months;
+      if (pending.coupon_code) payload.coupon_code = pending.coupon_code;
 
       try {
         const resp = await api.post(endpoint, payload);

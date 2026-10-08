@@ -46,6 +46,12 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
+  // Sistema de Referidos y Cupones
+  const [referralData, setReferralData] = useState(null);
+  const [referralLoading, setReferralLoading] = useState(false);
+  const [couponInput, setCouponInput] = useState('');
+  const [couponRedeeming, setCouponRedeeming] = useState(false);
+
   useEffect(() => {
     let isMounted = true;
     const syncFromStorage = () => {
@@ -95,6 +101,21 @@ export default function Profile() {
           if (isMounted && err.response?.status !== 401) {
             toast.error(err.response?.data?.detail || t('profile.error_loading_profile'));
           }
+        });
+
+      setReferralLoading(true);
+      api.get('/user/referrals')
+        .then(({ data }) => {
+          if (!isMounted) return;
+          if (data.status === 'success') {
+            setReferralData(data);
+          }
+        })
+        .catch((err) => {
+          console.error("Error obteniendo referidos:", err);
+        })
+        .finally(() => {
+          if (isMounted) setReferralLoading(false);
         });
     }
 
@@ -202,6 +223,56 @@ export default function Profile() {
     }
   };
 
+  const handleCopyReferralLink = () => {
+    const code = referralData?.referral_code || user?.referralCode || user?.referral_code;
+    if (!code) {
+      toast.error('No se encontró código de referido.');
+      return;
+    }
+    const link = `${window.location.origin}/register?ref=${code}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(link);
+      toast.success('¡Enlace de referido copiado!', { icon: '🔗' });
+    }
+  };
+
+  const handleCopyReferralCode = () => {
+    const code = referralData?.referral_code || user?.referralCode || user?.referral_code;
+    if (!code) {
+      toast.error('No se encontró código de referido.');
+      return;
+    }
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(code);
+      toast.success(`¡Código ${code} copiado!`, { icon: '📋' });
+    }
+  };
+
+  const handleRedeemCoupon = async (e) => {
+    e.preventDefault();
+    if (!couponInput.trim()) {
+      toast.error('Ingresa un código de cupón');
+      return;
+    }
+    setCouponRedeeming(true);
+    try {
+      const res = await api.post('/coupons/redeem-tokens', { code: couponInput.trim() });
+      if (res.data.status === 'success') {
+        toast.success(res.data.message || '¡Tokens canjeados exitosamente!', { icon: '🎉', duration: 4000 });
+        setCouponInput('');
+        const meRes = await api.get('/user/me');
+        setUser(meRes.data);
+        localStorage.setItem('user', JSON.stringify(meRes.data));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'No se pudo canjear el cupón', { icon: '❌' });
+    } finally {
+      setCouponRedeeming(false);
+    }
+  };
+
   // ─── Estado: Sin usuario ───
   if (!user) {
     return (
@@ -235,6 +306,37 @@ export default function Profile() {
   const planGradient = user.plan === 'pro'
     ? 'linear-gradient(135deg, #ff6b00, #ff8c33)'
     : 'linear-gradient(135deg, #3b82f6, #2563eb)';
+
+  const getDisplayTokens = (userData) => {
+    if (!userData) return 0;
+    if (typeof userData.totalTokens === 'number') return userData.totalTokens;
+    if (typeof userData.tokens === 'number') return userData.tokens;
+    if (typeof userData.tokens === 'object' && userData.tokens !== null) {
+      const t = userData.tokens.total ?? userData.tokens.monthly_tokens;
+      if (typeof t === 'number') return t;
+    }
+    if (typeof userData.tokenBalance === 'object' && userData.tokenBalance !== null) {
+      const t = userData.tokenBalance.total ?? userData.tokenBalance.monthly_tokens;
+      if (typeof t === 'number') return t;
+    }
+    const parsed = Number(userData.totalTokens ?? userData.tokens);
+    return isNaN(parsed) ? 0 : parsed;
+  };
+
+  const getExtraTokens = (userData) => {
+    if (!userData) return 0;
+    if (typeof userData.extraTokens === 'number') return userData.extraTokens;
+    if (typeof userData.tokens === 'object' && userData.tokens !== null) {
+      const e = userData.tokens.extra_tokens;
+      if (typeof e === 'number') return e;
+    }
+    if (typeof userData.tokenBalance === 'object' && userData.tokenBalance !== null) {
+      const e = userData.tokenBalance.extra_tokens;
+      if (typeof e === 'number') return e;
+    }
+    const parsed = Number(userData.extraTokens);
+    return isNaN(parsed) ? 0 : parsed;
+  };
 
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden flex flex-col">
@@ -366,6 +468,24 @@ export default function Profile() {
                 </p>
               </div>
 
+              {/* Tokens Disponibles */}
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+                <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
+                  Tokens DocIA
+                </p>
+                <div className="flex items-center justify-between">
+                  <p className="font-bold text-primary-container text-base sm:text-lg flex items-center gap-1">
+                    <span className="material-symbols-outlined text-base">generating_tokens</span>
+                    {getDisplayTokens(user).toLocaleString()}
+                  </p>
+                  {(getExtraTokens(user) > 0) && (
+                    <span className="text-[10px] bg-orange-100 dark:bg-orange-950/40 text-primary-container font-black px-2 py-0.5 rounded-full" title="Tokens extra que nunca expiran">
+                      +{getExtraTokens(user).toLocaleString()} Extra
+                    </span>
+                  )}
+                </div>
+              </div>
+
               {/* Última actividad */}
               <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
@@ -375,6 +495,196 @@ export default function Profile() {
                   {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : '—'}
                 </p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── Programa de Referidos ── */}
+        <section className="w-full">
+          <div className="bg-gradient-to-br from-white via-orange-50/20 to-white dark:from-[#1a1512] dark:via-[#221914] dark:to-[#1a1512] rounded-2xl sm:rounded-3xl border border-orange-200/70 dark:border-orange-500/20 p-5 sm:p-7 shadow-lg relative overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 border-b border-orange-100 dark:border-white/5 pb-4">
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="material-symbols-outlined text-primary-container text-2xl sm:text-3xl">share</span>
+                  <h2 className="text-lg sm:text-xl md:text-2xl font-black text-on-surface">
+                    Programa de Referidos
+                  </h2>
+                  <span className="bg-primary-container/10 text-primary-container text-[10px] sm:text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
+                    +1,000 Tokens DocIA
+                  </span>
+                </div>
+                <p className="text-xs sm:text-sm text-on-surface-variant mt-1.5 max-w-2xl">
+                  Invita a tus compañeros y amigos. Cuando un referido se registre con tu código o enlace y realice su <strong>primera compra o recarga</strong> de tokens, ¡recibirás de inmediato <strong>1,000 tokens DocIA</strong> extra que nunca expiran!
+                </p>
+              </div>
+            </div>
+
+            {/* Referrals Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
+              {/* Código y Enlace */}
+              <div className="lg:col-span-7 flex flex-col gap-3.5">
+                <div className="p-4 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                  <div>
+                    <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-on-surface-variant block mb-1">
+                      Tu Código Personal
+                    </span>
+                    <span className="text-xl sm:text-2xl font-black tracking-wider font-mono text-primary-container">
+                      {referralData?.referral_code || user.referralCode || user.referral_code || 'DOC-XXXXXX'}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleCopyReferralCode}
+                    className="px-4 py-2.5 rounded-xl bg-primary-container/10 hover:bg-primary-container/20 text-primary-container text-xs sm:text-sm font-black transition-all flex items-center justify-center gap-1.5 active:scale-95 whitespace-nowrap"
+                  >
+                    <span className="material-symbols-outlined text-base sm:text-lg">content_copy</span>
+                    Copiar Código
+                  </button>
+                </div>
+
+                <div className="p-4 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 shadow-sm">
+                  <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-on-surface-variant block mb-1.5">
+                    Tu Enlace de Invitación Directo
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      readOnly
+                      value={`${window.location.origin}/register?ref=${referralData?.referral_code || user.referralCode || user.referral_code || ''}`}
+                      className="flex-1 px-3 py-2 bg-slate-100 dark:bg-black/30 border border-outline/20 rounded-xl text-xs text-on-surface font-mono select-all truncate outline-none"
+                    />
+                    <button
+                      onClick={handleCopyReferralLink}
+                      className="px-4 py-2 bg-primary-container hover:bg-primary-container/90 text-white text-xs sm:text-sm font-black rounded-xl transition-all flex items-center gap-1.5 active:scale-95 flex-shrink-0 shadow-md shadow-orange-500/20"
+                    >
+                      <span className="material-symbols-outlined text-base">link</span>
+                      Copiar Enlace
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Estadísticas */}
+              <div className="lg:col-span-5 grid grid-cols-3 gap-2.5">
+                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                  <span className="material-symbols-outlined text-blue-500 text-xl sm:text-2xl mb-1">group</span>
+                  <span className="text-xl sm:text-2xl font-black text-on-surface">
+                    {referralData?.total_referrals ?? 0}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                    Invitados
+                  </span>
+                </div>
+
+                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                  <span className="material-symbols-outlined text-green-500 text-xl sm:text-2xl mb-1">verified</span>
+                  <span className="text-xl sm:text-2xl font-black text-green-600 dark:text-green-400">
+                    {referralData?.completed_referrals ?? 0}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                    Con Compra
+                  </span>
+                </div>
+
+                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                  <span className="material-symbols-outlined text-primary-container text-xl sm:text-2xl mb-1">generating_tokens</span>
+                  <span className="text-xl sm:text-2xl font-black text-primary-container">
+                    {referralData?.total_tokens_earned ?? 0}
+                  </span>
+                  <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                    Tokens Ganados
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Lista de Referidos */}
+            <div className="bg-white/60 dark:bg-black/20 rounded-2xl border border-slate-200/60 dark:border-outline-variant/20 p-4">
+              <h3 className="text-xs sm:text-sm font-black text-on-surface mb-3 flex items-center gap-1.5">
+                <span className="material-symbols-outlined text-base text-primary-container">format_list_bulleted</span>
+                Tus Invitados ({referralData?.referrals?.length || 0})
+              </h3>
+              {referralData?.referrals && referralData.referrals.length > 0 ? (
+                <div className="divide-y divide-slate-100 dark:divide-white/5 max-h-56 overflow-y-auto">
+                  {referralData.referrals.map((ref) => (
+                    <div key={ref.id} className="py-2.5 flex items-center justify-between text-xs gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-primary-container/10 text-primary-container font-black flex items-center justify-center flex-shrink-0 text-[11px]">
+                          {ref.name?.charAt(0) || 'U'}
+                        </div>
+                        <div className="truncate">
+                          <p className="font-bold text-on-surface truncate">{ref.name} <span className="text-on-surface-variant font-normal">({ref.email})</span></p>
+                          <p className="text-[10px] text-on-surface-variant">
+                            Registrado: {ref.registered_at ? new Date(ref.registered_at).toLocaleDateString() : '—'}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex-shrink-0 text-right">
+                        {ref.reward_granted ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-bold text-green-600 dark:text-green-400 bg-green-100/70 dark:bg-green-900/30 px-2.5 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-xs">check_circle</span>
+                            +{ref.reward_tokens || 1000} Tokens
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-600 dark:text-amber-400 bg-amber-100/70 dark:bg-amber-900/30 px-2.5 py-1 rounded-full">
+                            <span className="material-symbols-outlined text-xs">hourglass_empty</span>
+                            Pendiente 1ª compra
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-on-surface-variant text-center py-4">
+                  Aún no tienes amigos referidos registrados. ¡Comparte tu enlace para empezar a ganar tokens gratis!
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {/* ── Canjear Cupón de Regalo ── */}
+        <section className="w-full">
+          <div className="bg-white/70 dark:bg-[#1a1512]/70 backdrop-blur-lg rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start sm:items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white flex items-center justify-center flex-shrink-0 shadow-md">
+                  <span className="material-symbols-outlined text-2xl">confirmation_number</span>
+                </div>
+                <div>
+                  <h2 className="text-base sm:text-lg font-black text-on-surface flex items-center gap-2">
+                    ¿Tienes un Cupón de Tokens?
+                  </h2>
+                  <p className="text-xs text-on-surface-variant mt-0.5">
+                    Canjea tus códigos promocionales de tokens y añádelos a tu saldo al instante.
+                  </p>
+                </div>
+              </div>
+
+              <form onSubmit={handleRedeemCoupon} className="flex items-center gap-2 w-full sm:w-auto">
+                <input
+                  type="text"
+                  value={couponInput}
+                  onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                  placeholder="CÓDIGO DE CUPÓN"
+                  className="w-full sm:w-56 px-3.5 py-2.5 bg-slate-100 dark:bg-black/30 border border-outline/30 rounded-xl text-xs sm:text-sm font-mono uppercase tracking-wider text-on-surface focus:outline-none focus:border-primary-container"
+                  disabled={couponRedeeming}
+                />
+                <button
+                  type="submit"
+                  disabled={couponRedeeming || !couponInput.trim()}
+                  className="px-5 py-2.5 bg-primary-container hover:opacity-90 disabled:opacity-50 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5 flex-shrink-0"
+                >
+                  {couponRedeeming ? (
+                    <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                  ) : (
+                    <>
+                      <span className="material-symbols-outlined text-base">redeem</span>
+                      Canjear
+                    </>
+                  )}
+                </button>
+              </form>
             </div>
           </div>
         </section>

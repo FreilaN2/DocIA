@@ -19,6 +19,7 @@ from core.token_service import get_available_tokens
 from core.dependencies import get_current_user
 from core.schemas import UserCreate, UserLogin, GoogleAuthRequest, ChangePasswordRequest, SetPasswordRequest, UpdateProfileRequest
 from core.limiter import limiter
+from core.referral_service import generate_referral_code, assign_referral, get_user_referral_data
 
 router = APIRouter()
 
@@ -28,7 +29,10 @@ router = APIRouter()
 def _get_user_dict(u: User, db: Session) -> dict:
     """Serializa un usuario a dict para respuestas de autenticación."""
     plan_name = u.plan.name if getattr(u, 'plan', None) else "free"
-    tokens    = get_available_tokens(u.id, db)
+    tokens_data = get_available_tokens(u.id, db)
+    total_tokens = int(tokens_data.get("total", 0))
+    extra_tokens = int(tokens_data.get("extra_tokens", 0))
+    monthly_tokens = int(tokens_data.get("monthly_tokens", 0))
 
     latest_pago = (
         db.query(PagoMovilTransaction)
@@ -49,7 +53,13 @@ def _get_user_dict(u: User, db: Session) -> dict:
         "lastLoginAt": u.last_login_at.isoformat() if getattr(u, 'last_login_at', None) else None,
         "isAdmin": u.is_admin,
         "passwordSetupRequired": u.password_setup_required,
-        "tokens": tokens,
+        "tokens": total_tokens,
+        "totalTokens": total_tokens,
+        "extraTokens": extra_tokens,
+        "monthlyTokens": monthly_tokens,
+        "tokenBalance": tokens_data,
+        "referralCode": u.referral_code,
+        "referredById": u.referred_by_id,
         "lastPaymentId": latest_pago.id if latest_pago else None,
         "lastPaymentStatus": latest_pago.status if latest_pago else None,
     }
@@ -72,9 +82,15 @@ def register(request: Request, user_data: UserCreate, db: Session = Depends(get_
         phone=user_data.phone,
         country=user_data.country,
         password_hash=get_password_hash(user_data.password),
+        referral_code=generate_referral_code(db),
         plan_id=1,
     )
     db.add(new_user)
+    db.flush()
+
+    if user_data.referral_code:
+        assign_referral(new_user, user_data.referral_code, db)
+
     db.commit()
     db.refresh(new_user)
 
@@ -105,6 +121,12 @@ def update_user_me(
     db.commit()
     db.refresh(current_user)
     return {"status": "success", "user": _get_user_dict(current_user, db)}
+
+
+@router.get("/user/referrals")
+def get_my_referrals(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Retorna las métricas y lista de personas que se han registrado con el código de referido del usuario."""
+    return {"status": "success", **get_user_referral_data(current_user, db)}
 
 
 @router.post("/login")
@@ -145,9 +167,15 @@ def auth_google(data: GoogleAuthRequest, db: Session = Depends(get_db)):
                 country="US",
                 password_hash=get_password_hash(os.urandom(24).hex()),
                 password_setup_required=True,
+                referral_code=generate_referral_code(db),
                 plan_id=1,
             )
             db.add(user)
+            db.flush()
+
+            if data.referral_code:
+                assign_referral(user, data.referral_code, db)
+
             db.commit()
             db.refresh(user)
 

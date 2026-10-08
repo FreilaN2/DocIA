@@ -2,9 +2,11 @@
 routers/pagos.py
 ================
 Endpoints de pagos: PayPal, Binance Pay y Pago Móvil.
+Integra sistema de cupones de descuento y recompensas de referidos.
 """
 
 from datetime import datetime, timezone
+import logging
 
 from dateutil.relativedelta import relativedelta
 from fastapi import APIRouter, Depends, HTTPException
@@ -23,7 +25,10 @@ from core.schemas import (
     PackRequest, ConfirmarPackRequest,
     VerifyBinanceRequest, ReportPagoMovilRequest,
 )
+from core.referral_service import grant_referral_reward_if_eligible
+from core.coupon_service import validate_coupon_for_user, record_purchase_coupon_redemption
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/pago")
 
 
@@ -38,9 +43,57 @@ async def crear_orden_suscripcion(
     if data.months not in SUBSCRIPTION_PRICES:
         raise HTTPException(status_code=400, detail="Duración no válida. Usa 1, 3, 6 o 12.")
 
-    amount      = SUBSCRIPTION_PRICES[data.months]
+    original_amount = float(SUBSCRIPTION_PRICES[data.months])
+    amount = original_amount
+    discount_amount = 0.0
+    applied_coupon = None
+
+    if data.coupon_code:
+        applied_coupon, discount_amount, final_amount = validate_coupon_for_user(
+            code=data.coupon_code,
+            user_id=current_user.id,
+            db=db,
+            original_amount=original_amount,
+            expected_type='discount',
+        )
+        amount = final_amount
+
+    # Si el cupón cubrió el 100% del precio (monto 0)
+    if amount <= 0.0 and applied_coupon:
+        pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
+        current_user.plan_id = pro_plan.id
+        now = datetime.now(timezone.utc)
+        db.add(Subscription(
+            user_id=current_user.id,
+            paypal_order_id=f"coupon_{applied_coupon.code}_{current_user.id}",
+            months_paid=data.months,
+            tokens_per_month=TOKENS_PER_MONTH_PRO,
+            started_at=now,
+            ends_at=now + relativedelta(months=data.months),
+            status="active",
+        ))
+        record_purchase_coupon_redemption(
+            coupon=applied_coupon,
+            user_id=current_user.id,
+            discount_applied=discount_amount,
+            order_type="subscription",
+            order_reference=f"100pct_{data.months}m",
+            db=db,
+        )
+        assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
+        grant_referral_reward_if_eligible(current_user.id, db)
+        return {
+            "status": "success",
+            "free_activated": True,
+            "message": f"¡Suscripción Pro activada al 100% con tu cupón '{applied_coupon.code}'!",
+            "amount": 0.0,
+            "months": data.months,
+        }
+
     description = f"DocAI Pro — {data.months} mes(es) | {TOKENS_PER_MONTH_PRO} tokens/mes"
-    custom_id   = f"sub:{current_user.id}:{data.months}"
+    custom_id = f"sub:{current_user.id}:{data.months}"
+    if applied_coupon:
+        custom_id += f":coupon={applied_coupon.code}"
 
     try:
         order = create_order(amount=amount, description=description, custom_id=custom_id)
@@ -52,6 +105,8 @@ async def crear_orden_suscripcion(
         "order_id": order["order_id"],
         "approval_url": order["approval_url"],
         "amount": amount,
+        "original_amount": original_amount,
+        "discount_amount": discount_amount,
         "months": data.months,
     }
 
@@ -86,6 +141,34 @@ async def confirmar_suscripcion(
     db.commit()
     assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
 
+    # Registrar redención del cupón si se envió
+    if data.coupon_code:
+        try:
+            original_amt = float(SUBSCRIPTION_PRICES.get(data.months, 12.0))
+            coupon, discount_amt, _ = validate_coupon_for_user(
+                code=data.coupon_code,
+                user_id=current_user.id,
+                db=db,
+                original_amount=original_amt,
+                expected_type='discount',
+            )
+            record_purchase_coupon_redemption(
+                coupon=coupon,
+                user_id=current_user.id,
+                discount_applied=discount_amt,
+                order_type="subscription",
+                order_reference=data.order_id,
+                db=db,
+            )
+        except Exception as e:
+            logger.warning(f"Aviso registrando cupón en confirmar_suscripcion: {e}")
+
+    # Recompensa al usuario que lo refirió si es su primera compra
+    try:
+        grant_referral_reward_if_eligible(current_user.id, db)
+    except Exception as e:
+        logger.warning(f"Error procesando recompensa de referido: {e}")
+
     return {
         "status": "success",
         "message": f"Suscripción Pro activada por {data.months} mes(es).",
@@ -112,6 +195,23 @@ async def verify_binance(
         expected_amount = float(pack.price)
     else:
         raise HTTPException(status_code=400, detail="Tipo de pago no válido.")
+
+    applied_coupon = None
+    discount_amount = 0.0
+    if data.coupon_code:
+        try:
+            applied_coupon, discount_amount, final_amount = validate_coupon_for_user(
+                code=data.coupon_code,
+                user_id=current_user.id,
+                db=db,
+                original_amount=expected_amount,
+                expected_type='discount',
+            )
+            expected_amount = final_amount
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Aviso validando cupón Binance: {e}")
 
     if db.query(BinanceTransaction).filter(BinanceTransaction.order_id == data.order_id).first():
         raise HTTPException(status_code=400, detail="Este comprobante ya fue procesado.")
@@ -143,10 +243,31 @@ async def verify_binance(
         assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
         message = f"Pago verificado. ¡Pro activado por {data.item_id} mes(es)!"
     else:
+        pack = db.query(TokenPack).filter(TokenPack.id == data.item_id).first()
         add_extra_tokens(current_user.id, pack.tokens, db)
         message = f"Pago verificado. ¡+{pack.tokens} tokens añadidos!"
 
+    if applied_coupon:
+        try:
+            record_purchase_coupon_redemption(
+                coupon=applied_coupon,
+                user_id=current_user.id,
+                discount_applied=discount_amount,
+                order_type=data.type,
+                order_reference=data.order_id,
+                db=db,
+            )
+        except Exception as e:
+            logger.warning(f"Aviso guardando redención de cupón Binance: {e}")
+
     db.commit()
+
+    # Recompensa al usuario que lo refirió si es su primera compra
+    try:
+        grant_referral_reward_if_eligible(current_user.id, db)
+    except Exception as e:
+        logger.warning(f"Error procesando recompensa de referido Binance: {e}")
+
     return {"status": "success", "message": message}
 
 
@@ -182,6 +303,22 @@ async def reportar_pago_movil(
     else:
         raise HTTPException(status_code=400, detail="Tipo de pago no válido.")
 
+    # Aplicar descuento de cupón si fue provisto
+    if data.coupon_code:
+        try:
+            _, _, final_amount = validate_coupon_for_user(
+                code=data.coupon_code,
+                user_id=current_user.id,
+                db=db,
+                original_amount=amount_usd,
+                expected_type='discount',
+            )
+            amount_usd = final_amount
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.warning(f"Aviso validando cupón Pago Móvil: {e}")
+
     amount_ves = round(amount_usd * rate, 2)
 
     existing = (
@@ -192,9 +329,13 @@ async def reportar_pago_movil(
     if existing:
         raise HTTPException(status_code=400, detail="Esta referencia ya ha sido reportada.")
 
+    ref_note = data.reference_number
+    if data.coupon_code:
+        ref_note += f" [CUPON:{data.coupon_code.upper()}]"
+
     nuevo_pago = PagoMovilTransaction(
         user_id=current_user.id,
-        reference_number=data.reference_number,
+        reference_number=ref_note,
         phone_number=data.phone_number,
         amount_ves=amount_ves,
         amount_usd=amount_usd,
@@ -209,6 +350,8 @@ async def reportar_pago_movil(
         "status": "success",
         "message": "Reporte enviado. Un administrador verificará tu pago pronto.",
         "transaction_id": nuevo_pago.id,
+        "amount_usd": amount_usd,
+        "amount_ves": amount_ves,
     }
 
 
@@ -224,11 +367,49 @@ async def crear_orden_pack(
     if not pack:
         raise HTTPException(status_code=404, detail="Paquete no encontrado.")
 
+    original_amount = float(pack.price)
+    amount = original_amount
+    discount_amount = 0.0
+    applied_coupon = None
+
+    if data.coupon_code:
+        applied_coupon, discount_amount, final_amount = validate_coupon_for_user(
+            code=data.coupon_code,
+            user_id=current_user.id,
+            db=db,
+            original_amount=original_amount,
+            expected_type='discount',
+        )
+        amount = final_amount
+
+    # Si el cupón cubrió el 100% del pack
+    if amount <= 0.0 and applied_coupon:
+        add_extra_tokens(current_user.id, pack.tokens, db)
+        record_purchase_coupon_redemption(
+            coupon=applied_coupon,
+            user_id=current_user.id,
+            discount_applied=discount_amount,
+            order_type="pack",
+            order_reference=f"100pct_pack_{pack.id}",
+            db=db,
+        )
+        grant_referral_reward_if_eligible(current_user.id, db)
+        return {
+            "status": "success",
+            "free_activated": True,
+            "message": f"+{pack.tokens} tokens extra añadidos con tu cupón '{applied_coupon.code}'.",
+            "pack": {"name": pack.name, "tokens": pack.tokens, "price": 0.0},
+        }
+
     try:
+        custom_id = f"pack:{current_user.id}:{pack.id}"
+        if applied_coupon:
+            custom_id += f":coupon={applied_coupon.code}"
+
         order = create_order(
-            amount=float(pack.price),
+            amount=amount,
             description=f"DocAI — {pack.name} ({pack.tokens} tokens extra)",
-            custom_id=f"pack:{current_user.id}:{pack.id}",
+            custom_id=custom_id,
         )
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Error con PayPal: {e}")
@@ -237,6 +418,9 @@ async def crear_orden_pack(
         "status": "success",
         "order_id": order["order_id"],
         "approval_url": order["approval_url"],
+        "amount": amount,
+        "original_amount": original_amount,
+        "discount_amount": discount_amount,
         "pack": {"name": pack.name, "tokens": pack.tokens, "price": float(pack.price)},
     }
 
@@ -260,6 +444,33 @@ async def confirmar_pack(
         raise HTTPException(status_code=404, detail="Paquete no encontrado.")
 
     add_extra_tokens(current_user.id, pack.tokens, db)
+
+    if data.coupon_code:
+        try:
+            coupon, discount_amt, _ = validate_coupon_for_user(
+                code=data.coupon_code,
+                user_id=current_user.id,
+                db=db,
+                original_amount=float(pack.price),
+                expected_type='discount',
+            )
+            record_purchase_coupon_redemption(
+                coupon=coupon,
+                user_id=current_user.id,
+                discount_applied=discount_amt,
+                order_type="pack",
+                order_reference=data.order_id,
+                db=db,
+            )
+        except Exception as e:
+            logger.warning(f"Aviso registrando cupón en confirmar_pack: {e}")
+
+    # Recompensa al usuario que lo refirió si es su primera compra
+    try:
+        grant_referral_reward_if_eligible(current_user.id, db)
+    except Exception as e:
+        logger.warning(f"Error procesando recompensa de referido en pack: {e}")
+
     return {
         "status": "success",
         "message": f"+{pack.tokens} tokens extra añadidos.",

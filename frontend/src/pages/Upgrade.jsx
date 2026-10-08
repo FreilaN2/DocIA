@@ -37,6 +37,11 @@ export default function Upgrade() {
   const [pmPhone, setPmPhone] = useState('');
   const [pmLoading, setPmLoading] = useState(false);
 
+  // Cupones de descuento
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState(null);
+  const [couponLoading, setCouponLoading] = useState(false);
+
   const openPaymentModal = (type, item) => {
     if (!getToken()) { navigate('/login'); return; }
     setPaymentModal({ isOpen: true, type, item });
@@ -44,6 +49,8 @@ export default function Upgrade() {
     setBinanceOrderId('');
     setPmReference('');
     setPmPhone('');
+    setCouponCode('');
+    setAppliedCoupon(null);
     fetchBcvRate();
   };
   
@@ -56,7 +63,41 @@ export default function Upgrade() {
     }
   };
 
-  const closePaymentModal = () => setPaymentModal({ isOpen: false, type: null, item: null });
+  const closePaymentModal = () => {
+    setPaymentModal({ isOpen: false, type: null, item: null });
+    setAppliedCoupon(null);
+    setCouponCode('');
+  };
+
+  const handleApplyCoupon = async (e) => {
+    if (e) e.preventDefault();
+    if (!couponCode.trim()) {
+      toast.error('Ingresa un código de cupón');
+      return;
+    }
+    setCouponLoading(true);
+    try {
+      const originalPrice = paymentModal.item ? paymentModal.item.price : 0;
+      const resp = await api.post('/coupons/validate', {
+        code: couponCode.trim(),
+        original_amount: originalPrice,
+        expected_type: 'discount',
+      });
+      if (resp.data.valid) {
+        setAppliedCoupon(resp.data);
+        toast.success(resp.data.message || '¡Cupón aplicado!', { icon: '🏷️' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Cupón inválido o no aplicable', { icon: '❌' });
+    } finally {
+      setCouponLoading(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+  };
 
   useEffect(() => {
     const stored = localStorage.getItem('user');
@@ -73,8 +114,28 @@ export default function Upgrade() {
     if (!getToken()) { navigate('/login'); return; }
     setLoading(`sub-${months}`);
     try {
-      const resp = await api.post('/pago/suscripcion', { months });
-      localStorage.setItem('pending_purchase', JSON.stringify({ type: 'subscription', months }));
+      const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
+      const resp = await api.post('/pago/suscripcion', { 
+        months,
+        coupon_code: activeCode,
+      });
+
+      if (resp.data.free_activated) {
+        toast.success(resp.data.message || '¡Suscripción Pro activada con tu cupón!', { icon: '🎉', duration: 4000 });
+        const meRes = await api.get('/user/me');
+        localStorage.setItem('user', JSON.stringify(meRes.data));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
+        closePaymentModal();
+        navigate('/pago/exitoso');
+        return;
+      }
+
+      localStorage.setItem('pending_purchase', JSON.stringify({ 
+        type: 'subscription', 
+        months,
+        coupon_code: activeCode,
+      }));
       window.location.href = resp.data.approval_url;
     } catch (err) {
       console.error("Detalle completo del error de suscripción:", err);
@@ -87,8 +148,28 @@ export default function Upgrade() {
   const handleBuyPack = async (packId) => {
     setLoading(`pack-${packId}`);
     try {
-      const resp = await api.post('/pago/pack-tokens', { pack_id: packId });
-      localStorage.setItem('pending_purchase', JSON.stringify({ type: 'pack', pack_id: packId }));
+      const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
+      const resp = await api.post('/pago/pack-tokens', { 
+        pack_id: packId,
+        coupon_code: activeCode,
+      });
+
+      if (resp.data.free_activated) {
+        toast.success(resp.data.message || '¡Pack de tokens activado con tu cupón!', { icon: '🎉', duration: 4000 });
+        const meRes = await api.get('/user/me');
+        localStorage.setItem('user', JSON.stringify(meRes.data));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
+        closePaymentModal();
+        navigate('/pago/exitoso');
+        return;
+      }
+
+      localStorage.setItem('pending_purchase', JSON.stringify({ 
+        type: 'pack', 
+        pack_id: packId,
+        coupon_code: activeCode,
+      }));
       window.location.href = resp.data.approval_url;
     } catch (err) {
       console.error("Detalle completo del error del pack:", err);
@@ -106,10 +187,12 @@ export default function Upgrade() {
     setBinanceLoading(true);
     try {
       const itemId = paymentModal.type === 'subscription' ? paymentModal.item.months : paymentModal.item.id;
+      const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
       const resp = await api.post('/pago/verify-binance', {
         order_id: binanceOrderId.trim(),
         type: paymentModal.type,
-        item_id: itemId
+        item_id: itemId,
+        coupon_code: activeCode,
       });
       if (paymentModal.type === 'subscription') {
         const userStr = localStorage.getItem('user');
@@ -141,11 +224,13 @@ export default function Upgrade() {
     setPmLoading(true);
     try {
       const itemId = paymentModal.type === 'subscription' ? paymentModal.item.months : paymentModal.item.id;
+      const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
       const resp = await api.post('/pago/reportar-pagomovil', {
         reference_number: pmReference.trim(),
         phone_number: pmPhone.trim(),
         type: paymentModal.type,
-        item_id: itemId
+        item_id: itemId,
+        coupon_code: activeCode,
       });
       
       const userStr = localStorage.getItem('user');
@@ -407,166 +492,266 @@ export default function Upgrade() {
             
             {/* Modal Content - Scrollable */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1">
-              {binanceFlow === 'select' && (
-                <div className="space-y-3 sm:space-y-4">
-                  <p className="text-on-surface-variant text-xs sm:text-sm mb-3 sm:mb-4">
-                    {t('upgrade.select_method')} <strong>${paymentModal.item.price}</strong>.
-                  </p>
-                  
-                  <button 
-                    onClick={() => {
-                      if (paymentModal.type === 'subscription') handleSubscribe(paymentModal.item.months);
-                      else handleBuyPack(paymentModal.item.id);
-                    }} 
-                    className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#003087] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#002266] transition-colors active:scale-[0.98]"
-                  >
-                    <span className="material-symbols-outlined text-lg sm:text-xl">payments</span>
-                    {t('upgrade.pay_paypal')}
-                  </button>
-                  
-                  <div className="relative py-2 sm:py-3 flex items-center">
-                    <div className="flex-grow border-t border-outline/20"></div>
-                    <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
-                      {t('upgrade.or_crypto')}
-                    </span>
-                    <div className="flex-grow border-t border-outline/20"></div>
-                  </div>
+              {(() => {
+                const originalPrice = paymentModal.item ? Number(paymentModal.item.price) : 0;
+                const finalPrice = appliedCoupon ? Number(appliedCoupon.final_amount) : originalPrice;
+                const isFullyCovered = appliedCoupon && finalPrice <= 0;
 
-                  <button 
-                    onClick={() => setBinanceFlow('qr')} 
-                    className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#FCD535] text-[#1E2329] flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#F3BA2F] transition-colors active:scale-[0.98]"
-                  >
-                    <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" className="w-4 h-4 sm:w-5 sm:h-5" alt="BNB" />
-                    {t('upgrade.pay_binance')}
-                  </button>
-                  
-                  <div className="relative py-2 sm:py-3 flex items-center">
-                    <div className="flex-grow border-t border-outline/20"></div>
-                    <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
-                      {t('upgrade.transfer_ves')}
-                    </span>
-                    <div className="flex-grow border-t border-outline/20"></div>
-                  </div>
+                return (
+                  <>
+                    {binanceFlow === 'select' && (
+                      <div className="space-y-3 sm:space-y-4">
+                        {/* Resumen de Precio y Descuento */}
+                        {appliedCoupon ? (
+                          <div className="bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-500/30 rounded-2xl p-3.5 flex items-center justify-between text-xs">
+                            <div>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-on-surface">Precio Original:</span>
+                                <span className="line-through text-on-surface-variant font-medium">${originalPrice.toFixed(2)}</span>
+                                <span className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 font-black px-2 py-0.5 rounded-full text-[10px]">
+                                  -${Number(appliedCoupon.discount_amount).toFixed(2)} DESC
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1">
+                                ✓ Cupón "{appliedCoupon.coupon.code}" aplicado
+                              </p>
+                            </div>
+                            <div className="text-right pl-2">
+                              <span className="text-[10px] uppercase font-bold text-on-surface-variant block">Total</span>
+                              <span className="text-xl font-black text-primary-container">${finalPrice.toFixed(2)}</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <p className="text-on-surface-variant text-xs sm:text-sm mb-2">
+                            {t('upgrade.select_method')} <strong>${originalPrice.toFixed(2)}</strong>.
+                          </p>
+                        )}
 
-                  <button 
-                    onClick={() => setBinanceFlow('pagomovil')} 
-                    className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#008b8b] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#007070] transition-colors active:scale-[0.98]"
-                  >
-                    <span className="material-symbols-outlined text-lg sm:text-xl">smartphone</span>
-                    {t('upgrade.pagomovil')}
-                  </button>
-                </div>
-              )}
+                        {/* Input de Cupón */}
+                        <div className="pt-1">
+                          {!appliedCoupon ? (
+                            <form onSubmit={handleApplyCoupon} className="flex gap-2">
+                              <div className="relative flex-1">
+                                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">
+                                  local_offer
+                                </span>
+                                <input
+                                  type="text"
+                                  value={couponCode}
+                                  onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                                  placeholder="¿Tienes un cupón de descuento?"
+                                  className="w-full pl-9 pr-3 py-2.5 bg-slate-100 dark:bg-black/30 border border-outline/30 rounded-xl text-xs font-mono uppercase text-on-surface outline-none focus:border-primary-container"
+                                  disabled={couponLoading}
+                                />
+                              </div>
+                              <button
+                                type="submit"
+                                disabled={couponLoading || !couponCode.trim()}
+                                className="px-3.5 py-2.5 bg-slate-800 dark:bg-surface-variant hover:bg-slate-700 text-white font-bold text-xs rounded-xl transition-all disabled:opacity-50 flex items-center gap-1 active:scale-95"
+                              >
+                                {couponLoading ? <Spinner className="w-3.5 h-3.5" /> : 'Aplicar'}
+                              </button>
+                            </form>
+                          ) : (
+                            <div className="flex items-center justify-between px-3 py-2 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/40 rounded-xl text-xs">
+                              <span className="text-green-700 dark:text-green-300 font-bold flex items-center gap-1.5">
+                                <span className="material-symbols-outlined text-sm">verified</span>
+                                Cupón {appliedCoupon.coupon.code}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={handleRemoveCoupon}
+                                className="text-slate-400 hover:text-red-500 text-xs font-bold transition-colors"
+                              >
+                                Quitar
+                              </button>
+                            </div>
+                          )}
+                        </div>
 
-              {binanceFlow === 'qr' && (
-                <div className="flex flex-col items-center">
-                  <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-500 text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
-                    {t('upgrade.binance_instr_1')} <strong>{paymentModal.item.price} USDT</strong>.
-                  </div>
-                  
-                  <img 
-                    src="/binance.png" 
-                    alt="Binance QR" 
-                    className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-xl shadow-md border-4 border-white mb-4 sm:mb-6" 
-                  />
-                  
-                  <div className="w-full">
-                    <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
-                      {t('upgrade.order_id_label')}
-                    </label>
-                    <input 
-                      type="text" 
-                      value={binanceOrderId}
-                      onChange={e => setBinanceOrderId(e.target.value)}
-                      placeholder="Ej. 1234567890"
-                      className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary mb-3 sm:mb-4 text-sm"
-                    />
-                    
-                    <button 
-                      onClick={handleVerifyBinance}
-                      disabled={binanceLoading}
-                      className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-primary hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-[0.98] flex justify-center items-center gap-2"
-                    >
-                      {binanceLoading ? (
-                        <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
-                      ) : t('upgrade.verify_payment')}
-                    </button>
-                    <button 
-                      onClick={() => setBinanceFlow('select')} 
-                      className="w-full py-2.5 sm:py-3 mt-2 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
-                    >
-                      {t('upgrade.go_back')}
-                    </button>
-                  </div>
-                </div>
-              )}
+                        {/* Si el cupón cubrió el 100% */}
+                        {isFullyCovered ? (
+                          <div className="pt-2">
+                            <button
+                              onClick={() => {
+                                if (paymentModal.type === 'subscription') handleSubscribe(paymentModal.item.months);
+                                else handleBuyPack(paymentModal.item.id);
+                              }}
+                              disabled={loading !== null}
+                              className="w-full py-3.5 sm:py-4 rounded-xl font-black text-sm sm:text-base bg-gradient-to-r from-green-500 to-emerald-600 text-white flex items-center justify-center gap-2 hover:opacity-95 shadow-lg active:scale-[0.98] transition-all"
+                            >
+                              {loading ? (
+                                <Spinner />
+                              ) : (
+                                <>
+                                  <span className="material-symbols-outlined text-lg">redeem</span>
+                                  ¡Activar 100% Gratis con Cupón!
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        ) : (
+                          <>
+                            {/* Métodos de Pago */}
+                            <button 
+                              onClick={() => {
+                                if (paymentModal.type === 'subscription') handleSubscribe(paymentModal.item.months);
+                                else handleBuyPack(paymentModal.item.id);
+                              }} 
+                              className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#003087] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#002266] transition-colors active:scale-[0.98]"
+                            >
+                              <span className="material-symbols-outlined text-lg sm:text-xl">payments</span>
+                              {t('upgrade.pay_paypal')} {appliedCoupon && `($${finalPrice.toFixed(2)})`}
+                            </button>
+                            
+                            <div className="relative py-1.5 sm:py-2 flex items-center">
+                              <div className="flex-grow border-t border-outline/20"></div>
+                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
+                                {t('upgrade.or_crypto')}
+                              </span>
+                              <div className="flex-grow border-t border-outline/20"></div>
+                            </div>
 
-              {binanceFlow === 'pagomovil' && (
-                <div className="flex flex-col items-center">
-                  <div className="bg-[#008b8b]/10 text-[#006060] dark:text-[#00aaaa] text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
-                    {bcvRate ? (
-                      <>{t('upgrade.total_to_pay')} <strong>Bs. {(paymentModal.item.price * bcvRate).toFixed(2)}</strong> ({t('upgrade.bcv_rate')} {bcvRate})</>
-                    ) : (
-                      <>{t('upgrade.loading_bcv')}</>
+                            <button 
+                              onClick={() => setBinanceFlow('qr')} 
+                              className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#FCD535] text-[#1E2329] flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#F3BA2F] transition-colors active:scale-[0.98]"
+                            >
+                              <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" className="w-4 h-4 sm:w-5 sm:h-5" alt="BNB" />
+                              {t('upgrade.pay_binance')} ({finalPrice.toFixed(2)} USDT)
+                            </button>
+                            
+                            <div className="relative py-1.5 sm:py-2 flex items-center">
+                              <div className="flex-grow border-t border-outline/20"></div>
+                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
+                                {t('upgrade.transfer_ves')}
+                              </span>
+                              <div className="flex-grow border-t border-outline/20"></div>
+                            </div>
+
+                            <button 
+                              onClick={() => setBinanceFlow('pagomovil')} 
+                              className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#008b8b] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#007070] transition-colors active:scale-[0.98]"
+                            >
+                              <span className="material-symbols-outlined text-lg sm:text-xl">smartphone</span>
+                              {t('upgrade.pagomovil')}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     )}
-                  </div>
-                  
-                  <div className="w-full bg-surface-variant/30 p-3 sm:p-4 rounded-xl mb-4 border border-outline/20">
-                    <p className="text-xs sm:text-sm font-bold mb-1.5 sm:mb-2">{t('upgrade.receiver_data')}</p>
-                    <ul className="text-[10px] sm:text-xs md:text-sm space-y-1">
-                      <li><span className="font-semibold text-on-surface-variant">{t('upgrade.bank')}</span> Banco de Venezuela (0102)</li>
-                      <li><span className="font-semibold text-on-surface-variant">{t('upgrade.phone')}</span> 04122464468</li>
-                      <li><span className="font-semibold text-on-surface-variant">{t('upgrade.id_card')}</span> V-30.838.517</li>
-                    </ul>
-                  </div>
-                  
-                  <div className="w-full space-y-3 sm:space-y-4">
-                    <div>
-                      <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
-                        {t('upgrade.reference_number')}
-                      </label>
-                      <input 
-                        type="text" 
-                        value={pmReference}
-                        onChange={e => setPmReference(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                        placeholder="Ej. 123456"
-                        maxLength={6}
-                        className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                      />
-                    </div>
 
-                    <div>
-                      <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
-                        {t('upgrade.your_phone')}
-                      </label>
-                      <input 
-                        type="text" 
-                        value={pmPhone}
-                        onChange={e => setPmPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
-                        placeholder="Ej. 04120000000"
-                        maxLength={11}
-                        className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-sm"
-                      />
-                    </div>
-                    
-                    <button 
-                      onClick={handleReportPagoMovil}
-                      disabled={pmLoading || !bcvRate}
-                      className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-[#008b8b] hover:bg-[#007070] transition-all active:scale-[0.98] flex justify-center items-center gap-2"
-                    >
-                      {pmLoading ? (
-                        <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
-                      ) : t('upgrade.report_payment')}
-                    </button>
-                    <button 
-                      onClick={() => setBinanceFlow('select')} 
-                      className="w-full py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
-                    >
-                      {t('upgrade.go_back')}
-                    </button>
-                  </div>
-                </div>
-              )}
+                    {binanceFlow === 'qr' && (
+                      <div className="flex flex-col items-center">
+                        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-500 text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
+                          {t('upgrade.binance_instr_1')} <strong>{finalPrice.toFixed(2)} USDT</strong>.
+                        </div>
+                        
+                        <img 
+                          src="/binance.png" 
+                          alt="Binance QR" 
+                          className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-xl shadow-md border-4 border-white mb-4 sm:mb-6" 
+                        />
+                        
+                        <div className="w-full">
+                          <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
+                            {t('upgrade.order_id_label')}
+                          </label>
+                          <input 
+                            type="text" 
+                            value={binanceOrderId}
+                            onChange={e => setBinanceOrderId(e.target.value)}
+                            placeholder="Ej. 1234567890"
+                            className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary mb-3 sm:mb-4 text-sm"
+                          />
+                          
+                          <button 
+                            onClick={handleVerifyBinance}
+                            disabled={binanceLoading}
+                            className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-primary hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-[0.98] flex justify-center items-center gap-2"
+                          >
+                            {binanceLoading ? (
+                              <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
+                            ) : t('upgrade.verify_payment')}
+                          </button>
+                          <button 
+                            onClick={() => setBinanceFlow('select')} 
+                            className="w-full py-2.5 sm:py-3 mt-2 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
+                          >
+                            {t('upgrade.go_back')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {binanceFlow === 'pagomovil' && (
+                      <div className="flex flex-col items-center">
+                        <div className="bg-[#008b8b]/10 text-[#006060] dark:text-[#00aaaa] text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
+                          {bcvRate ? (
+                            <>{t('upgrade.total_to_pay')} <strong>Bs. {(finalPrice * bcvRate).toFixed(2)}</strong> ({t('upgrade.bcv_rate')} {bcvRate})</>
+                          ) : (
+                            <>{t('upgrade.loading_bcv')}</>
+                          )}
+                        </div>
+                        
+                        <div className="w-full bg-surface-variant/30 p-3 sm:p-4 rounded-xl mb-4 border border-outline/20">
+                          <p className="text-xs sm:text-sm font-bold mb-1.5 sm:mb-2">{t('upgrade.receiver_data')}</p>
+                          <ul className="text-[10px] sm:text-xs md:text-sm space-y-1">
+                            <li><span className="font-semibold text-on-surface-variant">{t('upgrade.bank')}</span> Banco de Venezuela (0102)</li>
+                            <li><span className="font-semibold text-on-surface-variant">{t('upgrade.phone')}</span> 04122464468</li>
+                            <li><span className="font-semibold text-on-surface-variant">{t('upgrade.id_card')}</span> V-30.838.517</li>
+                          </ul>
+                        </div>
+                        
+                        <div className="w-full space-y-3 sm:space-y-4">
+                          <div>
+                            <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
+                              {t('upgrade.reference_number')}
+                            </label>
+                            <input 
+                              type="text" 
+                              value={pmReference}
+                              onChange={e => setPmReference(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                              placeholder="Ej. 123456"
+                              maxLength={6}
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
+                              {t('upgrade.your_phone')}
+                            </label>
+                            <input 
+                              type="text" 
+                              value={pmPhone}
+                              onChange={e => setPmPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
+                              placeholder="Ej. 04120000000"
+                              maxLength={11}
+                              className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-sm"
+                            />
+                          </div>
+                          
+                          <button 
+                            onClick={handleReportPagoMovil}
+                            disabled={pmLoading || !bcvRate}
+                            className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-[#008b8b] hover:bg-[#007070] transition-all active:scale-[0.98] flex justify-center items-center gap-2"
+                          >
+                            {pmLoading ? (
+                              <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
+                            ) : t('upgrade.report_payment')}
+                          </button>
+                          <button 
+                            onClick={() => setBinanceFlow('select')} 
+                            className="w-full py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
+                          >
+                            {t('upgrade.go_back')}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           </motion.div>
         </div>

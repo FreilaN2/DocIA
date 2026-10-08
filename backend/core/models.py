@@ -43,6 +43,10 @@ class User(Base):
     
     is_admin = Column(Boolean, default=False)              # Admin role flag
 
+    # ── Sistema de Referidos ──
+    referral_code = Column(String(30), unique=True, index=True, nullable=True)
+    referred_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
     plan_id = Column(Integer, ForeignKey("plans.id"), default=1)
     created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
     updated_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
@@ -50,6 +54,7 @@ class User(Base):
     plan = relationship("Plan")
     token_balance = relationship("TokenBalance", back_populates="user", uselist=False)
     subscriptions = relationship("Subscription", back_populates="user")
+    referred_by = relationship("User", remote_side=[id], foreign_keys=[referred_by_id])
 
 # ─────────────────────────────────────────────
 # SESIONES JWT
@@ -193,4 +198,62 @@ class PushSubscription(Base):
     auth = Column(String(100), nullable=False)
     created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
 
+    user = relationship("User")
+
+# ─────────────────────────────────────────────
+# PROGRAMA DE REFERIDOS
+# ─────────────────────────────────────────────
+class Referral(Base):
+    __tablename__ = "referrals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    referrer_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    referred_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    reward_granted = Column(Boolean, default=False, nullable=False)
+    reward_tokens = Column(Integer, default=1000, nullable=False)
+    rewarded_at = Column(DateTime, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+
+    referrer = relationship("User", foreign_keys=[referrer_id])
+    referred = relationship("User", foreign_keys=[referred_id])
+
+# ─────────────────────────────────────────────
+# SISTEMA DE CUPONES
+# ─────────────────────────────────────────────
+class Coupon(Base):
+    __tablename__ = "coupons"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, index=True, nullable=False)
+    description = Column(String(255), nullable=True)
+    coupon_type = Column(
+        Enum('discount_percent', 'discount_fixed', 'tokens', name='coupon_type_enum'),
+        nullable=False
+    )
+    discount_value = Column(DECIMAL(10, 2), default=0.00, nullable=False)
+    tokens_value = Column(Integer, default=0, nullable=False)
+    min_purchase_amount = Column(DECIMAL(10, 2), default=0.00, nullable=False)
+    max_uses = Column(Integer, default=0, nullable=False)                 # 0 = ilimitado
+    current_uses = Column(Integer, default=0, nullable=False)
+    max_uses_per_user = Column(Integer, default=1, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    starts_at = Column(DateTime, nullable=True)
+    expires_at = Column(DateTime, nullable=True)
+    created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+    updated_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
+
+
+class CouponRedemption(Base):
+    __tablename__ = "coupon_redemptions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    coupon_id = Column(Integer, ForeignKey("coupons.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    discount_applied = Column(DECIMAL(10, 2), default=0.00, nullable=False)
+    tokens_granted = Column(Integer, default=0, nullable=False)
+    order_type = Column(String(50), nullable=True)                        # 'subscription', 'pack', 'direct_tokens'
+    order_reference = Column(String(100), nullable=True)
+    created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+
+    coupon = relationship("Coupon")
     user = relationship("User")

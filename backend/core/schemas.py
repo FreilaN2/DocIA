@@ -40,6 +40,7 @@ class UserCreate(BaseModel):
     phone: str
     country: str
     password: str
+    referral_code: Optional[str] = None
 
 
 class UpdateProfileRequest(BaseModel):
@@ -56,6 +57,7 @@ class UserLogin(BaseModel):
 
 class GoogleAuthRequest(BaseModel):
     token: str
+    referral_code: Optional[str] = None
 
 
 class ChangePasswordRequest(BaseModel):
@@ -71,26 +73,31 @@ class SetPasswordRequest(BaseModel):
 
 class SuscripcionRequest(BaseModel):
     months: int
+    coupon_code: Optional[str] = None
 
 
 class ConfirmarPagoRequest(BaseModel):
     order_id: str
     months: int
+    coupon_code: Optional[str] = None
 
 
 class PackRequest(BaseModel):
     pack_id: int
+    coupon_code: Optional[str] = None
 
 
 class ConfirmarPackRequest(BaseModel):
     order_id: str
     pack_id: int
+    coupon_code: Optional[str] = None
 
 
 class VerifyBinanceRequest(BaseModel):
     order_id: str
     type: str
     item_id: int
+    coupon_code: Optional[str] = None
 
 
 class ReportPagoMovilRequest(BaseModel):
@@ -98,6 +105,7 @@ class ReportPagoMovilRequest(BaseModel):
     phone_number: str
     type: str   # 'subscription' or 'pack'
     item_id: int  # months or pack_id
+    coupon_code: Optional[str] = None
 
 
 # ─── Administración ───────────────────────────────────────
@@ -109,3 +117,27 @@ class AdminPagoActionRequest(BaseModel):
 class CreateAdminRequest(BaseModel):
     email: str
     password: str
+
+
+# ─── Cupones ──────────────────────────────────────────────
+
+class CouponCreate(BaseModel):
+    code: str
+    description: Optional[str] = None
+    coupon_type: str  # 'discount_percent' | 'discount_fixed' | 'tokens'
+    discount_value: float = 0.0
+    tokens_value: int = 0
+    min_purchase_amount: float = 0.0
+    max_uses: int = 0
+    max_uses_per_user: int = 1
+    expires_at: Optional[str] = None
+
+
+class CouponValidateRequest(BaseModel):
+    code: str
+    original_amount: Optional[float] = 0.0
+    expected_type: Optional[str] = None  # 'discount' | 'tokens' | None
+
+
+class CouponRedeemTokensRequest(BaseModel):
+    code: str

@@ -107,6 +107,30 @@ def _run_safe_migrations(conn):
     _add_column_if_not_exists(conn, "token_transactions", "model_used", "VARCHAR(50) DEFAULT NULL")
     _add_column_if_not_exists(conn, "token_transactions", "estimated_cost_usd", "DECIMAL(10, 6) DEFAULT 0.0")
 
+    # Sistema de Referidos en users
+    _add_column_if_not_exists(conn, "users", "referral_code", "VARCHAR(30) DEFAULT NULL")
+    _add_column_if_not_exists(conn, "users", "referred_by_id", "INT DEFAULT NULL")
+
+    try:
+        conn.execute(text("CREATE UNIQUE INDEX idx_unique_referral_code ON users(referral_code)"))
+        conn.commit()
+    except Exception:
+        conn.rollback()
+
+    # Generar código de referido para usuarios existentes sin código
+    try:
+        users_no_code = conn.execute(text("SELECT id FROM users WHERE referral_code IS NULL OR referral_code = ''")).fetchall()
+        if users_no_code:
+            import secrets
+            for u in users_no_code:
+                code = "DOC-" + "".join(secrets.choice("23456789ABCDEFGHJKLMNPQRSTUVWXYZ") for _ in range(6))
+                conn.execute(text("UPDATE users SET referral_code = :c WHERE id = :uid"), {"c": code, "uid": u[0]})
+            conn.commit()
+            logger.info(f"✅ Códigos de referido generados para {len(users_no_code)} usuario(s) existente(s).")
+    except Exception as e:
+        conn.rollback()
+        logger.warning(f"Aviso actualizando referral_code en usuarios existentes: {e}")
+
     try:
         conn.execute(text("CREATE UNIQUE INDEX idx_unique_users_phone ON users(phone)"))
         conn.commit()

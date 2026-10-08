@@ -131,14 +131,20 @@ export default function Auth() {
     setIsLogin(location.pathname !== '/register');
   }, [location.pathname]);
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const queryParams = new URLSearchParams(location.search);
+  const initialRef = queryParams.get('ref') || sessionStorage.getItem('docai_ref') || '';
+  if (queryParams.get('ref')) {
+    sessionStorage.setItem('docai_ref', queryParams.get('ref'));
+  }
 
   const [formData, setFormData] = useState({
-    firstName: '', lastName: '', email: '', phone: '', country: '', password: '', confirmPassword: ''
+    firstName: '', lastName: '', email: '', phone: '', country: '', password: '', confirmPassword: '',
+    referralCode: initialRef
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   // ─── SOLO UN listener de mouse para TODOS los personajes ───
   const [mouseX, setMouseX] = useState(0);
@@ -296,6 +302,7 @@ export default function Auth() {
     }
 
     const endpoint = isLogin ? 'login' : 'register';
+    const refCodeToSend = formData.referralCode?.trim() || sessionStorage.getItem('docai_ref') || undefined;
     const payload = isLogin
       ? { email: formData.email, password: formData.password }
       : {
@@ -304,7 +311,8 @@ export default function Auth() {
         email: formData.email,
         phone: formData.phone,
         country: formData.country,
-        password: formData.password
+        password: formData.password,
+        referral_code: refCodeToSend,
       };
 
     try {
@@ -338,7 +346,11 @@ export default function Auth() {
   const handleGoogleSuccess = async (credentialResponse) => {
     setLoading(true);
     try {
-      const response = await api.post('/auth/google', { token: credentialResponse.credential });
+      const refCodeToSend = formData.referralCode?.trim() || sessionStorage.getItem('docai_ref') || undefined;
+      const response = await api.post('/auth/google', {
+        token: credentialResponse.credential,
+        referral_code: refCodeToSend,
+      });
       if (response.data.status === 'success') {
         localStorage.setItem('token', response.data.access_token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -674,6 +686,33 @@ export default function Auth() {
                     <div className="relative">
                       <span className="material-symbols-outlined absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 text-lg sm:text-xl">lock</span>
                       <input type={showPassword ? "text" : "password"} name="confirmPassword" required placeholder="••••••••" className={inputBaseClasses} onChange={handleChange} value={formData.confirmPassword} onFocus={() => setIsTyping(true)} onBlur={() => setIsTyping(false)} />
+                    </div>
+                  </motion.div>
+                )}
+
+                {!isLogin && (
+                  <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.3 }}
+                    className="space-y-1 overflow-hidden pt-1">
+                    <div className="flex justify-between items-center">
+                      <label className={labelBaseClasses}>Código de Referido (Opcional)</label>
+                      {formData.referralCode && (
+                        <span className="text-[11px] text-green-500 font-bold flex items-center gap-0.5">
+                          <span className="material-symbols-outlined text-[13px]">card_giftcard</span> Invitación aplicada
+                        </span>
+                      )}
+                    </div>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 text-lg sm:text-xl">card_giftcard</span>
+                      <input
+                        type="text"
+                        name="referralCode"
+                        placeholder="Ej: DOC-ABC123"
+                        className={`${inputBaseClasses} uppercase`}
+                        onChange={handleChange}
+                        value={formData.referralCode}
+                        onFocus={() => setIsTyping(true)}
+                        onBlur={() => setIsTyping(false)}
+                      />
                     </div>
                   </motion.div>
                 )}
