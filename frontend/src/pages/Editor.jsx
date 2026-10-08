@@ -509,7 +509,7 @@ export default function Editor() {
               </div>
               <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold w-full sm:w-auto">
                 <span className="text-primary-container flex-1 sm:flex-none">
-                  {tokenBalance.monthly_tokens} {t('editor.tokens_monthly')} + {tokenBalance.extra_tokens} {t('editor.tokens_extra')}
+                  {tokenBalance.monthly_tokens?.toLocaleString('es-ES')} {t('editor.tokens_monthly')} + {tokenBalance.extra_tokens?.toLocaleString('es-ES')} {t('editor.tokens_extra')}
                 </span>
                 <Link 
                   to="/upgrade" 
@@ -700,7 +700,7 @@ export default function Editor() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ duration: 0.3 }}
-                    className="mt-4 sm:mt-5 p-4 sm:p-5 rounded-2xl border bg-white/80 dark:bg-surface/80 backdrop-blur-sm border-slate-200 dark:border-outline-variant/30 shadow-sm"
+                    className="mt-4 sm:mt-5 p-4 sm:p-5 rounded-2xl border bg-white/80 dark:bg-[#1a1512]/80 backdrop-blur-sm border-slate-200 dark:border-outline-variant/30 shadow-sm"
                   >
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 dark:border-outline-variant/20">
                       <div className="flex items-center gap-2">
@@ -716,27 +716,24 @@ export default function Editor() {
                           </p>
                         </div>
                       </div>
-                      <span className="text-[10px] sm:text-xs font-black px-2.5 py-1 rounded-full bg-orange-100 dark:bg-orange-900/40 text-primary-container w-fit">
-                        {isPro ? 'DeepSeek V3' : 'Motor APA Reglas'}
-                      </span>
                     </div>
 
                     {/* Grilla de Métricas */}
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-3">
-                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl">
+                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-black/40 rounded-xl">
                         <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
                           Párrafos
                         </p>
                         <p className="text-sm sm:text-base font-black text-on-surface">
-                          {fileMetrics.total_paragraphs}
+                          {fileMetrics.total_paragraphs?.toLocaleString('es-ES')}
                         </p>
                       </div>
-                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl">
+                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-black/40 rounded-xl">
                         <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
                           Palabras
                         </p>
                         <p className="text-sm sm:text-base font-black text-on-surface">
-                          ~{fileMetrics.total_words?.toLocaleString()}
+                          ~{fileMetrics.total_words?.toLocaleString('es-ES')}
                         </p>
                       </div>
                       {isPro ? (
@@ -746,7 +743,7 @@ export default function Editor() {
                               DeepSeek Tokens
                             </p>
                             <p className="text-sm sm:text-base font-black text-primary-container">
-                              ~{fileMetrics.estimated_deepseek_tokens?.toLocaleString()}
+                              ~{fileMetrics.estimated_deepseek_tokens?.toLocaleString('es-ES')}
                             </p>
                           </div>
                           <div className="p-2.5 sm:p-3 bg-orange-50/70 dark:bg-orange-950/30 rounded-xl border border-orange-100 dark:border-orange-900/30">
@@ -754,7 +751,7 @@ export default function Editor() {
                               Costo DocAI
                             </p>
                             <p className="text-sm sm:text-base font-black text-primary-container">
-                              {fileMetrics.estimated_docai_tokens} tokens
+                              {fileMetrics.estimated_docai_tokens?.toLocaleString('es-ES')} tokens
                             </p>
                           </div>
                         </>
@@ -781,8 +778,8 @@ export default function Editor() {
                           </span>
                           <span>
                             {fileMetrics.has_enough_tokens
-                              ? `Saldo disponible: ${fileMetrics.user_tokens_available} tokens (Saldo restante: ${fileMetrics.tokens_after_process} tokens)`
-                              : `Saldo insuficiente: Tienes ${fileMetrics.user_tokens_available} tokens, requieres ${fileMetrics.estimated_docai_tokens} tokens.`}
+                              ? `Saldo disponible: ${fileMetrics.user_tokens_available?.toLocaleString('es-ES')} tokens (Saldo restante: ${fileMetrics.tokens_after_process?.toLocaleString('es-ES')} tokens)`
+                              : `Saldo insuficiente: Tienes ${fileMetrics.user_tokens_available?.toLocaleString('es-ES')} tokens, requieres ${fileMetrics.estimated_docai_tokens?.toLocaleString('es-ES')} tokens.`}
                           </span>
                         </div>
                         {!fileMetrics.has_enough_tokens && (
