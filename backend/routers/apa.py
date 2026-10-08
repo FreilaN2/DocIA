@@ -51,10 +51,25 @@ router = APIRouter()
 
 # ─── Limpieza de archivos ─────────────────────────────────
 
+def _eliminar_archivo_seguro(ruta: str, file_id: Optional[str] = None) -> None:
+    """Elimina un archivo del disco y su referencia en memoria de forma segura."""
+    if file_id:
+        try:
+            storage.pop(file_id)
+        except Exception:
+            pass
+    if ruta and os.path.exists(ruta):
+        try:
+            os.remove(ruta)
+            logger.info(f"🧹 Archivo temporal eliminado tras uso: {os.path.basename(ruta)}")
+        except Exception as e:
+            logger.warning(f"No se pudo eliminar archivo temporal {ruta}: {e}")
+
+
 async def limpiar_archivos_antiguos():
-    """Elimina archivos con más de 24h de antigüedad sin bloquear el event loop."""
+    """Elimina archivos con más de 1h de antigüedad sin bloquear el event loop."""
     ahora  = time.time()
-    umbral = 86400
+    umbral = 3600  # 1 hora
 
     def _do_cleanup():
         for carpeta in [UPLOAD_DIR, PROCESSED_DIR]:
@@ -65,7 +80,7 @@ async def limpiar_archivos_antiguos():
                 if os.path.isfile(ruta) and (ahora - os.path.getmtime(ruta)) > umbral:
                     try:
                         os.remove(ruta)
-                        logger.info(f"Limpieza: {archivo} eliminado")
+                        logger.info(f"🧹 Limpieza automática (>1h): {archivo} eliminado")
                     except Exception as e:
                         logger.error(f"Error limpiando {archivo}: {e}")
 
@@ -215,15 +230,8 @@ async def procesar_documento(
 ):
     background_tasks.add_task(limpiar_archivos_antiguos)
 
-    contents   = await file.read()
-    safe_name  = RE_SAFE_FILENAME.sub("_", file.filename) if file.filename else "upload.docx"
-    input_path = os.path.join(UPLOAD_DIR, f"{uuid.uuid4().hex}_{safe_name}")
-
-    with open(input_path, "wb") as f:
-        f.write(contents)
-
-    if not os.path.exists(input_path):
-        raise HTTPException(status_code=500, detail="Error al guardar el archivo")
+    contents  = await file.read()
+    safe_name = RE_SAFE_FILENAME.sub("_", file.filename) if file.filename else "upload.docx"
 
     try:
         doc = Document(io.BytesIO(contents))
@@ -577,8 +585,10 @@ def _convertir_docx_a_pdf(out_docx: str, out_pdf: str) -> None:
 @router.post("/generar-final/")
 async def generar_final(
     datos: DatosFinales,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
 ):
+    background_tasks.add_task(limpiar_archivos_antiguos)
     base_name     = os.path.splitext(datos.filename)[0]
     safe_base     = RE_SAFE_BASENAME.sub("_", base_name).strip()
     unique_suffix = uuid.uuid4().hex
@@ -826,6 +836,7 @@ async def generar_final(
     # --- Conversión a PDF (solo Pro) ---
     if datos.formato.lower() == "pdf":
         if datos.plan != "pro":
+            _eliminar_archivo_seguro(out_docx)
             raise HTTPException(status_code=403, detail="PDF exclusivo para usuarios Pro.")
 
         out_pdf = os.path.abspath(os.path.join(PROCESSED_DIR, out_name + ".pdf"))
@@ -835,7 +846,11 @@ async def generar_final(
             except Exception:
                 pass
 
-        await asyncio.to_thread(_convertir_docx_a_pdf, out_docx, out_pdf)
+        try:
+            await asyncio.to_thread(_convertir_docx_a_pdf, out_docx, out_pdf)
+        finally:
+            # Eliminar siempre el .docx intermedio tras generar el PDF
+            _eliminar_archivo_seguro(out_docx)
         output_path = out_pdf
 
     file_id = str(uuid.uuid4())
@@ -890,8 +905,9 @@ async def obtener_imagen_portada(upload_id: str, rel_id: str):
 
 
 @router.get("/descargar/{file_id}")
-async def descargar_archivo(file_id: str):
+async def descargar_archivo(file_id: str, background_tasks: BackgroundTasks):
     path = storage.get(file_id)
     if path and os.path.exists(path):
+        background_tasks.add_task(_eliminar_archivo_seguro, path, file_id)
         return FileResponse(path=path, filename=os.path.basename(path))
     raise HTTPException(status_code=404, detail="No encontrado")
