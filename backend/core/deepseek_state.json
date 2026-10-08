@@ -1,12 +1,12 @@
 {
-  "last_day": "2026-10-07",
+  "last_day": "2026-10-08",
   "keys": {
     "1": {
       "used_today": {
-        "deepseek-chat": 27
+        "deepseek-chat": 16
       },
       "used_minute": {
-        "deepseek-chat": 9
+        "deepseek-chat": 15
       }
     }
   }

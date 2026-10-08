@@ -316,6 +316,14 @@ export default function Editor() {
             detalles = [portadaBloque, ...detalles.slice(nPortada)];
           }
 
+          if (typeof evento.tokens_consumed === 'number') {
+            setFileMetrics(prev => prev ? {
+              ...prev,
+              estimated_docai_tokens: evento.tokens_consumed,
+              consumed_actual: true
+            } : prev);
+          }
+
           setResult({
             detalles: detalles,
             resumen: evento.stats,
@@ -435,12 +443,23 @@ export default function Editor() {
     }
   };
 
+  const formatMiles = (n) => Number(n ?? 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
   const TOKEN_MAX_PRO = 500;
+  const totalUserTokens = tokenBalance ? (tokenBalance.monthly_tokens + tokenBalance.extra_tokens) : 0;
+  const maxBarTokens = tokenBalance?.max_tokens
+    ? Math.max(tokenBalance.max_tokens, totalUserTokens, 1)
+    : (totalUserTokens > TOKEN_MAX_PRO ? 10000 : TOKEN_MAX_PRO);
   const tokenPercent = tokenBalance
-    ? Math.round(((tokenBalance.monthly_tokens + tokenBalance.extra_tokens) / TOKEN_MAX_PRO) * 100)
+    ? Math.min((totalUserTokens / maxBarTokens) * 100, 100)
     : 0;
-  const hasTokens = tokenBalance && (tokenBalance.monthly_tokens + tokenBalance.extra_tokens) > 0;
-  const noTokensForPro = isPro && (fileMetrics ? !fileMetrics.has_enough_tokens : (tokenBalance !== null && !hasTokens));
+  const estimatedCost = fileMetrics?.estimated_docai_tokens || 0;
+  const rawConsumedPercent = estimatedCost > 0 ? (estimatedCost / maxBarTokens) * 100 : 0;
+  const consumedVisualPercent = fileMetrics && estimatedCost > 0 && !result
+    ? Math.min(tokenPercent, rawConsumedPercent)
+    : 0;
+  const solidTokenPercent = Math.max(0, tokenPercent - consumedVisualPercent);
+  const hasTokens = totalUserTokens > 0;
+  const noTokensForPro = isPro && (fileMetrics && !result ? !fileMetrics.has_enough_tokens : (tokenBalance !== null && !hasTokens));
 
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden">
@@ -509,7 +528,7 @@ export default function Editor() {
               </div>
               <div className="flex items-center justify-between sm:justify-end gap-2 sm:gap-3 text-[10px] sm:text-xs font-bold w-full sm:w-auto">
                 <span className="text-primary-container flex-1 sm:flex-none">
-                  {tokenBalance.monthly_tokens?.toLocaleString('es-ES')} {t('editor.tokens_monthly')} + {tokenBalance.extra_tokens?.toLocaleString('es-ES')} {t('editor.tokens_extra')}
+                  {formatMiles(tokenBalance.monthly_tokens)} {t('editor.tokens_monthly')} + {formatMiles(tokenBalance.extra_tokens)} {t('editor.tokens_extra')}
                 </span>
                 <Link 
                   to="/upgrade" 
@@ -519,19 +538,67 @@ export default function Editor() {
                 </Link>
               </div>
             </div>
-            <div className="w-full bg-slate-100 dark:bg-surface-variant rounded-full h-2 sm:h-2.5">
+            <div className="w-full bg-slate-200/80 dark:bg-surface-variant rounded-full h-2.5 sm:h-3 overflow-hidden flex">
               <motion.div
                 initial={{ width: 0 }}
-                animate={{ width: `${Math.min(tokenPercent, 100)}%` }}
-                transition={{ duration: 0.8, ease: "easeOut" }}
-                className={`h-2 sm:h-2.5 rounded-full ${tokenPercent > 20 ? 'bg-primary-container' : 'bg-red-400'}`}
+                animate={{ width: `${solidTokenPercent}%` }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                style={{ backgroundColor: tokenPercent > 20 ? '#ff6b00' : '#f87171' }}
+                className={`h-full ${consumedVisualPercent > 0 ? 'rounded-l-full' : 'rounded-full'}`}
               />
+              {consumedVisualPercent > 0 && (
+                <motion.div
+                  initial={{ width: 0, opacity: 0 }}
+                  animate={{ width: `${consumedVisualPercent}%`, opacity: 1 }}
+                  transition={{ duration: 0.4, ease: "easeOut" }}
+                  title={`Consumo ${fileMetrics?.consumed_actual ? 'aplicado' : 'estimado'}: ${formatMiles(estimatedCost)} tokens DocIA`}
+                  style={{
+                    backgroundColor: fileMetrics?.has_enough_tokens === false && !result
+                      ? 'rgba(239, 68, 68, 0.48)'
+                      : 'rgba(255, 107, 0, 0.45)'
+                  }}
+                  className="h-full rounded-r-full"
+                />
+              )}
             </div>
-            {tokenBalance.next_reset_at && (
-              <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold mt-1 sm:mt-1.5">
-                {t('editor.tokens_renewal')}{new Date(tokenBalance.next_reset_at).toLocaleDateString()}
-              </p>
-            )}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 mt-1.5 sm:mt-2">
+              {tokenBalance.next_reset_at ? (
+                <p className="text-[9px] sm:text-[10px] text-slate-400 font-bold">
+                  {t('editor.tokens_renewal')}{new Date(tokenBalance.next_reset_at).toLocaleDateString()}
+                </p>
+              ) : <div />}
+
+              {analyzingFile && !result && (
+                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold text-primary-container animate-pulse">
+                  <Spinner className="w-3 h-3 text-primary-container" />
+                  <span>Calculando consumo...</span>
+                </div>
+              )}
+
+              {fileMetrics && !analyzingFile && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] font-bold"
+                >
+                  <span className="text-slate-500 dark:text-on-surface-variant">
+                    <strong className="text-on-surface font-black">{formatMiles(fileMetrics.total_paragraphs)}</strong> párrafos
+                  </span>
+                  <span className="text-slate-300 dark:text-outline-variant">•</span>
+                  <span className="text-slate-500 dark:text-on-surface-variant">
+                    <strong className="text-on-surface font-black">~{formatMiles(fileMetrics.total_words)}</strong> palabras
+                  </span>
+                  <span className="text-slate-300 dark:text-outline-variant">•</span>
+                  <span className={`px-2 py-0.5 rounded-full font-black ${
+                    fileMetrics.has_enough_tokens === false && !result
+                      ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400'
+                      : 'bg-orange-100/80 dark:bg-orange-950/40 text-primary-container'
+                  }`}>
+                    -{formatMiles(fileMetrics.estimated_docai_tokens)} tokens DocIA
+                  </span>
+                </motion.div>
+              )}
+            </div>
           </motion.div>
         )}
 
@@ -684,115 +751,6 @@ export default function Editor() {
                       </p>
                     )}
                   </label>
-                )}
-
-                {/* Indicador de análisis previo */}
-                {analyzingFile && (
-                  <div className="mt-4 p-4 rounded-2xl bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/40 flex items-center justify-center gap-3 text-primary-container text-xs sm:text-sm font-bold animate-pulse">
-                    <Spinner className="w-4 h-4 text-primary-container" />
-                    <span>Analizando documento y estimando tokens de DeepSeek...</span>
-                  </div>
-                )}
-
-                {/* Tarjeta de estimación de métricas y tokens */}
-                {fileMetrics && !analyzingFile && !loading && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="mt-4 sm:mt-5 p-4 sm:p-5 rounded-2xl border bg-white/80 dark:bg-[#1a1512]/80 backdrop-blur-sm border-slate-200 dark:border-outline-variant/30 shadow-sm"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3 pb-3 border-b border-slate-100 dark:border-outline-variant/20">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-primary-container text-xl sm:text-2xl">
-                          {isPro ? 'token' : 'auto_stories'}
-                        </span>
-                        <div>
-                          <h4 className="text-xs sm:text-sm font-black text-on-surface">
-                            {isPro ? 'Estimación de Consumo IA' : 'Detalles del Documento'}
-                          </h4>
-                          <p className="text-[10px] sm:text-xs text-slate-400 font-bold truncate max-w-xs sm:max-w-md">
-                            {file?.name}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Grilla de Métricas */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3 mb-3">
-                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-black/40 rounded-xl">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                          Párrafos
-                        </p>
-                        <p className="text-sm sm:text-base font-black text-on-surface">
-                          {fileMetrics.total_paragraphs?.toLocaleString('es-ES')}
-                        </p>
-                      </div>
-                      <div className="p-2.5 sm:p-3 bg-slate-50 dark:bg-black/40 rounded-xl">
-                        <p className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-wider">
-                          Palabras
-                        </p>
-                        <p className="text-sm sm:text-base font-black text-on-surface">
-                          ~{fileMetrics.total_words?.toLocaleString('es-ES')}
-                        </p>
-                      </div>
-                      {isPro ? (
-                        <>
-                          <div className="p-2.5 sm:p-3 bg-orange-50/70 dark:bg-orange-950/30 rounded-xl border border-orange-100 dark:border-orange-900/30">
-                            <p className="text-[9px] sm:text-[10px] font-black text-primary-container uppercase tracking-wider">
-                              DeepSeek Tokens
-                            </p>
-                            <p className="text-sm sm:text-base font-black text-primary-container">
-                              ~{fileMetrics.estimated_deepseek_tokens?.toLocaleString('es-ES')}
-                            </p>
-                          </div>
-                          <div className="p-2.5 sm:p-3 bg-orange-50/70 dark:bg-orange-950/30 rounded-xl border border-orange-100 dark:border-orange-900/30">
-                            <p className="text-[9px] sm:text-[10px] font-black text-primary-container uppercase tracking-wider">
-                              Costo DocAI
-                            </p>
-                            <p className="text-sm sm:text-base font-black text-primary-container">
-                              {fileMetrics.estimated_docai_tokens?.toLocaleString('es-ES')} tokens
-                            </p>
-                          </div>
-                        </>
-                      ) : (
-                        <div className="col-span-2 p-2.5 sm:p-3 bg-slate-50 dark:bg-surface-variant/40 rounded-xl flex items-center gap-2">
-                          <span className="material-symbols-outlined text-green-500 text-base">check_circle</span>
-                          <span className="text-[11px] sm:text-xs font-bold text-slate-600 dark:text-on-surface-variant">
-                            Gratis (procesamiento con reglas sin IA)
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Barra de Saldo para Pro */}
-                    {isPro && (
-                      <div className={`p-3 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 text-xs font-bold ${
-                        fileMetrics.has_enough_tokens 
-                          ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/40' 
-                          : 'bg-rose-50 dark:bg-rose-950/20 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900/40'
-                      }`}>
-                        <div className="flex items-center gap-1.5">
-                          <span className="material-symbols-outlined text-base">
-                            {fileMetrics.has_enough_tokens ? 'verified' : 'warning'}
-                          </span>
-                          <span>
-                            {fileMetrics.has_enough_tokens
-                              ? `Saldo disponible: ${fileMetrics.user_tokens_available?.toLocaleString('es-ES')} tokens (Saldo restante: ${fileMetrics.tokens_after_process?.toLocaleString('es-ES')} tokens)`
-                              : `Saldo insuficiente: Tienes ${fileMetrics.user_tokens_available?.toLocaleString('es-ES')} tokens, requieres ${fileMetrics.estimated_docai_tokens?.toLocaleString('es-ES')} tokens.`}
-                          </span>
-                        </div>
-                        {!fileMetrics.has_enough_tokens && (
-                          <Link 
-                            to="/upgrade" 
-                            className="px-3 py-1 rounded-lg bg-rose-600 text-white font-black text-[11px] hover:bg-rose-700 transition-colors no-underline whitespace-nowrap self-end sm:self-auto"
-                          >
-                            Recargar Tokens
-                          </Link>
-                        )}
-                      </div>
-                    )}
-                  </motion.div>
                 )}
 
                 {/* Barra de progreso */}

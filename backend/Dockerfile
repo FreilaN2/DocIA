@@ -21,6 +21,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copiar el código del backend
 COPY . .
 
+# Instalar las fuentes APA incluidas (Times New Roman, Calibri, Arial, Georgia) para que LibreOffice las use en el PDF
+RUN mkdir -p /usr/share/fonts/truetype/docai && \
+    cp -f /app/fonts/*.ttf /usr/share/fonts/truetype/docai/ 2>/dev/null || true && \
+    fc-cache -f
+
 # Asegurar carpetas de almacenamiento
 RUN mkdir -p uploads processed
 

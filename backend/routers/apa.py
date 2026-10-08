@@ -170,7 +170,7 @@ async def procesar_apa_stream(
             if plan == "pro":
                 async for evento in procesar_con_ia_stream(doc.paragraphs):
                     if evento.get("tipo") == "finalizado":
-                        consume_tokens(
+                        tokens_consumed = consume_tokens(
                             user_id=current_user.id,
                             deepseek_tokens_used=evento.get("deepseek_tokens", 0),
                             document_name=filename,
@@ -181,6 +181,7 @@ async def procesar_apa_stream(
                             total_words=evento.get("total_words", 0),
                             model_used=evento.get("modelo", "deepseek-chat"),
                         )
+                        evento["tokens_consumed"] = tokens_consumed
                         # No eliminamos input_path aquí: /generar-final/ lo necesita
                         # para copiar la portada con imágenes. El cron de limpieza
                         # (limpiar_archivos_antiguos) lo borrará después de 24h.
@@ -259,79 +260,317 @@ async def mis_tokens(
     return {"status": "success", **get_available_tokens(current_user.id, db)}
 
 
+def _find_browser_executable() -> Optional[str]:
+    """Busca Microsoft Edge, Google Chrome o Brave para conversión headless a PDF."""
+    for cmd in ("msedge", "chrome", "chromium", "google-chrome"):
+        found = shutil.which(cmd)
+        if found:
+            return found
+
+    candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        os.path.expandvars(r"%LocalAppData%\Microsoft\Edge\Application\msedge.exe"),
+        r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+        r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+        os.path.expandvars(r"%LocalAppData%\Google\Chrome\Application\chrome.exe"),
+        r"C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe",
+    ]
+    for path in candidates:
+        if path and os.path.exists(path):
+            return path
+    return None
+
+
+def _docx_to_apa_html(docx_path: str) -> str:
+    """Convierte un archivo DOCX ya formateado en APA a HTML fiel para impresión PDF."""
+    import base64
+    import html as html_lib
+    from docx.text.paragraph import Paragraph
+    from docx.table import Table
+
+    doc = Document(docx_path)
+    default_font = "Times New Roman"
+    default_size_pt = 12
+
+    for p in doc.paragraphs:
+        for r in p.runs:
+            if r.font.name:
+                default_font = r.font.name
+            if r.font.size:
+                default_size_pt = round(r.font.size.pt)
+            if r.font.name and r.font.size:
+                break
+
+    ns_r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+    blip_tag = "{http://schemas.openxmlformats.org/drawingml/2006/main}blip"
+    w_ns = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+
+    body_parts: list[str] = []
+
+    for child in doc.element.body:
+        tag = child.tag.split("}")[-1] if "}" in child.tag else child.tag
+
+        if tag == "p":
+            p = Paragraph(child, doc)
+            pf = p.paragraph_format
+
+            # Detectar saltos de página explícitos dentro del párrafo
+            has_page_break = False
+            for br in child.iter(f"{w_ns}br"):
+                if br.get(f"{w_ns}type") == "page":
+                    has_page_break = True
+
+            # Detectar cambio de sección (ej. fin de portada)
+            pPr = child.find(f"{w_ns}pPr")
+            has_sect_break = pPr is not None and pPr.find(f"{w_ns}sectPr") is not None
+
+            # Extraer imágenes embebidas en el párrafo
+            imgs_html: list[str] = []
+            for blip in child.iter(blip_tag):
+                r_embed = blip.get(f"{{{ns_r}}}embed")
+                if r_embed and r_embed in doc.part.related_parts:
+                    img_part = doc.part.related_parts[r_embed]
+                    b64 = base64.b64encode(img_part._blob).decode("ascii")
+                    mime = img_part.content_type or "image/png"
+                    imgs_html.append(
+                        f'<img src="data:{mime};base64,{b64}" '
+                        f'style="max-width:100%; max-height:240pt; object-fit:contain; display:block; margin:6pt auto;" />'
+                    )
+
+            # Construir contenido de runs
+            runs_html: list[str] = []
+            for r in p.runs:
+                txt = html_lib.escape(r.text or "")
+                if not txt:
+                    continue
+                styles_r: list[str] = []
+                if r.font.name:
+                    styles_r.append(f"font-family:'{html_lib.escape(r.font.name)}', serif")
+                if r.font.size:
+                    styles_r.append(f"font-size:{r.font.size.pt:.1f}pt")
+                if styles_r:
+                    txt = f'<span style="{";".join(styles_r)}">{txt}</span>'
+                if r.bold:
+                    txt = f"<strong>{txt}</strong>"
+                if r.italic:
+                    txt = f"<em>{txt}</em>"
+                if r.underline:
+                    txt = f"<u>{txt}</u>"
+                runs_html.append(txt)
+
+            inner_html = "".join(imgs_html) + "".join(runs_html)
+
+            if not inner_html.strip():
+                if has_page_break or has_sect_break:
+                    body_parts.append('<div class="page-break"></div>')
+                else:
+                    body_parts.append('<p class="empty-p">&nbsp;</p>')
+                continue
+
+            # Estilos de párrafo
+            p_styles: list[str] = []
+            align_map = {
+                WD_ALIGN_PARAGRAPH.CENTER: "center",
+                WD_ALIGN_PARAGRAPH.RIGHT: "right",
+                WD_ALIGN_PARAGRAPH.JUSTIFY: "justify",
+                WD_ALIGN_PARAGRAPH.LEFT: "left",
+            }
+            align_css = align_map.get(p.alignment, "left")
+            p_styles.append(f"text-align:{align_css}")
+
+            left_in = pf.left_indent.inches if pf.left_indent else 0.0
+            first_in = pf.first_line_indent.inches if pf.first_line_indent else 0.0
+
+            if first_in < -0.05 and left_in > 0.05:
+                p_styles.append(f"padding-left:{left_in:.2f}in")
+                p_styles.append(f"text-indent:{first_in:.2f}in")
+            else:
+                if left_in > 0.05:
+                    p_styles.append(f"margin-left:{left_in:.2f}in")
+                if abs(first_in) > 0.05:
+                    p_styles.append(f"text-indent:{first_in:.2f}in")
+
+            if pf.page_break_before:
+                body_parts.append('<div class="page-break"></div>')
+
+            body_parts.append(f'<p style="{";".join(p_styles)}">{inner_html}</p>')
+
+            if has_page_break or has_sect_break:
+                body_parts.append('<div class="page-break"></div>')
+
+        elif tag == "tbl":
+            tbl = Table(child, doc)
+            rows_html: list[str] = []
+            for row in tbl.rows:
+                cells_html = [
+                    f'<td style="border-top:1px solid #333; border-bottom:1px solid #333; padding:4pt 6pt;">'
+                    f'{html_lib.escape(cell.text.strip())}</td>'
+                    for cell in row.cells
+                ]
+                rows_html.append(f"<tr>{''.join(cells_html)}</tr>")
+            body_parts.append(
+                f'<table style="width:100%; border-collapse:collapse; margin:12pt 0;">'
+                f"{''.join(rows_html)}</table>"
+            )
+
+    return f"""<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<style>
+  @page {{
+    size: 8.5in 11in;
+    margin: 1in;
+  }}
+  body {{
+    font-family: '{default_font}', 'Times New Roman', serif;
+    font-size: {default_size_pt}pt;
+    line-height: 2.0;
+    color: #000000;
+    margin: 0;
+    padding: 0;
+  }}
+  p {{
+    margin-top: 0;
+    margin-bottom: 0;
+     line-height: 2.0;
+    word-wrap: break-word;
+  }}
+  p.empty-p {{
+    line-height: 1.0;
+    height: 12pt;
+  }}
+  .page-break {{
+    page-break-before: always;
+    break-before: page;
+  }}
+</style>
+</head>
+<body>
+{"".join(body_parts)}
+</body>
+</html>"""
+
+
 def _convertir_docx_a_pdf(out_docx: str, out_pdf: str) -> None:
     """
-    Convierte un archivo DOCX a PDF.
-    1. Intenta LibreOffice (entorno Linux/Docker/Servidores de producción).
-    2. Si LibreOffice no está instalado y estamos en Windows, utiliza Microsoft Word COM (win32com).
+    Convierte un archivo DOCX a PDF:
+    1. Intenta LibreOffice (entorno Linux/Docker/Servidores o Windows si está instalado).
+    2. Intenta Microsoft Word o WPS Writer vía COM en Windows.
+    3. Fallback universal con Microsoft Edge / Google Chrome Headless renderizando HTML APA.
     """
     soffice = _get_soffice_path_cached()
     if soffice:
+        tmp_dir = tempfile.mkdtemp()
         try:
-            tmp_dir = tempfile.mkdtemp()
+            from pathlib import Path
+            profile_uri = Path(os.path.join(tmp_dir, "lo_profile")).as_uri()
             result = subprocess.run(
-                [soffice, "--headless", "--convert-to", "pdf", "--outdir", tmp_dir,
-                 os.path.abspath(out_docx)],
+                [
+                    soffice,
+                    f"-env:UserInstallation={profile_uri}",
+                    "--headless",
+                    "--convert-to", "pdf",
+                    "--outdir", tmp_dir,
+                    os.path.abspath(out_docx),
+                ],
                 capture_output=True, text=True, timeout=60,
             )
             if result.returncode == 0:
                 generated = os.path.join(tmp_dir, os.path.splitext(os.path.basename(out_docx))[0] + ".pdf")
                 if os.path.exists(generated):
                     shutil.move(generated, out_pdf)
-                    shutil.rmtree(tmp_dir, ignore_errors=True)
                     logger.info("Conversión a PDF con LibreOffice exitosa.")
                     return
             logger.warning(f"LibreOffice no produjo el archivo PDF esperado: {result.stderr}")
         except subprocess.TimeoutExpired:
-            raise HTTPException(status_code=500, detail="La conversión a PDF con LibreOffice tardó demasiado.")
+            logger.warning("La conversión a PDF con LibreOffice excedió el tiempo límite.")
         except Exception as e:
             logger.warning(f"Error en conversión con LibreOffice: {e}")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
-    # Fallback en Windows usando Microsoft Word vía COM
+    # Fallback 2: En Windows usando Microsoft Word o WPS Office vía COM
     if sys.platform == "win32":
         try:
-            logger.info("Convirtiendo DOCX a PDF usando Microsoft Word COM en Windows...")
             import pythoncom
             import win32com.client
 
-            pythoncom.CoInitialize()
-            word = None
-            doc_com = None
-            try:
-                word = win32com.client.DispatchEx("Word.Application")
-                word.Visible = False
-                word.DisplayAlerts = False
-                abs_docx = os.path.abspath(out_docx)
-                abs_pdf = os.path.abspath(out_pdf)
-                doc_com = word.Documents.Open(abs_docx)
-                # 17 = wdExportFormatPDF
-                doc_com.SaveAs(abs_pdf, FileFormat=17)
-            finally:
-                if doc_com is not None:
+            for prog_id in ("Word.Application", "kwps.Application", "wps.Application"):
+                pythoncom.CoInitialize()
+                word = None
+                doc_com = None
+                try:
+                    word = win32com.client.DispatchEx(prog_id)
+                    logger.info(f"Convirtiendo DOCX a PDF usando {prog_id} COM en Windows...")
+                    word.Visible = False
                     try:
-                        doc_com.Close(SaveChanges=False)
+                        word.DisplayAlerts = False
                     except Exception:
                         pass
-                if word is not None:
-                    try:
-                        word.Quit()
-                    except Exception:
-                        pass
-                pythoncom.CoUninitialize()
+                    abs_docx = os.path.abspath(out_docx)
+                    abs_pdf = os.path.abspath(out_pdf)
+                    doc_com = word.Documents.Open(abs_docx)
+                    # 17 = wdExportFormatPDF
+                    doc_com.SaveAs(abs_pdf, FileFormat=17)
+                except Exception as com_err:
+                    logger.warning(f"COM ({prog_id}) no disponible: {com_err}")
+                finally:
+                    if doc_com is not None:
+                        try:
+                            doc_com.Close(SaveChanges=False)
+                        except Exception:
+                            pass
+                    if word is not None:
+                        try:
+                            word.Quit()
+                        except Exception:
+                            pass
+                    pythoncom.CoUninitialize()
 
-            if os.path.exists(out_pdf):
-                logger.info(f"Conversión a PDF exitosa con Microsoft Word: {out_pdf}")
+                if os.path.exists(out_pdf):
+                    logger.info(f"Conversión a PDF exitosa con {prog_id}: {out_pdf}")
+                    return
+        except Exception as e:
+            logger.warning(f"Aviso en intento COM de Windows: {e}")
+
+    # Fallback 3: Microsoft Edge / Google Chrome Headless (preinstalado en Windows 10/11)
+    browser_exe = _find_browser_executable()
+    if browser_exe:
+        tmp_dir = tempfile.mkdtemp()
+        try:
+            logger.info(f"Convirtiendo DOCX a PDF usando navegador headless ({os.path.basename(browser_exe)})...")
+            html_content = _docx_to_apa_html(out_docx)
+            html_path = os.path.join(tmp_dir, "doc_apa.html")
+            with open(html_path, "w", encoding="utf-8") as f:
+                f.write(html_content)
+
+            from pathlib import Path
+            html_uri = Path(html_path).as_uri()
+            abs_pdf = os.path.abspath(out_pdf)
+
+            cmd = [
+                browser_exe,
+                "--headless",
+                "--disable-gpu",
+                "--no-sandbox",
+                "--no-pdf-header-footer",
+                f"--print-to-pdf={abs_pdf}",
+                html_uri,
+            ]
+            subprocess.run(cmd, capture_output=True, text=True, timeout=45)
+            if os.path.exists(out_pdf) and os.path.getsize(out_pdf) > 0:
+                logger.info(f"Conversión a PDF exitosa con {os.path.basename(browser_exe)}: {out_pdf}")
                 return
         except Exception as e:
-            logger.error(f"Error en conversión con Microsoft Word COM: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al convertir a PDF con Microsoft Word: {e}"
-            )
+            logger.error(f"Error en conversión PDF con navegador headless: {e}")
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
     raise HTTPException(
         status_code=500,
-        detail="No se pudo convertir a PDF: ni LibreOffice ni Microsoft Word están disponibles en el servidor."
+        detail="No se pudo convertir a PDF: instala LibreOffice, Microsoft Word o Microsoft Edge/Chrome."
     )
 
 

@@ -76,13 +76,33 @@ def check_and_renew_monthly_tokens(user_id: int, db: Session) -> TokenBalance:
 
 
 def get_available_tokens(user_id: int, db: Session) -> dict:
-    """Retorna el saldo total disponible de un usuario."""
+    """Retorna el saldo total disponible de un usuario y el tope de su plan desde la BD."""
+    from .models import Subscription, Plan
+
     balance = check_and_renew_monthly_tokens(user_id, db)
     total = balance.monthly_tokens + balance.extra_tokens
+
+    max_tokens = 500
+    sub = (
+        db.query(Subscription)
+        .filter(Subscription.user_id == user_id, Subscription.status == "active")
+        .order_by(Subscription.id.desc())
+        .first()
+    )
+    if sub and sub.tokens_per_month:
+        max_tokens = sub.tokens_per_month
+    else:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user and user.plan and user.plan.tokens_per_month:
+            max_tokens = user.plan.tokens_per_month
+
+    max_tokens = max(max_tokens, total, 1)
+
     return {
         "monthly_tokens": balance.monthly_tokens,
         "extra_tokens": balance.extra_tokens,
         "total": total,
+        "max_tokens": max_tokens,
         "next_reset_at": balance.next_reset_at.isoformat() if balance.next_reset_at else None,
     }
 

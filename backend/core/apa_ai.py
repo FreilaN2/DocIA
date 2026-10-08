@@ -329,13 +329,28 @@ def estimar_tokens_documento(textos: list[str]) -> dict:
     total_parrafos = len(textos)
     total_palabras = sum(len(txt.split()) for txt in textos)
 
-    # 1 palabra en español ≈ 1.35 tokens
-    # Cada lote de 40 párrafos tiene ~150 tokens de overhead del prompt del sistema
-    num_lotes = max(1, (total_parrafos + BATCH_SIZE - 1) // BATCH_SIZE) if total_parrafos > 0 else 1
-    prompt_tokens_est = round(total_palabras * 1.35) + (num_lotes * 150)
+    if total_parrafos == 0:
+        return {
+            "total_paragraphs": 0,
+            "total_words": 0,
+            "estimated_deepseek_tokens": 0,
+            "estimated_prompt_tokens": 0,
+            "estimated_completion_tokens": 0,
+            "estimated_docai_tokens": 0,
+        }
 
-    # Cada párrafo genera ~2 tokens de respuesta estructurada en JSON
-    completion_tokens_est = total_parrafos * 2
+    # Construir los prompts reales por lote (incluyendo el recorte de [:360] caracteres por párrafo)
+    # En español con el tokenizador BPE de DeepSeek, 1 palabra de prompt ≈ 1.32 tokens
+    palabras_prompt = 0
+    for i in range(0, total_parrafos, BATCH_SIZE):
+        lote = textos[i : i + BATCH_SIZE]
+        prompt_lote = _prompt_para_lote(lote, json_output=True)
+        palabras_prompt += len(prompt_lote.split())
+
+    prompt_tokens_est = round(palabras_prompt * 1.32)
+
+    # Cada párrafo genera ~6 tokens de respuesta estructurada en JSON (ej. "PARRAFO_NORMAL",)
+    completion_tokens_est = total_parrafos * 6
 
     total_deepseek_est = prompt_tokens_est + completion_tokens_est
     from core.token_service import deepseek_tokens_to_docai
