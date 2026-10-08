@@ -51,6 +51,8 @@ export default function Profile() {
   const [referralLoading, setReferralLoading] = useState(false);
   const [couponInput, setCouponInput] = useState('');
   const [couponRedeeming, setCouponRedeeming] = useState(false);
+  const [inputReferralCode, setInputReferralCode] = useState('');
+  const [applyingReferral, setApplyingReferral] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -245,6 +247,38 @@ export default function Profile() {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(code);
       toast.success(`¡Código ${code} copiado!`, { icon: '📋' });
+    }
+  };
+
+  const handleApplyReferralCode = async (e) => {
+    e.preventDefault();
+    const clean = inputReferralCode.trim().toUpperCase();
+    if (!clean) {
+      toast.error('Ingresa un código de referido');
+      return;
+    }
+    setApplyingReferral(true);
+    try {
+      const res = await api.post('/user/apply-referral', { code: clean });
+      if (res.data.status === 'success') {
+        toast.success(res.data.message || '¡Código de referido vinculado con éxito!', { icon: '🎉', duration: 4000 });
+        setInputReferralCode('');
+        if (res.data.user) {
+          setUser(res.data.user);
+          localStorage.setItem('user', JSON.stringify(res.data.user));
+          window.dispatchEvent(new Event('storage'));
+          window.dispatchEvent(new Event('authChange'));
+        }
+        api.get('/user/referrals')
+          .then(({ data }) => {
+            if (data.status === 'success') setReferralData(data);
+          })
+          .catch(() => {});
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'No se pudo vincular el código de referido', { icon: '❌' });
+    } finally {
+      setApplyingReferral(false);
     }
   };
 
@@ -518,6 +552,89 @@ export default function Profile() {
                 </p>
               </div>
             </div>
+
+            {/* Estado de Referente: Vinculado vs Formulario para vincular */}
+            {Boolean(referralData?.referred_by || user.referredById || user.referredByName) ? (
+              <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 shadow-sm">
+                    <span className="material-symbols-outlined text-2xl">handshake</span>
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                        Fuiste Referido Por
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-[9px] font-bold bg-emerald-200/70 dark:bg-emerald-800/50 text-emerald-900 dark:text-emerald-200 px-2 py-0.5 rounded-full">
+                        <span className="material-symbols-outlined text-[10px]">lock</span> Vinculado
+                      </span>
+                    </div>
+                    <p className="text-sm sm:text-base font-black text-on-surface mt-0.5">
+                      {referralData?.referred_by?.name || user.referredByName || 'Usuario Referente'}
+                      {referralData?.referred_by?.email && (
+                        <span className="text-xs text-on-surface-variant font-medium ml-1.5 font-sans">
+                          ({referralData.referred_by.email})
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[11px] text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                      Tu cuenta está vinculada a este usuario. Este vínculo es permanente y no se puede modificar.
+                    </p>
+                  </div>
+                </div>
+                {referralData?.referred_by?.code && (
+                  <div className="text-left sm:text-right flex-shrink-0 bg-white/60 dark:bg-black/20 p-2.5 rounded-xl border border-emerald-200/50 dark:border-emerald-900/40">
+                    <span className="text-[10px] block text-slate-400 font-bold uppercase tracking-wider">Código usado</span>
+                    <span className="font-mono font-black text-emerald-600 dark:text-emerald-400 text-sm">
+                      {referralData.referred_by.code}
+                    </span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-white/90 dark:bg-surface-container/50 border border-orange-200/80 dark:border-outline-variant/30 shadow-sm">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start sm:items-center gap-3">
+                    <div className="w-11 h-11 rounded-2xl bg-primary-container/10 text-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
+                      <span className="material-symbols-outlined text-2xl">person_add</span>
+                    </div>
+                    <div>
+                      <h3 className="text-xs sm:text-sm font-black text-on-surface flex items-center gap-1.5">
+                        ¿Te recomendó un amigo o compañero?
+                      </h3>
+                      <p className="text-[11px] sm:text-xs text-on-surface-variant mt-0.5 max-w-xl">
+                        Si iniciaste sesión con Google o no ingresaste un código al registrarte, puedes vincularlo aquí. <em>(Solo se puede vincular una vez)</em>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <form onSubmit={handleApplyReferralCode} className="flex items-center gap-2 w-full md:w-auto">
+                    <input
+                      type="text"
+                      value={inputReferralCode}
+                      onChange={(e) => setInputReferralCode(e.target.value.toUpperCase())}
+                      placeholder="CÓDIGO (EJ: DOC-XXXXXX)"
+                      disabled={applyingReferral}
+                      className="flex-1 md:w-52 px-3.5 py-2.5 bg-slate-100 dark:bg-black/30 border border-outline/30 rounded-xl text-xs sm:text-sm font-mono uppercase tracking-wider text-on-surface focus:outline-none focus:border-primary-container"
+                    />
+                    <button
+                      type="submit"
+                      disabled={applyingReferral || !inputReferralCode.trim()}
+                      className="px-4 sm:px-5 py-2.5 bg-primary-container hover:opacity-90 disabled:opacity-50 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap"
+                    >
+                      {applyingReferral ? (
+                        <span className="material-symbols-outlined animate-spin text-base">progress_activity</span>
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-base">link</span>
+                          Vincular
+                        </>
+                      )}
+                    </button>
+                  </form>
+                </div>
+              </div>
+            )}
 
             {/* Referrals Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">

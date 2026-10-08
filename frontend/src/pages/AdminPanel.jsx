@@ -30,6 +30,8 @@ export default function AdminPanel() {
   const [couponsLoading, setCouponsLoading] = useState(false);
   const [couponSearch, setCouponSearch] = useState('');
   const [couponModalOpen, setCouponModalOpen] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState(null);
+  const [deleteCouponModal, setDeleteCouponModal] = useState({ isOpen: false, coupon: null });
   const [couponActionLoading, setCouponActionLoading] = useState(null);
   const [createCouponLoading, setCreateCouponLoading] = useState(false);
   const [couponForm, setCouponForm] = useState({
@@ -43,6 +45,14 @@ export default function AdminPanel() {
     max_uses_per_user: 1,
     expires_at: '',
   });
+
+  // Referrals State
+  const [referralsData, setReferralsData] = useState({ stats: {}, referrals: [] });
+  const [referralsLoading, setReferralsLoading] = useState(false);
+  const [referralSearch, setReferralSearch] = useState('');
+  const [referralStatusFilter, setReferralStatusFilter] = useState('all');
+  const [referralActionLoading, setReferralActionLoading] = useState(null);
+  const [deleteReferralModal, setDeleteReferralModal] = useState({ isOpen: false, referral: null });
 
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
@@ -163,6 +173,15 @@ export default function AdminPanel() {
             })
             .catch(err => console.error('Error auto-refrescando cupones', err));
         }
+
+        // Refrescar referidos si estamos en la pestaña
+        if (activeTab === 'referrals') {
+          adminApi.get('/admin/referrals')
+            .then(resp => {
+              if (resp.data.status === 'success') setReferralsData(resp.data);
+            })
+            .catch(err => console.error('Error auto-refrescando referidos', err));
+        }
       }, 5000); // 5 segundos para que se sienta muy fluido en tiempo real
     }
     return () => clearInterval(interval);
@@ -214,6 +233,8 @@ export default function AdminPanel() {
         fetchAiConsumption(aiSearch);
       } else if (activeTab === 'coupons') {
         fetchCoupons();
+      } else if (activeTab === 'referrals') {
+        fetchReferrals();
       }
     }
   }, [historyFilter, isAdmin, activeTab]);
@@ -242,7 +263,39 @@ export default function AdminPanel() {
     setCouponForm(prev => ({ ...prev, code }));
   };
 
-  const handleCreateCoupon = async (e) => {
+  const handleOpenCreateCoupon = () => {
+    setEditingCoupon(null);
+    setCouponForm({
+      code: '',
+      description: '',
+      coupon_type: 'discount_percent',
+      discount_value: 10,
+      tokens_value: 100,
+      min_purchase_amount: 0,
+      max_uses: '',
+      max_uses_per_user: 1,
+      expires_at: '',
+    });
+    setCouponModalOpen(true);
+  };
+
+  const handleOpenEditCoupon = (c) => {
+    setEditingCoupon(c);
+    setCouponForm({
+      code: c.code,
+      description: c.description || '',
+      coupon_type: c.coupon_type,
+      discount_value: c.discount_value,
+      tokens_value: c.tokens_value,
+      min_purchase_amount: c.min_purchase_amount,
+      max_uses: c.max_uses ? String(c.max_uses) : '',
+      max_uses_per_user: c.max_uses_per_user || 1,
+      expires_at: c.expires_at ? c.expires_at.split('T')[0] : '',
+    });
+    setCouponModalOpen(true);
+  };
+
+  const handleSaveCoupon = async (e) => {
     e.preventDefault();
     if (!couponForm.code.trim()) {
       toast.error('Ingresa un código de cupón');
@@ -257,27 +310,23 @@ export default function AdminPanel() {
         discount_value: Number(couponForm.discount_value) || 0,
         tokens_value: Number(couponForm.tokens_value) || 0,
         min_purchase_amount: Number(couponForm.min_purchase_amount) || 0,
-        max_uses: couponForm.max_uses ? Number(couponForm.max_uses) : undefined,
+        max_uses: couponForm.max_uses ? Number(couponForm.max_uses) : 0,
         max_uses_per_user: Number(couponForm.max_uses_per_user) || 1,
         expires_at: couponForm.expires_at ? couponForm.expires_at : undefined,
       };
-      const resp = await adminApi.post('/admin/coupons', payload);
-      toast.success(resp.data.message || 'Cupón creado');
+
+      if (editingCoupon) {
+        const resp = await adminApi.put(`/admin/coupons/${editingCoupon.id}`, payload);
+        toast.success(resp.data.message || 'Cupón actualizado exitosamente');
+      } else {
+        const resp = await adminApi.post('/admin/coupons', payload);
+        toast.success(resp.data.message || 'Cupón creado exitosamente');
+      }
       setCouponModalOpen(false);
-      setCouponForm({
-        code: '',
-        description: '',
-        coupon_type: 'discount_percent',
-        discount_value: 10,
-        tokens_value: 100,
-        min_purchase_amount: 0,
-        max_uses: '',
-        max_uses_per_user: 1,
-        expires_at: '',
-      });
+      setEditingCoupon(null);
       fetchCoupons();
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Error al crear cupón');
+      toast.error(err.response?.data?.detail || 'Error al guardar cupón');
     } finally {
       setCreateCouponLoading(false);
     }
@@ -296,17 +345,63 @@ export default function AdminPanel() {
     }
   };
 
-  const handleDeleteCoupon = async (couponId, couponCode) => {
-    if (!window.confirm(`¿Estás seguro de que deseas eliminar o desactivar el cupón "${couponCode}"?`)) return;
-    setCouponActionLoading(couponId);
+  const executeDeleteCoupon = async () => {
+    if (!deleteCouponModal.coupon) return;
+    const { id } = deleteCouponModal.coupon;
+    setCouponActionLoading(id);
     try {
-      const resp = await adminApi.delete(`/admin/coupons/${couponId}`);
-      toast.success(resp.data.message);
+      const resp = await adminApi.delete(`/admin/coupons/${id}`);
+      toast.success(resp.data.message || 'Cupón eliminado exitosamente');
+      setDeleteCouponModal({ isOpen: false, coupon: null });
       fetchCoupons();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error al eliminar cupón');
     } finally {
       setCouponActionLoading(null);
+    }
+  };
+
+  const fetchReferrals = async () => {
+    setReferralsLoading(true);
+    try {
+      const resp = await adminApi.get('/admin/referrals');
+      if (resp.data.status === 'success') {
+        setReferralsData(resp.data);
+      }
+    } catch (err) {
+      console.error('Error cargando referidos', err);
+      toast.error('Error cargando lista de referidos');
+    } finally {
+      setReferralsLoading(false);
+    }
+  };
+
+  const handleGrantReward = async (referral) => {
+    setReferralActionLoading(referral.id);
+    try {
+      const resp = await adminApi.post(`/admin/referrals/${referral.id}/grant-reward`);
+      toast.success(resp.data.message || 'Bono acreditado exitosamente', { icon: '🎉' });
+      fetchReferrals();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al acreditar bono');
+    } finally {
+      setReferralActionLoading(null);
+    }
+  };
+
+  const executeDeleteReferral = async () => {
+    if (!deleteReferralModal.referral) return;
+    const { id } = deleteReferralModal.referral;
+    setReferralActionLoading(id);
+    try {
+      const resp = await adminApi.delete(`/admin/referrals/${id}`);
+      toast.success(resp.data.message || 'Vinculación de referido eliminada');
+      setDeleteReferralModal({ isOpen: false, referral: null });
+      fetchReferrals();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al desvincular referido');
+    } finally {
+      setReferralActionLoading(null);
     }
   };
 
@@ -773,6 +868,17 @@ export default function AdminPanel() {
             <span className="material-symbols-outlined text-sm sm:text-base">confirmation_number</span>
             Cupones
           </button>
+          <button
+            onClick={() => setActiveTab('referrals')}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
+              activeTab === 'referrals' 
+                ? 'border-primary text-primary' 
+                : 'border-transparent text-on-surface-variant hover:text-on-surface'
+            }`}
+          >
+            <span className="material-symbols-outlined text-sm sm:text-base">share</span>
+            Referidos
+          </button>
         </div>
 
         {/* Tab: Administradores */}
@@ -1198,7 +1304,7 @@ export default function AdminPanel() {
               </div>
               <div className="flex items-center gap-2 w-full sm:w-auto">
                 <button
-                  onClick={() => setCouponModalOpen(true)}
+                  onClick={handleOpenCreateCoupon}
                   className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 text-xs sm:text-sm font-bold bg-primary hover:bg-primary-container text-white px-4 py-2.5 rounded-xl transition-all shadow-md active:scale-95"
                 >
                   <span className="material-symbols-outlined text-lg">add_circle</span>
@@ -1397,14 +1503,23 @@ export default function AdminPanel() {
                             </td>
 
                             <td className="py-3 px-3 text-center">
-                              <button
-                                onClick={() => handleDeleteCoupon(c.id, c.code)}
-                                disabled={couponActionLoading === c.id}
-                                className="p-1.5 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
-                                title="Eliminar Cupón"
-                              >
-                                <span className="material-symbols-outlined text-base">delete</span>
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => handleOpenEditCoupon(c)}
+                                  className="p-1.5 text-slate-400 hover:text-primary transition-colors rounded-lg hover:bg-orange-50 dark:hover:bg-orange-950/20"
+                                  title="Editar Cupón"
+                                >
+                                  <span className="material-symbols-outlined text-base">edit</span>
+                                </button>
+                                <button
+                                  onClick={() => setDeleteCouponModal({ isOpen: true, coupon: c })}
+                                  disabled={couponActionLoading === c.id}
+                                  className="p-1.5 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  title="Eliminar Cupón"
+                                >
+                                  <span className="material-symbols-outlined text-base">delete</span>
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1618,10 +1733,335 @@ export default function AdminPanel() {
                         disabled={createCouponLoading}
                         className="flex-1 py-3 bg-primary hover:bg-primary-container text-white font-black text-sm rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-2"
                       >
-                        {createCouponLoading ? <Spinner className="h-4 w-4" /> : 'Guardar Cupón'}
+                        {createCouponLoading ? <Spinner className="h-4 w-4" /> : editingCoupon ? 'Actualizar Cupón' : 'Guardar Cupón'}
                       </button>
                     </div>
                   </form>
+                </div>
+              </div>
+            )}
+
+            {/* Modal: Confirmar Eliminación de Cupón */}
+            {deleteCouponModal.isOpen && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
+                onClick={() => setDeleteCouponModal({ isOpen: false, coupon: null })}
+              >
+                <div
+                  className="bg-white dark:bg-surface w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-7 border border-slate-200 dark:border-outline-variant/30 text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-red-100 dark:bg-red-950/40 text-red-600 dark:text-red-400 flex items-center justify-center mx-auto mb-4">
+                    <span className="material-symbols-outlined text-3xl">delete_forever</span>
+                  </div>
+                  <h3 className="text-lg font-black text-on-surface mb-2">
+                    ¿Eliminar o Desactivar Cupón?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-on-surface-variant mb-5 leading-relaxed">
+                    ¿Estás seguro de que deseas eliminar el cupón{' '}
+                    <span className="font-mono font-bold text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-950/50 px-2 py-0.5 rounded">
+                      {deleteCouponModal.coupon?.code}
+                    </span>
+                    ? Si ya posee canjes registrados en el sistema, será desactivado automáticamente para preservar el historial de auditoría.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteCouponModal({ isOpen: false, coupon: null })}
+                      className="flex-1 py-2.5 px-4 bg-surface-variant text-on-surface font-bold text-xs sm:text-sm rounded-xl hover:bg-outline/20 transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={couponActionLoading === deleteCouponModal.coupon?.id}
+                      onClick={executeDeleteCoupon}
+                      className="flex-1 py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      {couponActionLoading === deleteCouponModal.coupon?.id ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-base">delete</span>
+                          Eliminar
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : activeTab === 'referrals' ? (
+          /* Tab: Referidos */
+          <div className="space-y-6">
+            {/* Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">share</span>
+                  Auditoría del Programa de Referidos
+                </h2>
+                <p className="text-xs sm:text-sm text-on-surface-variant font-medium mt-0.5">
+                  Monitorea las vinculaciones entre usuarios, recompensas de 1,000 tokens DocIA y detecta posibles multi-cuentas o abusos.
+                </p>
+              </div>
+              <button
+                onClick={fetchReferrals}
+                disabled={referralsLoading}
+                className="flex items-center justify-center gap-1 text-xs sm:text-sm font-bold bg-surface-variant hover:bg-outline/20 text-on-surface px-3 py-2.5 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                title="Refrescar Referidos"
+              >
+                <span className={`material-symbols-outlined text-lg ${referralsLoading ? 'animate-spin' : ''}`}>
+                  refresh
+                </span>
+                Refrescar
+              </button>
+            </div>
+
+            {/* KPI Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-on-surface-variant font-bold uppercase tracking-wider">Total Invitados</span>
+                  <span className="material-symbols-outlined text-blue-500 text-xl">group</span>
+                </div>
+                <div className="text-2xl font-black text-on-surface mt-2">
+                  {referralsData.stats?.total_referrals ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Usuarios vinculados</div>
+              </div>
+
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-on-surface-variant font-bold uppercase tracking-wider">Con Compra</span>
+                  <span className="material-symbols-outlined text-green-500 text-xl">verified</span>
+                </div>
+                <div className="text-2xl font-black text-green-600 dark:text-green-400 mt-2">
+                  {referralsData.stats?.completed_referrals ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Bono otorgado</div>
+              </div>
+
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-on-surface-variant font-bold uppercase tracking-wider">Pendientes</span>
+                  <span className="material-symbols-outlined text-amber-500 text-xl">hourglass_top</span>
+                </div>
+                <div className="text-2xl font-black text-amber-600 dark:text-amber-400 mt-2">
+                  {referralsData.stats?.pending_referrals ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Esperando 1ª recarga</div>
+              </div>
+
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 shadow-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-on-surface-variant font-bold uppercase tracking-wider">Tokens Otorgados</span>
+                  <span className="material-symbols-outlined text-primary text-xl">generating_tokens</span>
+                </div>
+                <div className="text-2xl font-black text-primary mt-2">
+                  {referralsData.stats?.total_tokens_rewarded?.toLocaleString() ?? 0}
+                </div>
+                <div className="text-[10px] text-slate-400 mt-0.5">Tokens DocIA entregados</div>
+              </div>
+            </div>
+
+            {/* Búsqueda y Filtros */}
+            <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between">
+              <div className="relative flex-1">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                <input
+                  type="text"
+                  placeholder="Buscar por nombre, correo o código DOC-..."
+                  value={referralSearch}
+                  onChange={(e) => setReferralSearch(e.target.value)}
+                  className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 rounded-xl text-xs sm:text-sm text-on-surface placeholder-slate-400 focus:outline-none focus:border-primary"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-on-surface-variant">Estado:</span>
+                <select
+                  value={referralStatusFilter}
+                  onChange={(e) => setReferralStatusFilter(e.target.value)}
+                  className="px-3 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 rounded-xl text-xs sm:text-sm text-on-surface font-bold outline-none focus:border-primary cursor-pointer"
+                >
+                  <option value="all">Todos los referidos</option>
+                  <option value="completed">Con Bono Otorgado</option>
+                  <option value="pending">Pendientes de 1ª Compra</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tabla de Referidos */}
+            <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 shadow-sm overflow-hidden">
+              {referralsLoading ? (
+                <div className="p-12 text-center">
+                  <Spinner className="h-8 w-8 mx-auto text-primary mb-3" />
+                  <p className="text-xs text-on-surface-variant font-bold">Cargando referidos...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-outline/20 bg-slate-50/50 dark:bg-surface-variant/30 text-[11px] font-black uppercase text-on-surface-variant tracking-wider">
+                        <th className="py-3 px-3">ID</th>
+                        <th className="py-3 px-3">Referente (Invitador)</th>
+                        <th className="py-3 px-3">Código Usado</th>
+                        <th className="py-3 px-3">Referido (Nuevo Usuario)</th>
+                        <th className="py-3 px-3">Fecha Registro</th>
+                        <th className="py-3 px-3">Estado Bono</th>
+                        <th className="py-3 px-3 text-center">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline/10 font-medium">
+                      {(referralsData.referrals || [])
+                        .filter(r => {
+                          const query = referralSearch.toLowerCase();
+                          const matchesSearch =
+                            !query ||
+                            r.referrer_name?.toLowerCase().includes(query) ||
+                            r.referrer_email?.toLowerCase().includes(query) ||
+                            r.referrer_code?.toLowerCase().includes(query) ||
+                            r.referred_name?.toLowerCase().includes(query) ||
+                            r.referred_email?.toLowerCase().includes(query);
+
+                          const matchesStatus =
+                            referralStatusFilter === 'all' ||
+                            (referralStatusFilter === 'completed' && r.reward_granted) ||
+                            (referralStatusFilter === 'pending' && !r.reward_granted);
+
+                          return matchesSearch && matchesStatus;
+                        })
+                        .map((r) => (
+                          <tr key={r.id} className="hover:bg-slate-50/70 dark:hover:bg-surface-variant/20 transition-colors">
+                            <td className="py-3 px-3 text-xs font-mono text-slate-400">
+                              #{r.id}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <p className="font-bold text-on-surface text-xs sm:text-sm">{r.referrer_name}</p>
+                              <p className="text-[11px] text-on-surface-variant font-mono">{r.referrer_email}</p>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <span className="font-mono font-bold text-xs bg-orange-50 dark:bg-orange-950/40 text-primary px-2 py-0.5 rounded border border-orange-200/50 dark:border-orange-800/30">
+                                {r.referrer_code}
+                              </span>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <p className="font-bold text-on-surface text-xs sm:text-sm">{r.referred_name}</p>
+                              <p className="text-[11px] text-on-surface-variant font-mono">{r.referred_email}</p>
+                            </td>
+
+                            <td className="py-3 px-3 text-xs text-on-surface-variant">
+                              {r.created_at ? new Date(r.created_at).toLocaleDateString() : '—'}
+                            </td>
+
+                            <td className="py-3 px-3">
+                              {r.reward_granted ? (
+                                <div>
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                    <span className="material-symbols-outlined text-xs">check_circle</span>
+                                    +{r.reward_tokens || 1000} Otorgado
+                                  </span>
+                                  {r.rewarded_at && (
+                                    <span className="text-[10px] text-slate-400 block mt-0.5">
+                                      {new Date(r.rewarded_at).toLocaleDateString()}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">
+                                  <span className="material-symbols-outlined text-xs">hourglass_empty</span>
+                                  Pendiente 1ª compra
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                {!r.reward_granted && (
+                                  <button
+                                    onClick={() => handleGrantReward(r)}
+                                    disabled={referralActionLoading === r.id}
+                                    className="p-1.5 text-slate-400 hover:text-green-600 transition-colors rounded-lg hover:bg-green-50 dark:hover:bg-green-950/20"
+                                    title="Acreditar manualmente los 1,000 tokens al referente"
+                                  >
+                                    {referralActionLoading === r.id ? (
+                                      <Spinner className="h-4 w-4 inline" />
+                                    ) : (
+                                      <span className="material-symbols-outlined text-base">add_circle</span>
+                                    )}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => setDeleteReferralModal({ isOpen: true, referral: r })}
+                                  disabled={referralActionLoading === r.id}
+                                  className="p-1.5 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50 dark:hover:bg-red-950/20"
+                                  title="Desvincular o anular referido"
+                                >
+                                  <span className="material-symbols-outlined text-base">link_off</span>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                    </tbody>
+                  </table>
+                  {(referralsData.referrals || []).length === 0 && (
+                    <div className="p-8 text-center text-xs text-on-surface-variant font-bold">
+                      No hay registros de referidos aún en el sistema.
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal: Confirmar Desvinculación de Referido */}
+            {deleteReferralModal.isOpen && (
+              <div
+                className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm"
+                onClick={() => setDeleteReferralModal({ isOpen: false, referral: null })}
+              >
+                <div
+                  className="bg-white dark:bg-surface w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl p-6 sm:p-7 border border-slate-200 dark:border-outline-variant/30 text-center"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-4">
+                    <span className="material-symbols-outlined text-3xl">link_off</span>
+                  </div>
+                  <h3 className="text-lg font-black text-on-surface mb-2">
+                    ¿Desvincular Referido?
+                  </h3>
+                  <p className="text-xs sm:text-sm text-on-surface-variant mb-5 leading-relaxed">
+                    Se desvinculará a <strong>{deleteReferralModal.referral?.referred_name}</strong> ({deleteReferralModal.referral?.referred_email}) del referente <strong>{deleteReferralModal.referral?.referrer_name}</strong>. Esta acción se usa ante sospechas de multi-cuentas o comportamientos anómalos.
+                  </p>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteReferralModal({ isOpen: false, referral: null })}
+                      className="flex-1 py-2.5 px-4 bg-surface-variant text-on-surface font-bold text-xs sm:text-sm rounded-xl hover:bg-outline/20 transition-all"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      disabled={referralActionLoading === deleteReferralModal.referral?.id}
+                      onClick={executeDeleteReferral}
+                      className="flex-1 py-2.5 px-4 bg-amber-600 hover:bg-amber-700 text-white font-black text-xs sm:text-sm rounded-xl transition-all shadow-md active:scale-95 flex items-center justify-center gap-1.5"
+                    >
+                      {referralActionLoading === deleteReferralModal.referral?.id ? (
+                        <Spinner className="h-4 w-4" />
+                      ) : (
+                        <>
+                          <span className="material-symbols-outlined text-base">link_off</span>
+                          Desvincular
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}

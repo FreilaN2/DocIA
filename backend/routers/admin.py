@@ -13,13 +13,13 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption
+from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption, Referral
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
 from core.token_service import assign_monthly_tokens, add_extra_tokens
 from core.referral_service import grant_referral_reward_if_eligible
 from core.constants import SUBSCRIPTION_PRICES, TOKENS_PER_MONTH_PRO
-from core.schemas import AdminPagoActionRequest, CreateAdminRequest, CouponCreate
+from core.schemas import AdminPagoActionRequest, CreateAdminRequest, CouponCreate, CouponUpdate
 
 router = APIRouter(prefix="/admin")
 
@@ -351,3 +351,166 @@ async def eliminar_cupon(
     db.delete(coupon)
     db.commit()
     return {"status": "success", "message": f"Cupón '{coupon.code}' eliminado correctamente."}
+
+
+@router.put("/coupons/{coupon_id}")
+async def actualizar_cupon(
+    coupon_id: int,
+    data: CouponUpdate,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Actualiza la configuración de un cupón existente."""
+    coupon = db.query(Coupon).filter(Coupon.id == coupon_id).first()
+    if not coupon:
+        raise HTTPException(status_code=404, detail="Cupón no encontrado.")
+
+    if data.code:
+        clean_code = data.code.strip().upper()
+        if clean_code != coupon.code:
+            existing = db.query(Coupon).filter(Coupon.code == clean_code, Coupon.id != coupon_id).first()
+            if existing:
+                raise HTTPException(status_code=400, detail=f"Ya existe otro cupón con el código '{clean_code}'.")
+            coupon.code = clean_code
+
+    if data.description is not None:
+        coupon.description = data.description.strip() if data.description else None
+
+    if data.coupon_type:
+        if data.coupon_type not in ('discount_percent', 'discount_fixed', 'tokens'):
+            raise HTTPException(status_code=400, detail="Tipo de cupón no válido.")
+        coupon.coupon_type = data.coupon_type
+
+    if data.discount_value is not None:
+        if coupon.coupon_type == 'discount_percent' and (data.discount_value <= 0 or data.discount_value > 100):
+            raise HTTPException(status_code=400, detail="El porcentaje de descuento debe estar entre 1% y 100%.")
+        coupon.discount_value = data.discount_value
+
+    if data.tokens_value is not None:
+        coupon.tokens_value = data.tokens_value
+
+    if data.min_purchase_amount is not None:
+        coupon.min_purchase_amount = data.min_purchase_amount
+
+    if data.max_uses is not None:
+        coupon.max_uses = data.max_uses
+
+    if data.max_uses_per_user is not None:
+        coupon.max_uses_per_user = data.max_uses_per_user
+
+    if data.is_active is not None:
+        coupon.is_active = data.is_active
+
+    if data.expires_at is not None:
+        if data.expires_at == "" or data.expires_at is None:
+            coupon.expires_at = None
+        else:
+            try:
+                coupon.expires_at = datetime.fromisoformat(data.expires_at.replace("Z", "+00:00"))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Formato de fecha de expiración no válido (usa YYYY-MM-DD).")
+
+    db.commit()
+    db.refresh(coupon)
+
+    return {
+        "status": "success",
+        "message": f"Cupón '{coupon.code}' actualizado exitosamente.",
+        "coupon_id": coupon.id,
+    }
+
+
+# ─── Panel de Referidos para Administradores ───────────────
+
+@router.get("/referrals")
+async def listar_referidos_admin(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Retorna métricas globales y lista completa de referidos para monitoreo, auditoría y prevención de fraude."""
+    referrals = db.query(Referral).order_by(Referral.created_at.desc()).all()
+
+    total_referrals = len(referrals)
+    completed = sum(1 for r in referrals if r.reward_granted)
+    pending = total_referrals - completed
+    total_tokens_rewarded = sum(r.reward_tokens or 0 for r in referrals if r.reward_granted)
+
+    list_data = []
+    for r in referrals:
+        referrer_user = r.referrer
+        referred_user = r.referred
+        list_data.append({
+            "id": r.id,
+            "referrer_id": r.referrer_id,
+            "referrer_name": f"{referrer_user.first_name} {referrer_user.last_name}".strip() if referrer_user else f"Usuario #{r.referrer_id}",
+            "referrer_email": referrer_user.email if referrer_user else "N/A",
+            "referrer_code": referrer_user.referral_code if referrer_user else "N/A",
+            "referred_id": r.referred_id,
+            "referred_name": f"{referred_user.first_name} {referred_user.last_name}".strip() if referred_user else f"Usuario #{r.referred_id}",
+            "referred_email": referred_user.email if referred_user else "N/A",
+            "created_at": r.created_at.isoformat() if r.created_at else None,
+            "reward_granted": r.reward_granted,
+            "rewarded_at": r.rewarded_at.isoformat() if r.rewarded_at else None,
+            "reward_tokens": r.reward_tokens or 1000,
+        })
+
+    return {
+        "status": "success",
+        "stats": {
+            "total_referrals": total_referrals,
+            "completed_referrals": completed,
+            "pending_referrals": pending,
+            "total_tokens_rewarded": total_tokens_rewarded,
+        },
+        "referrals": list_data,
+    }
+
+
+@router.post("/referrals/{referral_id}/grant-reward")
+async def otorgar_recompensa_manual_admin(
+    referral_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Permite al administrador acreditar manualmente los 1,000 tokens DocIA de recompensa al referente."""
+    ref = db.query(Referral).filter(Referral.id == referral_id).first()
+    if not ref:
+        raise HTTPException(status_code=404, detail="Registro de referido no encontrado.")
+    if ref.reward_granted:
+        raise HTTPException(status_code=400, detail="La recompensa ya fue acreditada anteriormente.")
+
+    referrer = db.query(User).filter(User.id == ref.referrer_id).first()
+    if not referrer:
+        raise HTTPException(status_code=404, detail="Usuario referente no encontrado.")
+
+    tokens_to_add = ref.reward_tokens or 1000
+    add_extra_tokens(referrer.id, tokens_to_add, db)
+    ref.reward_granted = True
+    ref.rewarded_at = datetime.now(timezone.utc)
+    db.commit()
+
+    return {
+        "status": "success",
+        "message": f"Bono de +{tokens_to_add} tokens acreditado exitosamente a {referrer.email}.",
+    }
+
+
+@router.delete("/referrals/{referral_id}")
+async def eliminar_referido_admin(
+    referral_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Elimina la vinculación de referido y desvincula al usuario (útil ante multi-cuentas o exploits)."""
+    ref = db.query(Referral).filter(Referral.id == referral_id).first()
+    if not ref:
+        raise HTTPException(status_code=404, detail="Registro de referido no encontrado.")
+
+    # Desvincular usuario referido si aún apuntaba a este referente
+    referred = db.query(User).filter(User.id == ref.referred_id).first()
+    if referred and referred.referred_by_id == ref.referrer_id:
+        referred.referred_by_id = None
+
+    db.delete(ref)
+    db.commit()
+    return {"status": "success", "message": "Vinculación de referido eliminada correctamente."}

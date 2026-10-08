@@ -161,6 +161,18 @@ def get_user_referral_data(user: User, db: Session) -> dict:
             "reward_tokens": r.reward_tokens,
         })
 
+    referred_by_info = None
+    if user.referred_by_id:
+        referrer_obj = db.query(User).filter(User.id == user.referred_by_id).first()
+        if referrer_obj:
+            display_referrer = f"{referrer_obj.first_name} {referrer_obj.last_name}".strip()
+            referred_by_info = {
+                "id": referrer_obj.id,
+                "name": display_referrer,
+                "email": _mask_email(referrer_obj.email),
+                "code": referrer_obj.referral_code,
+            }
+
     return {
         "referral_code": user.referral_code,
         "total_referrals": total_referrals,
@@ -169,4 +181,5 @@ def get_user_referral_data(user: User, db: Session) -> dict:
         "total_tokens_earned": total_tokens_earned,
         "reward_per_referral": REWARD_TOKENS_PER_REFERRAL,
         "referrals": referrals_list,
+        "referred_by": referred_by_info,
     }

@@ -17,9 +17,23 @@ from core.models import User, PagoMovilTransaction
 from core.auth import get_password_hash, verify_password, create_access_token
 from core.token_service import get_available_tokens
 from core.dependencies import get_current_user
-from core.schemas import UserCreate, UserLogin, GoogleAuthRequest, ChangePasswordRequest, SetPasswordRequest, UpdateProfileRequest
+from core.schemas import (
+    UserCreate,
+    UserLogin,
+    GoogleAuthRequest,
+    ChangePasswordRequest,
+    SetPasswordRequest,
+    UpdateProfileRequest,
+    ApplyReferralRequest,
+)
 from core.limiter import limiter
-from core.referral_service import generate_referral_code, assign_referral, get_user_referral_data
+from core.referral_service import (
+    generate_referral_code,
+    assign_referral,
+    get_user_referral_data,
+    grant_referral_reward_if_eligible,
+    _mask_email,
+)
 
 router = APIRouter()
 
@@ -41,6 +55,9 @@ def _get_user_dict(u: User, db: Session) -> dict:
         .first()
     )
 
+    referred_by_user = u.referred_by if getattr(u, 'referred_by', None) else None
+    referred_by_name = f"{referred_by_user.first_name} {referred_by_user.last_name}".strip() if referred_by_user else None
+
     return {
         "id": u.id,
         "email": u.email,
@@ -60,6 +77,7 @@ def _get_user_dict(u: User, db: Session) -> dict:
         "tokenBalance": tokens_data,
         "referralCode": u.referral_code,
         "referredById": u.referred_by_id,
+        "referredByName": referred_by_name,
         "lastPaymentId": latest_pago.id if latest_pago else None,
         "lastPaymentStatus": latest_pago.status if latest_pago else None,
     }
@@ -127,6 +145,60 @@ def update_user_me(
 def get_my_referrals(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Retorna las métricas y lista de personas que se han registrado con el código de referido del usuario."""
     return {"status": "success", **get_user_referral_data(current_user, db)}
+
+
+@router.post("/user/apply-referral")
+def apply_referral_code(
+    data: ApplyReferralRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Vincula un código de referido para usuarios que no lo ingresaron al registrarse (ej. login con Google)."""
+    if current_user.referred_by_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Ya tienes un referente vinculado en tu cuenta y no puede ser modificado.",
+        )
+
+    clean_code = data.code.strip().upper() if data.code else ""
+    if not clean_code:
+        raise HTTPException(status_code=400, detail="Por favor ingresa un código de referido válido.")
+
+    if current_user.referral_code and clean_code == current_user.referral_code.upper():
+        raise HTTPException(status_code=400, detail="No puedes usar tu propio código de referido.")
+
+    referrer = db.query(User).filter(User.referral_code == clean_code).first()
+    if not referrer:
+        raise HTTPException(status_code=404, detail=f"El código de referido '{clean_code}' no existe.")
+
+    if referrer.id == current_user.id:
+        raise HTTPException(status_code=400, detail="No puedes auto-referirte.")
+
+    # Vincular usuario y crear registro de referido
+    referrer_assigned = assign_referral(current_user, clean_code, db)
+    if not referrer_assigned:
+        raise HTTPException(status_code=400, detail="No se pudo vincular el código de referido.")
+
+    # Si el usuario ya cuenta con plan Pro o compras previas, activar bono al referente
+    plan_name = current_user.plan.name if current_user.plan else "free"
+    if plan_name == "pro":
+        grant_referral_reward_if_eligible(current_user.id, db)
+
+    db.commit()
+    db.refresh(current_user)
+
+    referrer_name = f"{referrer.first_name} {referrer.last_name}".strip()
+    return {
+        "status": "success",
+        "message": f"¡Código vinculado con éxito! Fuiste referido por {referrer_name}.",
+        "user": _get_user_dict(current_user, db),
+        "referred_by": {
+            "id": referrer.id,
+            "name": referrer_name,
+            "email": _mask_email(referrer.email),
+            "code": referrer.referral_code,
+        },
+    }
 
 
 @router.post("/login")

@@ -141,3 +141,21 @@ class CouponValidateRequest(BaseModel):
 
 class CouponRedeemTokensRequest(BaseModel):
     code: str
+
+
+class CouponUpdate(BaseModel):
+    code: Optional[str] = None
+    description: Optional[str] = None
+    coupon_type: Optional[str] = None  # 'discount_percent' | 'discount_fixed' | 'tokens'
+    discount_value: Optional[float] = 0.0
+    tokens_value: Optional[int] = 0
+    min_purchase_amount: Optional[float] = 0.0
+    max_uses: Optional[int] = 0
+    max_uses_per_user: Optional[int] = 1
+    is_active: Optional[bool] = True
+    expires_at: Optional[str] = None
+
+
+class ApplyReferralRequest(BaseModel):
+    code: str
+
