@@ -168,3 +168,25 @@ class CouponUpdate(BaseModel):
 class ApplyReferralRequest(BaseModel):
     code: str
 
+
+class AdminAdjustTokensRequest(BaseModel):
+    action: str  # 'add_extra' | 'subtract_extra' | 'set_monthly'
+    amount: int
+
+
+class AdminChangePlanRequest(BaseModel):
+    plan: str  # 'pro' | 'free'
+    months: Optional[int] = 1
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: str
+
+
+class ResetPasswordRequest(BaseModel):
+    email: str
+    verification_value: str  # Código de 6 dígitos enviado por correo o teléfono registrado
+    new_password: str
+
+
+

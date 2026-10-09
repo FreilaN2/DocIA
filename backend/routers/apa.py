@@ -25,7 +25,7 @@ from docx.enum.section import WD_SECTION_START
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.models import User
+from core.models import User, ProcessedDocument
 from core.apa_rules import procesar_con_reglas
 from core.apa_ai import procesar_con_ia, procesar_con_ia_stream, estimar_tokens_documento, _extraer_textos
 from core.token_service import get_available_tokens, consume_tokens, deepseek_tokens_to_docai
@@ -196,7 +196,18 @@ async def procesar_apa_stream(
                             total_words=evento.get("total_words", 0),
                             model_used=evento.get("modelo", "deepseek-chat"),
                         )
-                        evento["tokens_consumed"] = res_tokens.get("consumed", 0) if isinstance(res_tokens, dict) else res_tokens
+                        consumed_val = res_tokens.get("consumed", 0) if isinstance(res_tokens, dict) else res_tokens
+                        evento["tokens_consumed"] = consumed_val
+                        try:
+                            db.add(ProcessedDocument(
+                                user_id=current_user.id,
+                                original_filename=filename,
+                                apa_version=edicion,
+                                tokens_consumed=int(consumed_val or 0),
+                            ))
+                            db.commit()
+                        except Exception:
+                            db.rollback()
                         # No eliminamos input_path aquí: /generar-final/ lo necesita
                         # para copiar la portada con imágenes. El cron de limpieza
                         # (limpiar_archivos_antiguos) lo borrará después de 24h.
@@ -207,6 +218,17 @@ async def procesar_apa_stream(
                     yield f"data: {json.dumps(evento, ensure_ascii=False)}\n\n"
             else:
                 resultado = procesar_con_reglas(doc.paragraphs)
+                if current_user:
+                    try:
+                        db.add(ProcessedDocument(
+                            user_id=current_user.id,
+                            original_filename=filename,
+                            apa_version=edicion,
+                            tokens_consumed=0,
+                        ))
+                        db.commit()
+                    except Exception:
+                        db.rollback()
                 yield f"data: {json.dumps({'tipo': 'inicio', 'total_lotes': 1, 'progreso': 0, 'modelo': 'reglas'}, ensure_ascii=False)}\n\n"
                 yield f"data: {json.dumps({'tipo': 'finalizado', 'progreso': 100, 'stats': resultado['stats'], 'detalles': resultado['detalles'], 'deepseek_tokens': 0}, ensure_ascii=False)}\n\n"
         except Exception as e:

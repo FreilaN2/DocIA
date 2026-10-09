@@ -59,6 +59,19 @@ export default function AdminPanel() {
   const [feedbacksLoading, setFeedbacksLoading] = useState(false);
   const [feedbacksFilter, setFeedbacksFilter] = useState('unread'); // 'all', 'unread', 'read'
 
+  // Users Management State
+  const [usersData, setUsersData] = useState({
+    stats: { total_users: 0, pro_users: 0, free_users: 0, suspended_users: 0 },
+    users: [],
+  });
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [userSearch, setUserSearch] = useState('');
+  const [userPlanFilter, setUserPlanFilter] = useState('all');
+  const [userActionLoading, setUserActionLoading] = useState(null);
+  const [userTokenModal, setUserTokenModal] = useState({ isOpen: false, user: null });
+  const [userTokenForm, setUserTokenForm] = useState({ action: 'add_extra', amount: 1000 });
+  const [userPlanModal, setUserPlanModal] = useState({ isOpen: false, user: null, plan: 'pro', months: 1 });
+
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
   const [email, setEmail] = useState('');
@@ -238,10 +251,88 @@ export default function AdminPanel() {
     }
   };
 
+  const formatMiles = (num) => Math.round(Number(num ?? 0)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  const fetchUsers = async (searchQuery = userSearch, planFilter = userPlanFilter) => {
+    setUsersLoading(true);
+    try {
+      const params = {};
+      if (searchQuery && searchQuery.trim()) params.search = searchQuery.trim();
+      if (planFilter && planFilter !== 'all') params.plan = planFilter;
+      const resp = await adminApi.get('/admin/users', { params });
+      if (resp.data && resp.data.users) {
+        setUsersData(resp.data);
+      }
+    } catch (err) {
+      console.error('Error cargando usuarios', err);
+      toast.error('Error al cargar la lista de usuarios');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  const handleAdjustUserTokens = async (e) => {
+    e.preventDefault();
+    if (!userTokenModal.user) return;
+    const amt = parseInt(userTokenForm.amount, 10);
+    if (isNaN(amt) || amt < 0) {
+      toast.error('Ingresa una cantidad válida de tokens');
+      return;
+    }
+    setUserActionLoading(`tokens-${userTokenModal.user.id}`);
+    try {
+      const resp = await adminApi.put(`/admin/users/${userTokenModal.user.id}/tokens`, {
+        action: userTokenForm.action,
+        amount: amt,
+      });
+      toast.success(resp.data.message || 'Saldo de tokens actualizado');
+      setUserTokenModal({ isOpen: false, user: null });
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al ajustar tokens');
+    } finally {
+      setUserActionLoading(null);
+    }
+  };
+
+  const handleChangeUserPlan = async (e) => {
+    e.preventDefault();
+    if (!userPlanModal.user) return;
+    setUserActionLoading(`plan-${userPlanModal.user.id}`);
+    try {
+      const resp = await adminApi.put(`/admin/users/${userPlanModal.user.id}/plan`, {
+        plan: userPlanModal.plan,
+        months: parseInt(userPlanModal.months, 10) || 1,
+      });
+      toast.success(resp.data.message || 'Plan actualizado');
+      setUserPlanModal({ isOpen: false, user: null, plan: 'pro', months: 1 });
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al cambiar el plan');
+    } finally {
+      setUserActionLoading(null);
+    }
+  };
+
+  const handleToggleUserActive = async (targetUser) => {
+    setUserActionLoading(`active-${targetUser.id}`);
+    try {
+      const resp = await adminApi.put(`/admin/users/${targetUser.id}/toggle-active`);
+      toast.success(resp.data.message || 'Estado de cuenta actualizado');
+      fetchUsers();
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al cambiar estado de la cuenta');
+    } finally {
+      setUserActionLoading(null);
+    }
+  };
+
   useEffect(() => {
     if (isAdmin) {
       if (activeTab === 'history') {
         fetchHistorial(historyFilter);
+      } else if (activeTab === 'users') {
+        fetchUsers(userSearch, userPlanFilter);
       } else if (activeTab === 'ai-status') {
         fetchAiStatus();
         fetchAiConsumption(aiSearch);
@@ -253,7 +344,7 @@ export default function AdminPanel() {
         fetchFeedbacks();
       }
     }
-  }, [historyFilter, isAdmin, activeTab, feedbacksFilter]);
+  }, [historyFilter, isAdmin, activeTab, feedbacksFilter, userPlanFilter]);
 
   const fetchCoupons = async () => {
     setCouponsLoading(true);
@@ -675,6 +766,12 @@ export default function AdminPanel() {
     {
       title: 'Crecimiento y Comunidad',
       items: [
+        {
+          id: 'users',
+          label: 'Usuarios',
+          icon: 'group',
+          desc: 'Gestión de usuarios, planes, saldos de tokens y estado de cuentas',
+        },
         {
           id: 'coupons',
           label: 'Cupones',
@@ -2556,7 +2653,375 @@ export default function AdminPanel() {
             </div>
           )}
         </div>
+        ) : activeTab === 'users' ? (
+          <div className="space-y-6">
+            {/* KPIs de Usuarios */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 sm:p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-on-surface-variant">Total Usuarios</span>
+                  <span className="material-symbols-outlined text-primary text-xl">group</span>
+                </div>
+                <p className="text-2xl sm:text-3xl font-black text-on-surface">{formatMiles(usersData.stats?.total_users || 0)}</p>
+              </div>
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 sm:p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-on-surface-variant">Plan PRO</span>
+                  <span className="material-symbols-outlined text-orange-500 text-xl">workspace_premium</span>
+                </div>
+                <p className="text-2xl sm:text-3xl font-black text-orange-500">{formatMiles(usersData.stats?.pro_users || 0)}</p>
+              </div>
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 sm:p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-on-surface-variant">Plan Gratuito</span>
+                  <span className="material-symbols-outlined text-blue-500 text-xl">person</span>
+                </div>
+                <p className="text-2xl sm:text-3xl font-black text-blue-500">{formatMiles(usersData.stats?.free_users || 0)}</p>
+              </div>
+              <div className="bg-white dark:bg-surface rounded-2xl border border-slate-200 dark:border-outline-variant/30 p-4 sm:p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[11px] font-black uppercase tracking-wider text-on-surface-variant">Suspendidos</span>
+                  <span className="material-symbols-outlined text-red-500 text-xl">block</span>
+                </div>
+                <p className="text-2xl sm:text-3xl font-black text-red-500">{formatMiles(usersData.stats?.suspended_users || 0)}</p>
+              </div>
+            </div>
+
+            {/* Buscador, Filtro y Tabla de Usuarios */}
+            <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    fetchUsers(userSearch, userPlanFilter);
+                  }}
+                  className="flex items-center gap-2 flex-1"
+                >
+                  <div className="relative flex-1">
+                    <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
+                    <input
+                      type="text"
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                      placeholder="Buscar por nombre, correo o país..."
+                      className="w-full pl-10 pr-4 py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm text-on-surface focus:outline-none focus:border-primary"
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="px-4 py-2.5 bg-primary hover:bg-primary-container text-white font-bold text-xs sm:text-sm rounded-xl transition-all"
+                  >
+                    Buscar
+                  </button>
+                </form>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={userPlanFilter}
+                    onChange={(e) => setUserPlanFilter(e.target.value)}
+                    className="px-3.5 py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="all">Todos los planes</option>
+                    <option value="pro">Solo PRO</option>
+                    <option value="free">Solo Free</option>
+                  </select>
+                  <button
+                    onClick={() => fetchUsers(userSearch, userPlanFilter)}
+                    className="p-2.5 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] hover:bg-slate-200 dark:hover:bg-white/10 text-on-surface transition-colors"
+                    title="Refrescar usuarios"
+                  >
+                    <span className="material-symbols-outlined text-lg">refresh</span>
+                  </button>
+                </div>
+              </div>
+
+              {usersLoading ? (
+                <div className="p-12 text-center">
+                  <Spinner className="h-8 w-8 mx-auto text-primary mb-3" />
+                  <p className="text-xs text-on-surface-variant font-bold">Cargando usuarios...</p>
+                </div>
+              ) : usersData.users.length === 0 ? (
+                <div className="p-10 text-center text-on-surface-variant">
+                  <span className="material-symbols-outlined text-4xl mb-2 opacity-50">person_off</span>
+                  <p className="text-sm font-bold">No se encontraron usuarios con esos criterios</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                  <table className="w-full text-left border-collapse min-w-[780px]">
+                    <thead>
+                      <tr className="border-b border-outline/20 text-[11px] uppercase tracking-wider text-on-surface-variant">
+                        <th className="pb-3 px-3 font-black">Usuario</th>
+                        <th className="pb-3 px-3 font-black">Plan</th>
+                        <th className="pb-3 px-3 font-black">Saldo Tokens</th>
+                        <th className="pb-3 px-3 font-black text-center">Docs</th>
+                        <th className="pb-3 px-3 font-black">Estado</th>
+                        <th className="pb-3 px-3 font-black text-right">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline/10 text-xs sm:text-sm">
+                      {usersData.users.map((u) => (
+                        <tr key={u.id} className="hover:bg-surface-variant/20 transition-colors">
+                          <td className="py-3.5 px-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-8 h-8 rounded-full bg-primary/15 text-primary font-black flex items-center justify-center flex-shrink-0 text-xs">
+                                {(u.first_name || u.email || 'U').charAt(0).toUpperCase()}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-on-surface flex items-center gap-1.5 flex-wrap">
+                                  <span>{u.full_name}</span>
+                                  {u.is_admin && (
+                                    <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300">
+                                      ADMIN
+                                    </span>
+                                  )}
+                                  {u.country && (
+                                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-on-surface-variant">
+                                      {u.country}
+                                    </span>
+                                  )}
+                                </div>
+                                <div className="text-xs text-on-surface-variant truncate">{u.email}</div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            {u.plan === 'pro' ? (
+                              <div>
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-950/50 text-orange-600 dark:text-orange-400 text-[11px] font-black">
+                                  ⚡ PRO
+                                </span>
+                                {u.subscription_ends_at && (
+                                  <div className="text-[10px] text-on-surface-variant mt-0.5">
+                                    Vence: {new Date(u.subscription_ends_at).toLocaleDateString()}
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/50 text-blue-600 dark:text-blue-400 text-[11px] font-bold">
+                                Free
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            <div className="font-black text-on-surface">{formatMiles(u.total_tokens)}</div>
+                            <div className="text-[10px] text-on-surface-variant">
+                              Mensual: {formatMiles(u.monthly_tokens)} · Extra: {formatMiles(u.extra_tokens)}
+                            </div>
+                          </td>
+
+                          <td className="py-3.5 px-3 text-center font-bold text-on-surface">
+                            {u.docs_processed}
+                          </td>
+
+                          <td className="py-3.5 px-3">
+                            {u.is_active ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 text-[11px] font-bold">
+                                Activa
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[11px] font-bold">
+                                Suspendida
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3.5 px-3 text-right">
+                            <div className="inline-flex items-center justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setUserTokenForm({ action: 'add_extra', amount: 1000 });
+                                  setUserTokenModal({ isOpen: true, user: u });
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-orange-50 dark:bg-orange-950/30 hover:bg-orange-100 dark:hover:bg-orange-900/50 text-primary font-bold text-xs transition-colors flex items-center gap-1"
+                                title="Ajustar tokens manualmente"
+                              >
+                                <span className="material-symbols-outlined text-sm">Generating_Tokens</span>
+                                Tokens
+                              </button>
+
+                              <button
+                                onClick={() => {
+                                  const nextPlan = u.plan === 'pro' ? 'free' : 'pro';
+                                  setUserPlanModal({ isOpen: true, user: u, plan: nextPlan, months: 1 });
+                                }}
+                                className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-on-surface font-bold text-xs transition-colors flex items-center gap-1"
+                                title="Cambiar plan del usuario"
+                              >
+                                <span className="material-symbols-outlined text-sm">swap_horiz</span>
+                                Plan
+                              </button>
+
+                              <button
+                                onClick={() => handleToggleUserActive(u)}
+                                disabled={userActionLoading === `active-${u.id}`}
+                                className={`px-2.5 py-1.5 rounded-lg font-bold text-xs transition-colors flex items-center gap-1 ${
+                                  u.is_active
+                                    ? 'bg-red-50 dark:bg-red-950/30 hover:bg-red-100 text-red-600 dark:text-red-400'
+                                    : 'bg-green-50 dark:bg-green-950/30 hover:bg-green-100 text-green-600 dark:text-green-400'
+                                }`}
+                                title={u.is_active ? 'Suspender cuenta' : 'Reactivar cuenta'}
+                              >
+                                <span className="material-symbols-outlined text-sm">
+                                  {u.is_active ? 'block' : 'check_circle'}
+                                </span>
+                                {u.is_active ? 'Suspender' : 'Activar'}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
         ) : null}
+
+        {/* Modal: Ajustar Tokens de Usuario */}
+        {userTokenModal.isOpen && userTokenModal.user && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#1a1512] rounded-2xl p-6 w-full max-w-md border border-slate-200 dark:border-white/10 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-black text-on-surface">
+                  Ajustar Tokens de Usuario
+                </h3>
+                <button
+                  onClick={() => setUserTokenModal({ isOpen: false, user: null })}
+                  className="text-on-surface-variant hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 text-xs space-y-1">
+                <p className="font-bold text-on-surface">{userTokenModal.user.full_name} ({userTokenModal.user.email})</p>
+                <p className="text-on-surface-variant">
+                  Saldo actual: <strong className="text-primary">{formatMiles(userTokenModal.user.total_tokens)} tokens</strong> (Mensuales: {formatMiles(userTokenModal.user.monthly_tokens)} · Extra: {formatMiles(userTokenModal.user.extra_tokens)})
+                </p>
+              </div>
+
+              <form onSubmit={handleAdjustUserTokens} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Tipo de ajuste</label>
+                  <select
+                    value={userTokenForm.action}
+                    onChange={(e) => setUserTokenForm({ ...userTokenForm, action: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 text-xs sm:text-sm font-bold text-on-surface"
+                  >
+                    <option value="add_extra">Sumar tokens extra (+)</option>
+                    <option value="subtract_extra">Restar tokens extra (-)</option>
+                    <option value="set_monthly">Fijar saldo mensual exacto (=)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Cantidad de tokens</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={userTokenForm.amount}
+                    onChange={(e) => setUserTokenForm({ ...userTokenForm, amount: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 text-sm font-black text-on-surface"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserTokenModal({ isOpen: false, user: null })}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-on-surface text-xs font-bold"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={userActionLoading === `tokens-${userTokenModal.user.id}`}
+                    className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-white text-xs font-black"
+                  >
+                    Guardar Cambios
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* Modal: Cambiar Plan de Usuario */}
+        {userPlanModal.isOpen && userPlanModal.user && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+            <div className="bg-white dark:bg-[#1a1512] rounded-2xl p-6 w-full max-w-md border border-slate-200 dark:border-white/10 shadow-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base sm:text-lg font-black text-on-surface">
+                  Cambiar Plan de Usuario
+                </h3>
+                <button
+                  onClick={() => setUserPlanModal({ isOpen: false, user: null, plan: 'pro', months: 1 })}
+                  className="text-on-surface-variant hover:text-on-surface"
+                >
+                  <span className="material-symbols-outlined">close</span>
+                </button>
+              </div>
+
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 text-xs space-y-1">
+                <p className="font-bold text-on-surface">{userPlanModal.user.full_name} ({userPlanModal.user.email})</p>
+                <p className="text-on-surface-variant">
+                  Plan actual: <strong className="uppercase">{userPlanModal.user.plan}</strong>
+                </p>
+              </div>
+
+              <form onSubmit={handleChangeUserPlan} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-on-surface-variant mb-1">Nuevo Plan</label>
+                  <select
+                    value={userPlanModal.plan}
+                    onChange={(e) => setUserPlanModal({ ...userPlanModal, plan: e.target.value })}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 text-xs sm:text-sm font-bold text-on-surface"
+                  >
+                    <option value="pro">⚡ Researcher PRO (con 10.000 tokens mensuales)</option>
+                    <option value="free">Starter Free (Plan Gratuito)</option>
+                  </select>
+                </div>
+
+                {userPlanModal.plan === 'pro' && (
+                  <div>
+                    <label className="block text-xs font-bold text-on-surface-variant mb-1">Duración (meses)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="12"
+                      value={userPlanModal.months}
+                      onChange={(e) => setUserPlanModal({ ...userPlanModal, months: e.target.value })}
+                      className="w-full px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 text-sm font-black text-on-surface"
+                      required
+                    />
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setUserPlanModal({ isOpen: false, user: null, plan: 'pro', months: 1 })}
+                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-white/10 text-on-surface text-xs font-bold"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={userActionLoading === `plan-${userPlanModal.user.id}`}
+                    className="px-4 py-2 rounded-xl bg-primary hover:bg-primary-container text-white text-xs font-black"
+                  >
+                    Confirmar Cambio
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
         </main>
       </div>
     </div>

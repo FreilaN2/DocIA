@@ -49,13 +49,24 @@ export default function Profile() {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // Sistema de Referidos y Cupones
+  // Sistema de Referidos, Cupones e Historial de Documentos
   const [referralData, setReferralData] = useState(null);
   const [referralLoading, setReferralLoading] = useState(false);
+  const [docsHistory, setDocsHistory] = useState({ total_documents: 0, total_tokens_used: 0, documents: [] });
+  const [docsLoading, setDocsLoading] = useState(false);
   const [couponInput, setCouponInput] = useState('');
   const [couponRedeeming, setCouponRedeeming] = useState(false);
   const [inputReferralCode, setInputReferralCode] = useState('');
   const [applyingReferral, setApplyingReferral] = useState(false);
+  const [dismissedPaymentId, setDismissedPaymentId] = useState(
+    () => localStorage.getItem('dismissed_payment_alert') || null
+  );
+
+  const handleDismissPaymentAlert = (paymentId) => {
+    const val = String(paymentId);
+    localStorage.setItem('dismissed_payment_alert', val);
+    setDismissedPaymentId(val);
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -121,6 +132,21 @@ export default function Profile() {
         })
         .finally(() => {
           if (isMounted) setReferralLoading(false);
+        });
+
+      setDocsLoading(true);
+      api.get('/user/documents')
+        .then(({ data }) => {
+          if (!isMounted) return;
+          if (data.status === 'success') {
+            setDocsHistory(data);
+          }
+        })
+        .catch((err) => {
+          console.error("Error obteniendo historial de documentos:", err);
+        })
+        .finally(() => {
+          if (isMounted) setDocsLoading(false);
         });
     }
 
@@ -443,6 +469,7 @@ export default function Profile() {
 
   const tabs = [
     { id: 'cuenta', label: 'Mi Cuenta', icon: 'person' },
+    { id: 'documentos', label: 'Documentos', icon: 'description' },
     { id: 'referidos', label: 'Referidos', icon: 'group_add' },
     { id: 'canjear', label: 'Canjear Códigos', icon: 'redeem' },
   ];
@@ -453,6 +480,79 @@ export default function Profile() {
 
       <main className="flex-1 pt-20 sm:pt-24 md:pt-28 pb-12 sm:pb-16 px-4 sm:px-6 md:px-8 max-w-5xl mx-auto w-full flex flex-col gap-5">
         
+        {/* ── Alerta de Estado de Pago Móvil (en revisión o rechazado) ── */}
+        {user.lastPaymentStatus === 'pending' && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full rounded-2xl bg-amber-50/90 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-500/30 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+          >
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-2xl animate-pulse">schedule</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-200">
+                    Pago Móvil en revisión
+                  </p>
+                  {user.lastPaymentRef && (
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-md bg-amber-200/60 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
+                      Ref. #{user.lastPaymentRef}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
+                  Tu reporte de pago{user.lastPaymentAmountVes ? ` por Bs. ${user.lastPaymentAmountVes}` : ''} está siendo verificado por nuestro equipo. Tus tokens o plan se acreditarán automáticamente en cuanto sea aprobado.
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        )}
+
+        {user.lastPaymentStatus === 'rejected' && String(user.lastPaymentId) !== String(dismissedPaymentId) && (
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="w-full rounded-2xl bg-red-50/90 dark:bg-red-950/30 border border-red-200 dark:border-red-500/30 p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm"
+          >
+            <div className="flex items-start sm:items-center gap-3.5">
+              <div className="w-10 h-10 rounded-xl bg-red-500/15 text-red-600 dark:text-red-400 flex items-center justify-center flex-shrink-0">
+                <span className="material-symbols-outlined text-2xl">error</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-xs sm:text-sm font-black text-red-900 dark:text-red-200">
+                    Reporte de Pago Móvil no verificado
+                  </p>
+                  {user.lastPaymentRef && (
+                    <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-md bg-red-200/60 dark:bg-red-900/50 text-red-800 dark:text-red-300">
+                      Ref. #{user.lastPaymentRef}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-red-800/80 dark:text-red-300/80 mt-0.5">
+                  No pudimos confirmar tu último comprobante. Verifica el número de referencia y vuelve a reportarlo o contáctanos en Soporte.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 self-end sm:self-center flex-shrink-0">
+              <Link
+                to="/upgrade"
+                className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black transition-colors no-underline"
+              >
+                Reportar de nuevo
+              </Link>
+              <button
+                onClick={() => handleDismissPaymentAlert(user.lastPaymentId)}
+                className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/40 hover:bg-red-200 text-red-800 dark:text-red-200 text-xs font-bold transition-colors"
+              >
+                Entendido
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {/* ── Cabecera Unificada: Perfil + Saldo de Tokens + Vencimiento + Editor ── */}
         <section className="w-full">
           <div className="bg-white/85 dark:bg-[#1a1512]/85 backdrop-blur-xl rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-lg">
@@ -1040,6 +1140,149 @@ export default function Profile() {
                       </button>
                     </form>
                   </>
+                )}
+              </div>
+            </motion.section>
+          )}
+
+          {activeTab === 'documentos' && (
+            <motion.section
+              key="tab-documentos"
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.18 }}
+              className="w-full"
+            >
+              <div className="bg-white/85 dark:bg-[#1a1512]/85 backdrop-blur-lg rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm space-y-5">
+                
+                {/* Encabezado + KPIs de Documentos */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-white/5">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary-container text-2xl">description</span>
+                      <h2 className="text-lg sm:text-xl font-black text-on-surface">
+                        Historial de Documentos
+                      </h2>
+                    </div>
+                    <p className="text-xs sm:text-sm text-on-surface-variant mt-1">
+                      Registro de los documentos que has formateado con DocIA y el detalle de tokens utilizados.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 flex-shrink-0">
+                    <div className="px-4 py-2.5 bg-surface-container/40 dark:bg-white/5 rounded-xl text-center">
+                      <span className="text-lg sm:text-xl font-black text-on-surface block leading-tight">
+                        {docsHistory?.total_documents ?? 0}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                        Documentos
+                      </span>
+                    </div>
+                    <div className="px-4 py-2.5 bg-orange-50/80 dark:bg-orange-950/25 rounded-xl text-center border border-orange-200/50 dark:border-orange-500/20">
+                      <span className="text-lg sm:text-xl font-black text-primary-container block leading-tight">
+                        {formatMiles(docsHistory?.total_tokens_used ?? 0)}
+                      </span>
+                      <span className="text-[10px] text-on-surface-variant font-bold uppercase tracking-wider">
+                        Tokens Usados
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Lista de Documentos Procesados */}
+                {docsLoading ? (
+                  <div className="py-12 text-center text-on-surface-variant text-sm flex flex-col items-center gap-2">
+                    <span className="material-symbols-outlined animate-spin text-2xl text-primary-container">progress_activity</span>
+                    Cargando historial de documentos...
+                  </div>
+                ) : docsHistory?.documents && docsHistory.documents.length > 0 ? (
+                  <div className="overflow-x-auto rounded-2xl border border-slate-200/70 dark:border-outline-variant/20">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50/80 dark:bg-white/5 text-[10px] font-black uppercase tracking-wider text-on-surface-variant border-b border-slate-200/70 dark:border-outline-variant/20">
+                          <th className="py-3 px-4">Documento</th>
+                          <th className="py-3 px-4">Extensión</th>
+                          <th className="py-3 px-4">Norma</th>
+                          <th className="py-3 px-4">Consumo</th>
+                          <th className="py-3 px-4 text-right">Fecha</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-xs">
+                        {docsHistory.documents.map((doc) => (
+                          <tr key={doc.id} className="hover:bg-slate-50/60 dark:hover:bg-white/[0.02] transition-colors">
+                            <td className="py-3.5 px-4">
+                              <div className="flex items-center gap-2.5">
+                                <div className="w-8 h-8 rounded-lg bg-primary-container/10 text-primary-container flex items-center justify-center flex-shrink-0">
+                                  <span className="material-symbols-outlined text-lg">article</span>
+                                </div>
+                                <span className="font-bold text-on-surface truncate max-w-[200px] sm:max-w-[280px]" title={doc.document_name}>
+                                  {doc.document_name}
+                                </span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 text-on-surface-variant">
+                              {doc.total_words > 0 ? (
+                                <span>
+                                  <strong className="text-on-surface">{formatMiles(doc.total_words)}</strong> palabras
+                                  {doc.total_paragraphs > 0 ? ` · ${doc.total_paragraphs} párr.` : ''}
+                                </span>
+                              ) : (
+                                <span>—</span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-white/10 text-on-surface font-bold text-[11px]">
+                                APA {doc.apa_version || '7'}ª Ed.
+                              </span>
+                            </td>
+                            <td className="py-3.5 px-4">
+                              {doc.tokens_consumed > 0 ? (
+                                <span className="inline-flex items-center gap-1 font-black text-primary-container bg-orange-50 dark:bg-orange-950/30 px-2.5 py-1 rounded-full text-[11px]">
+                                  <span className="material-symbols-outlined text-xs">bolt</span>
+                                  -{formatMiles(doc.tokens_consumed)} tokens
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2.5 py-1 rounded-full text-[11px]">
+                                  Plan Gratuito
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4 text-right text-on-surface-variant whitespace-nowrap">
+                              {doc.created_at
+                                ? new Date(doc.created_at).toLocaleDateString('es-ES', {
+                                    day: '2-digit',
+                                    month: 'short',
+                                    year: 'numeric',
+                                  })
+                                : '—'}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-slate-200 dark:border-outline-variant/30 p-8 text-center space-y-3">
+                    <div className="w-12 h-12 rounded-2xl bg-primary-container/10 text-primary-container flex items-center justify-center mx-auto">
+                      <span className="material-symbols-outlined text-2xl">upload_file</span>
+                    </div>
+                    <div>
+                      <p className="text-sm font-black text-on-surface">
+                        Aún no has procesado documentos
+                      </p>
+                      <p className="text-xs text-on-surface-variant mt-1 max-w-md mx-auto">
+                        Cuando formatees tus trabajos o tesis en el editor APA, aparecerán registrados aquí junto con las palabras procesadas y tokens utilizados.
+                      </p>
+                    </div>
+                    <Link
+                      to={`/editor/${user.plan === 'pro' ? 'pro' : 'free'}`}
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-primary-container text-white text-xs font-black hover:opacity-90 transition-opacity no-underline"
+                    >
+                      <span className="material-symbols-outlined text-base">edit_document</span>
+                      Ir al Editor APA
+                    </Link>
+                  </div>
                 )}
               </div>
             </motion.section>

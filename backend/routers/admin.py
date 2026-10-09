@@ -5,6 +5,7 @@ Endpoints del panel de administración.
 Todos requieren rol de administrador (get_admin_user).
 """
 
+import logging
 from datetime import datetime, timezone
 
 from dateutil.relativedelta import relativedelta
@@ -13,14 +14,22 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
+from core.models import User, Plan, Subscription, TokenPack, TokenBalance, TokenTransaction, ProcessedDocument, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
-from core.token_service import assign_monthly_tokens, add_extra_tokens
+from core.token_service import assign_monthly_tokens, add_extra_tokens, get_or_create_balance as get_or_create_token_balance
 from core.referral_service import grant_referral_reward_if_eligible
 from core.constants import SUBSCRIPTION_PRICES, TOKENS_PER_MONTH_PRO
-from core.schemas import AdminPagoActionRequest, CreateAdminRequest, CouponCreate, CouponUpdate
+from core.schemas import (
+    AdminPagoActionRequest,
+    CreateAdminRequest,
+    CouponCreate,
+    CouponUpdate,
+    AdminAdjustTokensRequest,
+    AdminChangePlanRequest,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin")
 
 
@@ -567,3 +576,219 @@ def mark_all_feedbacks_read(
     db.query(Feedback).filter(Feedback.is_read == False).update({"is_read": True})
     db.commit()
     return {"status": "success"}
+
+
+# ─── Gestión de Usuarios ───────────────────────────────────
+
+@router.get("/users")
+async def listar_usuarios_admin(
+    search: Optional[str] = Query(None),
+    plan: Optional[str] = Query("all"),
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Retorna la lista de usuarios registrados con métricas de tokens, plan y documentos."""
+    from sqlalchemy import func
+
+    all_users_count = db.query(func.count(User.id)).scalar() or 0
+    pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
+    pro_users_count = (
+        db.query(func.count(User.id)).filter(User.plan_id == pro_plan.id).scalar()
+        if pro_plan else 0
+    ) or 0
+    free_users_count = max(0, all_users_count - pro_users_count)
+    suspended_count = db.query(func.count(User.id)).filter(User.is_active == False).scalar() or 0
+
+    query = db.query(User)
+    if search:
+        s = f"%{search.strip()}%"
+        query = query.filter(
+            (User.email.ilike(s)) |
+            (User.first_name.ilike(s)) |
+            (User.last_name.ilike(s)) |
+            (User.country.ilike(s))
+        )
+
+    if plan and plan != "all":
+        target_plan = db.query(Plan).filter(Plan.name == plan).first()
+        if target_plan:
+            query = query.filter(User.plan_id == target_plan.id)
+
+    users = query.order_by(User.created_at.desc()).limit(250).all()
+
+    # Pre-cargar conteos de documentos por usuario
+    tx_counts = dict(
+        db.query(TokenTransaction.user_id, func.count(TokenTransaction.id))
+        .group_by(TokenTransaction.user_id)
+        .all()
+    )
+    proc_counts = dict(
+        db.query(ProcessedDocument.user_id, func.count(ProcessedDocument.id))
+        .group_by(ProcessedDocument.user_id)
+        .all()
+    )
+
+    items = []
+    for u in users:
+        tb = u.token_balance
+        monthly_tokens = tb.monthly_tokens if tb else 0
+        extra_tokens = tb.extra_tokens if tb else 0
+        total_tokens = monthly_tokens + extra_tokens
+
+        # Suscripción más reciente si es Pro
+        active_sub = (
+            db.query(Subscription)
+            .filter(Subscription.user_id == u.id, Subscription.status == "active")
+            .order_by(Subscription.ends_at.desc())
+            .first()
+        )
+
+        docs_count = max(tx_counts.get(u.id, 0), proc_counts.get(u.id, 0))
+        plan_name = u.plan.name if u.plan else "free"
+
+        items.append({
+            "id": u.id,
+            "email": u.email,
+            "first_name": u.first_name or "",
+            "last_name": u.last_name or "",
+            "full_name": f"{u.first_name or ''} {u.last_name or ''}".strip() or "Sin nombre",
+            "country": u.country or "",
+            "phone": u.phone or "",
+            "plan": plan_name,
+            "is_admin": bool(u.is_admin),
+            "is_active": bool(u.is_active),
+            "is_email_verified": bool(u.is_email_verified),
+            "monthly_tokens": monthly_tokens,
+            "extra_tokens": extra_tokens,
+            "total_tokens": total_tokens,
+            "docs_processed": docs_count,
+            "subscription_ends_at": active_sub.ends_at.isoformat() if (active_sub and active_sub.ends_at) else None,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+        })
+
+    return {
+        "stats": {
+            "total_users": all_users_count,
+            "pro_users": pro_users_count,
+            "free_users": free_users_count,
+            "suspended_users": suspended_count,
+        },
+        "users": items,
+    }
+
+
+@router.put("/users/{user_id}/tokens")
+async def ajustar_tokens_usuario_admin(
+    user_id: int,
+    data: AdminAdjustTokensRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Permite al administrador sumar/restar tokens extra o fijar los tokens mensuales de un usuario."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    if data.amount < 0:
+        raise HTTPException(status_code=400, detail="La cantidad debe ser un número positivo.")
+
+    tb = get_or_create_token_balance(user.id, db)
+
+    if data.action == "add_extra":
+        tb.extra_tokens = (tb.extra_tokens or 0) + data.amount
+        msg = f"Se acreditaron +{data.amount} tokens extra a {user.email}."
+    elif data.action == "subtract_extra":
+        tb.extra_tokens = max(0, (tb.extra_tokens or 0) - data.amount)
+        msg = f"Se descontaron {data.amount} tokens extra a {user.email}."
+    elif data.action == "set_monthly":
+        tb.monthly_tokens = data.amount
+        tb.last_reset_at = datetime.now(timezone.utc)
+        msg = f"Tokens mensuales de {user.email} fijados en {data.amount}."
+    else:
+        raise HTTPException(status_code=400, detail="Acción de tokens no válida.")
+
+    db.commit()
+    db.refresh(tb)
+
+    return {
+        "status": "success",
+        "message": msg,
+        "monthly_tokens": tb.monthly_tokens,
+        "extra_tokens": tb.extra_tokens,
+        "total_tokens": tb.monthly_tokens + tb.extra_tokens,
+    }
+
+
+@router.put("/users/{user_id}/plan")
+async def cambiar_plan_usuario_admin(
+    user_id: int,
+    data: AdminChangePlanRequest,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Cambia el plan de un usuario entre 'free' y 'pro'."""
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    target_plan_name = data.plan.strip().lower()
+    if target_plan_name not in ("free", "pro"):
+        raise HTTPException(status_code=400, detail="El plan debe ser 'free' o 'pro'.")
+
+    target_plan = db.query(Plan).filter(Plan.name == target_plan_name).first()
+    if not target_plan:
+        raise HTTPException(status_code=404, detail=f"Plan '{target_plan_name}' no configurado en la base de datos.")
+
+    user.plan_id = target_plan.id
+    now = datetime.now(timezone.utc)
+
+    if target_plan_name == "pro":
+        months = max(1, min(12, data.months or 1))
+        db.add(Subscription(
+            user_id=user.id,
+            paypal_order_id=f"admin_grant_{int(now.timestamp())}",
+            months_paid=months,
+            tokens_per_month=TOKENS_PER_MONTH_PRO,
+            started_at=now,
+            ends_at=now + relativedelta(months=months),
+            status="active",
+        ))
+        assign_monthly_tokens(user.id, TOKENS_PER_MONTH_PRO, db)
+        msg = f"{user.email} actualizado a Plan PRO ({months} mes(es)) con {TOKENS_PER_MONTH_PRO} tokens mensuales."
+    else:
+        # Cancelar suscripciones activas y poner tokens mensuales en 0 (conservando extra_tokens)
+        db.query(Subscription).filter(
+            Subscription.user_id == user.id,
+            Subscription.status == "active"
+        ).update({"status": "expired"})
+        tb = get_or_create_token_balance(user.id, db)
+        tb.monthly_tokens = 0
+        msg = f"{user.email} cambiado a Plan Gratuito."
+
+    db.commit()
+    return {"status": "success", "message": msg, "plan": target_plan_name}
+
+
+@router.put("/users/{user_id}/toggle-active")
+async def alternar_estado_usuario_admin(
+    user_id: int,
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """Activa o suspende la cuenta de un usuario."""
+    if user_id == admin.id:
+        raise HTTPException(status_code=400, detail="No puedes suspender tu propia cuenta de administrador.")
+
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    user.is_active = not bool(user.is_active)
+    db.commit()
+    estado = "activada" if user.is_active else "suspendida"
+    return {
+        "status": "success",
+        "message": f"Cuenta de {user.email} {estado}.",
+        "is_active": user.is_active,
+    }
+

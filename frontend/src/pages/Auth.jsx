@@ -146,6 +146,17 @@ export default function Auth() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Recuperación de contraseña
+  const [forgotModalOpen, setForgotModalOpen] = useState(false);
+  const [forgotStep, setForgotStep] = useState(1); // 1: email, 2: verificación + nueva clave
+  const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotMethod, setForgotMethod] = useState('email_code'); // 'email_code' | 'phone_verification'
+  const [forgotPhoneHint, setForgotPhoneHint] = useState('');
+  const [forgotVerification, setForgotVerification] = useState('');
+  const [forgotNewPassword, setForgotNewPassword] = useState('');
+  const [showForgotNewPassword, setShowForgotNewPassword] = useState(false);
+  const [forgotLoading, setForgotLoading] = useState(false);
+
   // ─── SOLO UN listener de mouse para TODOS los personajes ───
   const [mouseX, setMouseX] = useState(0);
   const [mouseY, setMouseY] = useState(0);
@@ -387,6 +398,61 @@ export default function Auth() {
       <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
     </svg>
   );
+
+  const openForgotModal = () => {
+    setForgotEmail(formData.email || '');
+    setForgotStep(1);
+    setForgotVerification('');
+    setForgotNewPassword('');
+    setForgotModalOpen(true);
+  };
+
+  const handleRequestRecovery = async (e) => {
+    e.preventDefault();
+    if (!forgotEmail.trim()) {
+      toast.error('Ingresa tu correo electrónico');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await api.post('/auth/forgot-password', { email: forgotEmail.trim() });
+      if (res.data.status === 'success') {
+        setForgotMethod(res.data.method || 'email_code');
+        setForgotPhoneHint(res.data.phone_hint || '');
+        setForgotStep(2);
+        toast.success(res.data.message || 'Verifica tu identidad para continuar', { icon: '🔐' });
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'No se pudo iniciar la recuperación');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
+
+  const handleConfirmResetPassword = async (e) => {
+    e.preventDefault();
+    if (!hasStrongPassword(forgotNewPassword)) {
+      toast.error(t('auth.error_password_weak') || 'La contraseña debe tener al menos 8 caracteres, mayúscula, número y símbolo.');
+      return;
+    }
+    setForgotLoading(true);
+    try {
+      const res = await api.post('/auth/reset-password', {
+        email: forgotEmail.trim(),
+        verification_value: forgotVerification.trim(),
+        new_password: forgotNewPassword,
+      });
+      if (res.data.status === 'success') {
+        toast.success(res.data.message || '¡Contraseña restablecida con éxito!', { icon: '✅', duration: 4000 });
+        setFormData((prev) => ({ ...prev, email: forgotEmail.trim(), password: '' }));
+        setForgotModalOpen(false);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error al restablecer la contraseña');
+    } finally {
+      setForgotLoading(false);
+    }
+  };
 
   return (
     <div className="bg-background min-h-screen text-on-background relative flex flex-col overflow-x-hidden">
@@ -633,7 +699,18 @@ export default function Auth() {
               </div>
 
               <div className="space-y-1">
-                <label className={labelBaseClasses}>{t('auth.password')}</label>
+                <div className="flex items-center justify-between">
+                  <label className={labelBaseClasses}>{t('auth.password')}</label>
+                  {isLogin && (
+                    <button
+                      type="button"
+                      onClick={openForgotModal}
+                      className="text-[11px] font-bold text-primary-container hover:underline mb-1"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <span className="material-symbols-outlined absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 text-lg sm:text-xl">lock</span>
                   <input type={showPassword ? "text" : "password"} name="password" required placeholder="••••••••" className={inputBaseClasses} onChange={handleChange} value={formData.password} onFocus={() => setIsTyping(true)} onBlur={() => setIsTyping(false)} />
@@ -760,6 +837,159 @@ export default function Auth() {
           </div>
         </div>
       </div>
+
+      {/* Modal: Recuperar Contraseña */}
+      <AnimatePresence>
+        {forgotModalOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ scale: 0.95, y: 16 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.95, y: 16 }}
+              className="bg-white dark:bg-[#1a1512] rounded-2xl sm:rounded-3xl p-6 sm:p-7 w-full max-w-md border border-slate-200 dark:border-outline-variant/30 shadow-2xl relative"
+            >
+              <button
+                type="button"
+                onClick={() => setForgotModalOpen(false)}
+                className="absolute top-4 right-4 text-on-surface-variant hover:text-on-surface transition-colors"
+              >
+                <span className="material-symbols-outlined">close</span>
+              </button>
+
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-11 h-11 rounded-2xl bg-primary-container/15 text-primary-container flex items-center justify-center flex-shrink-0">
+                  <span className="material-symbols-outlined text-2xl">lock_reset</span>
+                </div>
+                <div>
+                  <h2 className="text-lg font-black text-on-surface">
+                    Recuperar Contraseña
+                  </h2>
+                  <p className="text-xs text-on-surface-variant">
+                    {forgotStep === 1
+                      ? 'Ingresa el correo electrónico de tu cuenta'
+                      : 'Verifica tu identidad y crea una nueva clave'}
+                  </p>
+                </div>
+              </div>
+
+              {forgotStep === 1 ? (
+                <form onSubmit={handleRequestRecovery} className="space-y-4">
+                  <div className="space-y-1">
+                    <label className={labelBaseClasses}>Correo Electrónico</label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-lg">mail</span>
+                      <input
+                        type="email"
+                        required
+                        value={forgotEmail}
+                        onChange={(e) => setForgotEmail(e.target.value)}
+                        placeholder="tucorreo@ejemplo.com"
+                        className={inputBaseClasses}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotModalOpen(false)}
+                      className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 text-on-surface text-xs font-bold"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="px-5 py-2.5 rounded-xl bg-primary-container hover:opacity-90 text-white text-xs font-black flex items-center gap-2"
+                    >
+                      {forgotLoading ? <Spinner /> : 'Continuar'}
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleConfirmResetPassword} className="space-y-4">
+                  <div className="p-3 rounded-xl bg-orange-50/80 dark:bg-orange-950/25 border border-orange-200/60 dark:border-orange-500/20 text-xs text-on-surface-variant">
+                    {forgotMethod === 'email_code' ? (
+                      <span>
+                        Ingresa el <strong>código de 6 dígitos</strong> enviado a <strong className="text-on-surface">{forgotEmail}</strong>.
+                      </span>
+                    ) : (
+                      <span>
+                        Confirma tu identidad ingresando tu <strong>número de teléfono registrado</strong> {forgotPhoneHint ? `(terminado en ${forgotPhoneHint})` : ''}.
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={labelBaseClasses}>
+                      {forgotMethod === 'email_code' ? 'Código de Verificación' : 'Teléfono Registrado'}
+                    </label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-lg">
+                        {forgotMethod === 'email_code' ? 'pin' : 'call'}
+                      </span>
+                      <input
+                        type="text"
+                        required
+                        value={forgotVerification}
+                        onChange={(e) => setForgotVerification(e.target.value)}
+                        placeholder={forgotMethod === 'email_code' ? '123456' : '+58 412 1234567'}
+                        className={inputBaseClasses}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className={labelBaseClasses}>Nueva Contraseña</label>
+                    <div className="relative">
+                      <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-500 text-lg">lock</span>
+                      <input
+                        type={showForgotNewPassword ? 'text' : 'password'}
+                        required
+                        value={forgotNewPassword}
+                        onChange={(e) => setForgotNewPassword(e.target.value)}
+                        placeholder="Mín. 8 caracteres, mayúscula, número y símbolo"
+                        className={inputBaseClasses}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowForgotNewPassword(!showForgotNewPassword)}
+                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-on-surface"
+                      >
+                        <span className="material-symbols-outlined text-lg">
+                          {showForgotNewPassword ? 'visibility_off' : 'visibility'}
+                        </span>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotStep(1)}
+                      className="px-3.5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 text-on-surface text-xs font-bold"
+                    >
+                      ← Cambiar correo
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={forgotLoading}
+                      className="px-5 py-2.5 rounded-xl bg-primary-container hover:opacity-90 text-white text-xs font-black flex items-center gap-2"
+                    >
+                      {forgotLoading ? <Spinner /> : 'Restablecer Contraseña'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
