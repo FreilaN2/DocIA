@@ -75,6 +75,7 @@ export default function AdminPanel() {
 
   // Theme State for Dashboard
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Profile State
   const [showProfile, setShowProfile] = useState(false);
@@ -647,45 +648,209 @@ export default function AdminPanel() {
     );
   }
 
+  const pendingCount = Array.isArray(pagos) ? pagos.length : 0;
+  const unreadFeedbackCount = Array.isArray(feedbacks)
+    ? feedbacks.filter(f => !f.is_read).length
+    : 0;
+
+  const navGroups = [
+    {
+      title: 'Pagos y Finanzas',
+      items: [
+        {
+          id: 'pending',
+          label: 'Pagos Pendientes',
+          icon: 'pending_actions',
+          badge: pendingCount > 0 ? pendingCount : null,
+          desc: 'Revisión y aprobación de reportes de pago en tiempo real',
+        },
+        {
+          id: 'history',
+          label: 'Historial de Pagos',
+          icon: 'receipt_long',
+          desc: 'Registro histórico de transacciones aprobadas y rechazadas',
+        },
+      ],
+    },
+    {
+      title: 'Crecimiento y Comunidad',
+      items: [
+        {
+          id: 'coupons',
+          label: 'Cupones',
+          icon: 'confirmation_number',
+          desc: 'Gestión de códigos promocionales de descuento y tokens',
+        },
+        {
+          id: 'referrals',
+          label: 'Referidos',
+          icon: 'group_add',
+          desc: 'Seguimiento de invitaciones y bonos de tokens otorgados',
+        },
+        {
+          id: 'feedbacks',
+          label: 'Feedback',
+          icon: 'forum',
+          badge: unreadFeedbackCount > 0 ? unreadFeedbackCount : null,
+          desc: 'Valoraciones y comentarios enviados por los usuarios',
+        },
+      ],
+    },
+    {
+      title: 'Sistema y Seguridad',
+      items: [
+        {
+          id: 'ai-status',
+          label: 'Consumo IA',
+          icon: 'memory',
+          desc: 'Métricas de uso de DeepSeek, costos y estado del pool de claves',
+        },
+        {
+          id: 'admins',
+          label: 'Administradores',
+          icon: 'shield_person',
+          desc: 'Gestión y creación de cuentas con acceso administrativo',
+        },
+      ],
+    },
+  ];
+
+  const allNavItems = navGroups.flatMap(g => g.items);
+  const currentNav = allNavItems.find(i => i.id === activeTab) || allNavItems[0];
+
   // ─── Dashboard ───
   return (
-    <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden flex flex-col">
-      {/* Top Navbar */}
-      <nav className="h-14 sm:h-16 border-b border-outline/10 bg-surface/80 backdrop-blur flex items-center justify-between px-3 sm:px-4 md:px-6 sticky top-0 z-50">
-        <div className="flex items-center gap-1.5 sm:gap-2">
-          <span className="material-symbols-outlined text-primary text-2xl sm:text-3xl">admin_panel_settings</span>
-          <span className="font-black text-base sm:text-lg md:text-xl tracking-tight text-on-surface">
-            DocIA <span className="hidden sm:inline">Admin</span>
-          </span>
-        </div>
-        <div className="flex items-center gap-2 sm:gap-3 md:gap-4">
-          <button
-            onClick={() => setShowProfile(true)}
-            className="flex items-center justify-center p-1.5 sm:p-2 rounded-full bg-slate-100 dark:bg-surface-variant hover:bg-slate-200 dark:hover:bg-surface-container-high text-slate-600 dark:text-on-surface-variant transition-all active:scale-90"
-            title="Mi Perfil"
-          >
-            <span className="material-symbols-outlined text-lg sm:text-xl">person</span>
-          </button>
+    <div className="bg-background min-h-screen text-on-background relative flex">
+      {/* Overlay móvil para el Sidebar */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-xs lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
 
-          <button
-            onClick={toggleTheme}
-            className="flex items-center justify-center p-1.5 sm:p-2 rounded-full bg-slate-100 dark:bg-surface-variant hover:bg-slate-200 dark:hover:bg-surface-container-high text-slate-600 dark:text-on-surface-variant transition-all active:scale-90"
-            title={theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
-          >
-            <span className="material-symbols-outlined text-lg sm:text-xl">
-              {theme === 'dark' ? 'light_mode' : 'dark_mode'}
-            </span>
-          </button>
+      {/* ── Sidebar Izquierdo ── */}
+      <aside
+        className={`fixed lg:sticky top-0 left-0 z-50 h-screen w-68 bg-white dark:bg-[#161210] border-r border-slate-200/80 dark:border-white/10 flex flex-col justify-between transition-transform duration-200 ease-out flex-shrink-0 ${
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'
+        }`}
+      >
+        {/* Marca / Cabecera del Sidebar */}
+        <div>
+          <div className="h-16 px-5 border-b border-slate-100 dark:border-white/5 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 rounded-xl bg-primary-container text-white flex items-center justify-center shadow-sm shadow-orange-500/20">
+                <span className="material-symbols-outlined text-xl">admin_panel_settings</span>
+              </div>
+              <div>
+                <span className="font-black text-base tracking-tight text-on-surface block leading-none">
+                  DocIA Admin
+                </span>
+                <span className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant block mt-1">
+                  Panel de Control
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="lg:hidden p-1.5 rounded-lg text-slate-400 hover:text-on-surface"
+            >
+              <span className="material-symbols-outlined text-xl">close</span>
+            </button>
+          </div>
 
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="text-xs sm:text-sm font-bold text-slate-500 hover:text-red-500 flex items-center gap-1 transition-colors"
-          >
-            <span className="material-symbols-outlined text-base sm:text-lg">logout</span>
-            <span className="hidden sm:inline">Cerrar Sesión</span>
-          </button>
+          {/* Navegación Agrupada */}
+          <nav className="p-3.5 space-y-5 overflow-y-auto max-h-[calc(100vh-190px)]">
+            {navGroups.map((group) => (
+              <div key={group.title}>
+                <p className="px-3 mb-1.5 text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-on-surface-variant/60">
+                  {group.title}
+                </p>
+                <div className="space-y-1">
+                  {group.items.map((item) => {
+                    const isActive = activeTab === item.id;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setSidebarOpen(false);
+                        }}
+                        className={`w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all ${
+                          isActive
+                            ? 'bg-primary-container text-white shadow-sm shadow-orange-500/20'
+                            : 'text-slate-600 dark:text-on-surface-variant hover:bg-slate-100 dark:hover:bg-white/5 hover:text-on-surface'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <span className="material-symbols-outlined text-[19px]">
+                            {item.icon}
+                          </span>
+                          <span className="truncate">{item.label}</span>
+                        </div>
+                        {item.badge !== null && item.badge !== undefined && (
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                              isActive
+                                ? 'bg-white/25 text-white'
+                                : 'bg-primary-container/15 text-primary-container'
+                            }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </nav>
         </div>
-      </nav>
+
+        {/* Pie del Sidebar: Usuario Admin + Controles */}
+        <div className="p-3.5 border-t border-slate-100 dark:border-white/5 bg-slate-50/50 dark:bg-black/20 space-y-2.5">
+          <div className="flex items-center justify-between gap-2 px-2 py-1.5">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-primary-container/15 text-primary-container font-black text-xs flex items-center justify-center flex-shrink-0">
+                {(loggedUser?.email || 'A').charAt(0).toUpperCase()}
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-black text-on-surface truncate">Administrador</p>
+                <p className="text-[10px] text-on-surface-variant truncate" title={loggedUser?.email}>
+                  {loggedUser?.email || 'admin@docia'}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={toggleTheme}
+              className="p-1.5 rounded-lg bg-white dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-slate-600 dark:text-on-surface-variant hover:text-on-surface transition-colors flex-shrink-0"
+              title={theme === 'dark' ? 'Modo Claro' : 'Modo Oscuro'}
+            >
+              <span className="material-symbols-outlined text-[17px]">
+                {theme === 'dark' ? 'light_mode' : 'dark_mode'}
+              </span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => setShowProfile(true)}
+              className="py-2 px-2.5 rounded-xl bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200/70 dark:border-white/10 text-xs font-bold text-on-surface flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[15px]">person</span>
+              Mi Clave
+            </button>
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="py-2 px-2.5 rounded-xl bg-red-50 dark:bg-red-950/25 hover:bg-red-100 dark:hover:bg-red-950/40 border border-red-200/60 dark:border-red-800/30 text-xs font-bold text-red-600 dark:text-red-400 flex items-center justify-center gap-1.5 transition-colors"
+            >
+              <span className="material-symbols-outlined text-[15px]">logout</span>
+              Salir
+            </button>
+          </div>
+        </div>
+      </aside>
 
       {/* Profile Modal */}
       {showProfile && (
@@ -859,78 +1024,46 @@ export default function AdminPanel() {
         </div>
       )}
 
-      {/* Main Content */}
-      <main className="flex-grow pt-6 sm:pt-8 pb-16 sm:pb-20 md:pb-24 px-3 sm:px-4 md:px-6 max-w-6xl mx-auto w-full">
-        {/* Tabs */}
-        <div className="flex gap-2 sm:gap-4 mb-4 sm:mb-6 border-b border-outline/20 overflow-x-auto">
-          <button
-            onClick={() => setActiveTab('pending')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'pending'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            Pendientes
-          </button>
-          <button
-            onClick={() => setActiveTab('history')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'history'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            Historial
-          </button>
-          <button
-            onClick={() => setActiveTab('admins')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'admins'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            Administradores
-          </button>
-          <button
-            onClick={() => setActiveTab('ai-status')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1 ${activeTab === 'ai-status'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            <span className="material-symbols-outlined text-sm sm:text-base">memory</span>
-            Consumo IA
-          </button>
-          <button
-            onClick={() => setActiveTab('coupons')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'coupons'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            <span className="material-symbols-outlined text-sm sm:text-base">confirmation_number</span>
-            Cupones
-          </button>
-          <button
-            onClick={() => setActiveTab('referrals')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'referrals'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            <span className="material-symbols-outlined text-sm sm:text-base">share</span>
-            Referidos
-          </button>
-          <button
-            onClick={() => setActiveTab('feedbacks')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'feedbacks'
-              ? 'border-primary text-primary'
-              : 'border-transparent text-on-surface-variant hover:text-on-surface'
-              }`}
-          >
-            <span className="material-symbols-outlined text-sm sm:text-base">forum</span>
-            Feedback
-          </button>
-        </div>
+      {/* Columna Principal Derecha */}
+      <div className="flex-1 flex flex-col min-w-0 min-h-screen">
+        {/* Cabecera Contextual Superior */}
+        <header className="h-16 border-b border-slate-200/80 dark:border-white/10 bg-white/80 dark:bg-[#161210]/80 backdrop-blur-md sticky top-0 z-30 px-4 sm:px-6 md:px-8 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 rounded-xl bg-slate-100 dark:bg-white/5 text-on-surface hover:bg-slate-200 dark:hover:bg-white/10 transition-colors flex-shrink-0"
+              title="Abrir menú"
+            >
+              <span className="material-symbols-outlined text-xl">menu</span>
+            </button>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary-container text-xl hidden sm:inline">
+                  {currentNav.icon}
+                </span>
+                <h1 className="text-base sm:text-lg font-black text-on-surface truncate">
+                  {currentNav.label}
+                </h1>
+              </div>
+              <p className="text-[11px] text-on-surface-variant truncate hidden sm:block">
+                {currentNav.desc}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => navigate('/')}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200/70 dark:border-white/10 text-xs font-bold text-on-surface-variant hover:text-on-surface transition-colors flex items-center gap-1.5"
+            >
+              <span className="material-symbols-outlined text-[15px]">open_in_new</span>
+              <span className="hidden sm:inline">Ir a DocIA</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Main Content */}
+        <main className="flex-1 py-6 sm:py-8 px-4 sm:px-6 md:px-8 max-w-6xl mx-auto w-full">
 
         {/* Tab: Administradores */}
         {activeTab === 'admins' ? (
@@ -2424,7 +2557,8 @@ export default function AdminPanel() {
           )}
         </div>
         ) : null}
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

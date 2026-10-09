@@ -78,6 +78,7 @@ def _get_user_dict(u: User, db: Session) -> dict:
         "extraTokens": extra_tokens,
         "monthlyTokens": monthly_tokens,
         "tokenBalance": tokens_data,
+        "planExpiresAt": tokens_data.get("subscription_ends_at") or tokens_data.get("next_reset_at"),
         "referralCode": u.referral_code,
         "referredById": u.referred_by_id,
         "referredByName": referred_by_name,
@@ -136,10 +137,61 @@ def update_user_me(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    current_user.first_name = data.firstName
-    current_user.last_name = data.lastName
-    current_user.phone = data.phone
-    current_user.country = data.country
+    import re
+
+    # Verificar contraseña actual por seguridad (si la cuenta ya tiene contraseña configurada)
+    if not current_user.password_setup_required and current_user.password_hash:
+        if not data.current_password:
+            raise HTTPException(
+                status_code=400,
+                detail="Por seguridad, debes ingresar tu contraseña actual para guardar cambios en tu perfil.",
+            )
+        if not verify_password(data.current_password, current_user.password_hash):
+            raise HTTPException(
+                status_code=400,
+                detail="La contraseña actual es incorrecta.",
+            )
+
+    first_name = (data.firstName or "").strip()
+    last_name = (data.lastName or "").strip()
+    phone = (data.phone or "").strip()
+    country = (data.country or "").strip().upper()
+
+    name_regex = re.compile(r"^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]{2,50}$")
+    if not name_regex.match(first_name) or not name_regex.match(last_name):
+        raise HTTPException(
+            status_code=400,
+            detail="El nombre y apellido solo deben contener letras (entre 2 y 50 caracteres).",
+        )
+
+    if phone:
+        phone_regex = re.compile(r"^\+?[0-9\s()-]{7,20}$")
+        if not phone_regex.match(phone):
+            raise HTTPException(
+                status_code=400,
+                detail="El formato del número de teléfono no es válido.",
+            )
+        existing_phone = (
+            db.query(User)
+            .filter(User.phone == phone, User.id != current_user.id)
+            .first()
+        )
+        if existing_phone:
+            raise HTTPException(
+                status_code=400,
+                detail="Este número de teléfono ya está asociado a otra cuenta.",
+            )
+
+    if not country or len(country) != 2:
+        raise HTTPException(
+            status_code=400,
+            detail="Por favor, selecciona un país válido.",
+        )
+
+    current_user.first_name = first_name
+    current_user.last_name = last_name
+    current_user.phone = phone or None
+    current_user.country = country
     db.commit()
     db.refresh(current_user)
     return {"status": "success", "user": _get_user_dict(current_user, db)}

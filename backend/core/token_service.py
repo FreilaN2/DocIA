@@ -95,8 +95,15 @@ def get_available_tokens(user_id: int, db: Session) -> dict:
         user = db.query(User).filter(User.id == user_id).first()
         if user and user.plan and user.plan.tokens_per_month:
             max_tokens = user.plan.tokens_per_month
+        if user and user.plan and user.plan.name == "pro" and not balance.next_reset_at:
+            from dateutil.relativedelta import relativedelta
+            base_date = balance.last_reset_at or getattr(user, "created_at", None) or datetime.utcnow()
+            balance.next_reset_at = base_date + relativedelta(months=1)
+            db.commit()
+            db.refresh(balance)
 
     max_tokens = max(max_tokens, total, 1)
+    expires_at = sub.ends_at if (sub and sub.ends_at) else balance.next_reset_at
 
     return {
         "monthly_tokens": balance.monthly_tokens,
@@ -104,6 +111,7 @@ def get_available_tokens(user_id: int, db: Session) -> dict:
         "total": total,
         "max_tokens": max_tokens,
         "next_reset_at": balance.next_reset_at.isoformat() if balance.next_reset_at else None,
+        "subscription_ends_at": expires_at.isoformat() if expires_at else None,
     }
 
 

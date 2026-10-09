@@ -46,8 +46,9 @@ class UserCreate(BaseModel):
 class UpdateProfileRequest(BaseModel):
     firstName: str
     lastName: str
-    phone: str
+    phone: Optional[str] = ""
     country: str
+    current_password: Optional[str] = None
 
 
 class UserLogin(BaseModel):
