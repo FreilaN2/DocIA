@@ -59,6 +59,7 @@ class UserLogin(BaseModel):
 class GoogleAuthRequest(BaseModel):
     token: str
     referral_code: Optional[str] = None
+    accepted_terms: Optional[bool] = False
 
 
 class ChangePasswordRequest(BaseModel):

@@ -303,6 +303,12 @@ def auth_google(data: GoogleAuthRequest, db: Session = Depends(get_db)):
 
         user = db.query(User).filter(User.email == email).first()
         if not user:
+            if not data.accepted_terms:
+                return {
+                    "status": "requires_terms",
+                    "email": email,
+                    "first_name": first_name,
+                }
             user = User(
                 first_name=first_name,
                 last_name=last_name,

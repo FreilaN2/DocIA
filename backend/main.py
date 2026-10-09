@@ -64,14 +64,9 @@ app.add_middleware(
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """Cabeceras de seguridad HTTP y forzado de HTTPS (redirección 301 + HSTS + CSP) en producción."""
+    """Cabeceras de seguridad HTTP y políticas HTTPS (HSTS + CSP) en producción."""
     host = (request.headers.get("host") or "").lower()
     is_local = host.startswith(("localhost", "127.0.0.1"))
-    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").lower()
-
-    if not is_local and forwarded_proto == "http":
-        https_url = str(request.url).replace("http://", "https://", 1)
-        return RedirectResponse(url=https_url, status_code=301)
 
     response = await call_next(request)
 

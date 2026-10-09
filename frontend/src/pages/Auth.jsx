@@ -148,6 +148,8 @@ export default function Auth() {
   const [error, setError] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [pendingGoogleToken, setPendingGoogleToken] = useState(null);
+  const [pendingGoogleEmail, setPendingGoogleEmail] = useState('');
 
   // Recuperación de contraseña
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
@@ -367,15 +369,27 @@ export default function Auth() {
     }
   };
 
-  const handleGoogleSuccess = async (credentialResponse) => {
+  const submitGoogleToken = async (googleCredential, forceAcceptedTerms = false) => {
     setLoading(true);
+    setError('');
     try {
       const refCodeToSend = formData.referralCode?.trim() || sessionStorage.getItem('docai_ref') || undefined;
       const response = await api.post('/auth/google', {
-        token: credentialResponse.credential,
+        token: googleCredential,
         referral_code: refCodeToSend,
+        accepted_terms: Boolean(forceAcceptedTerms || acceptedTerms),
       });
+
+      if (response.data.status === 'requires_terms') {
+        setPendingGoogleToken(googleCredential);
+        setPendingGoogleEmail(response.data.email || '');
+        setTermsModalOpen(true);
+        return;
+      }
+
       if (response.data.status === 'success') {
+        setPendingGoogleToken(null);
+        setPendingGoogleEmail('');
         localStorage.setItem('token', response.data.access_token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
         window.dispatchEvent(new Event('storage'));
@@ -397,6 +411,10 @@ export default function Auth() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleGoogleSuccess = async (credentialResponse) => {
+    await submitGoogleToken(credentialResponse.credential, false);
   };
 
   const selectedCountryName = formData.country
@@ -895,7 +913,19 @@ export default function Auth() {
       {termsModalOpen && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
-          onClick={() => setTermsModalOpen(false)}
+          onClick={() => {
+            if (pendingGoogleToken) {
+              setPendingGoogleToken(null);
+              setPendingGoogleEmail('');
+              toast(
+                isEn
+                  ? 'Registration cancelled. No account was created.'
+                  : 'Registro cancelado. No se creó ninguna cuenta.',
+                { icon: 'ℹ️' }
+              );
+            }
+            setTermsModalOpen(false);
+          }}
         >
           <div
             className="bg-white dark:bg-[#18181b] text-slate-800 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-700 shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
@@ -910,13 +940,41 @@ export default function Auth() {
               </h2>
               <button
                 type="button"
-                onClick={() => setTermsModalOpen(false)}
+                onClick={() => {
+                  if (pendingGoogleToken) {
+                    setPendingGoogleToken(null);
+                    setPendingGoogleEmail('');
+                    toast(
+                      isEn
+                        ? 'Registration cancelled. No account was created.'
+                        : 'Registro cancelado. No se creó ninguna cuenta.',
+                      { icon: 'ℹ️' }
+                    );
+                  }
+                  setTermsModalOpen(false);
+                }}
                 className="text-slate-500 hover:text-slate-800 dark:hover:text-white text-xl leading-none px-1"
                 aria-label="Cerrar"
               >
                 ×
               </button>
             </div>
+
+            {pendingGoogleToken && (
+              <div className="px-5 py-2.5 bg-blue-50 dark:bg-blue-950/40 border-b border-blue-200 dark:border-blue-800/60 text-xs sm:text-sm text-blue-900 dark:text-blue-200">
+                {isEn ? (
+                  <>
+                    You are creating a new account with Google{' '}
+                    {pendingGoogleEmail ? <strong>({pendingGoogleEmail})</strong> : null}. Read and accept the Terms and Conditions below to complete your registration, or cancel if you do not agree.
+                  </>
+                ) : (
+                  <>
+                    Estás creando una cuenta nueva con Google{' '}
+                    {pendingGoogleEmail ? <strong>({pendingGoogleEmail})</strong> : null}. Lee y acepta los Términos y Condiciones para concluir tu registro, o cancela si no estás de acuerdo.
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Contenido legal desplazable */}
             <div className="p-5 overflow-y-auto text-xs sm:text-sm leading-relaxed space-y-4 font-sans">
@@ -1103,25 +1161,55 @@ export default function Auth() {
               )}
             </div>
 
-            {/* Pie simple con botón de cerrar y aceptar */}
+            {/* Pie simple con botón de cerrar/cancelar y aceptar */}
             <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-black/20 rounded-b-lg">
               <button
                 type="button"
-                onClick={() => setTermsModalOpen(false)}
+                onClick={() => {
+                  if (pendingGoogleToken) {
+                    setPendingGoogleToken(null);
+                    setPendingGoogleEmail('');
+                    toast(
+                      isEn
+                        ? 'Registration cancelled. No account was created.'
+                        : 'Registro cancelado. No se creó ninguna cuenta.',
+                      { icon: 'ℹ️' }
+                    );
+                  }
+                  setTermsModalOpen(false);
+                }}
                 className="px-4 py-2 rounded border border-slate-300 dark:border-slate-600 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
               >
-                {isEn ? 'Close' : 'Cerrar'}
+                {pendingGoogleToken
+                  ? isEn
+                    ? 'Cancel Registration'
+                    : 'Cancelar Registro'
+                  : isEn
+                  ? 'Close'
+                  : 'Cerrar'}
               </button>
               <button
                 type="button"
-                onClick={() => {
+                onClick={async () => {
                   setAcceptedTerms(true);
                   setError('');
                   setTermsModalOpen(false);
+                  if (pendingGoogleToken) {
+                    const tokenToSubmit = pendingGoogleToken;
+                    setPendingGoogleToken(null);
+                    setPendingGoogleEmail('');
+                    await submitGoogleToken(tokenToSubmit, true);
+                  }
                 }}
                 className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold"
               >
-                {isEn ? 'I have read and accept' : 'He leído y acepto'}
+                {pendingGoogleToken
+                  ? isEn
+                    ? 'Accept & Complete Registration'
+                    : 'Aceptar y Concluir Registro'
+                  : isEn
+                  ? 'I have read and accept'
+                  : 'He leído y acepto'}
               </button>
             </div>
           </div>
