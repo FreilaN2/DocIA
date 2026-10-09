@@ -1,4 +1,13 @@
 User-agent: *
 Allow: /
+Allow: /editor/free
+Allow: /tools
+Allow: /pricing
+Allow: /login
+Allow: /register
+Disallow: /admin
+Disallow: /api/
+Disallow: /profile
+Disallow: /pago/
 
 Sitemap: https://docia.qzz.io/sitemap.xml
