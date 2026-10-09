@@ -37,27 +37,32 @@ if not os.getenv("SECRET_KEY"):
 def _get_secret_key() -> str:
     """
     Obtiene y valida la SECRET_KEY.
-    Usa una clave determinista de respaldo si no está definida en el entorno
-    para evitar invalidar las sesiones JWT al reiniciar el backend.
+    Si no está definida en las variables de entorno, genera automáticamente una clave
+    criptográficamente segura de 512 bits (secrets.token_urlsafe(64)) y la persiste
+    en disco (.jwt_secret.key) para mantener sesiones activas tras reinicios.
     """
+    import secrets
+
     secret = (os.getenv("SECRET_KEY") or "").strip()
-    
-    if not secret:
-        import hashlib
-        seed = f"docai-jwt-secret-{os.getenv('DB_NAME', 'docai_db')}-{os.getenv('DB_USER', 'root')}-{os.getenv('DB_PASS', 'docai')}"
-        secret = "docai-" + hashlib.sha256(seed.encode("utf-8")).hexdigest()
-        logger.warning(
-            "⚠️  SECRET_KEY no configurada en variables de entorno. "
-            "Usando clave determinista persistente para mantener sesiones tras reinicios."
-        )
-    
-    # FIX #7: Validar longitud mínima para seguridad
-    if len(secret) < 32:
-        logger.warning(
-            f"⚠️  SECRET_KEY tiene solo {len(secret)} caracteres. "
-            "Se recomienda al menos 32 caracteres para seguridad óptima."
-        )
-    
+
+    if not secret or len(secret) < 32:
+        key_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".jwt_secret.key")
+        if os.path.exists(key_file):
+            try:
+                with open(key_file, "r", encoding="utf-8") as f:
+                    saved_key = f.read().strip()
+                if len(saved_key) >= 64:
+                    return saved_key
+            except Exception:
+                pass
+
+        secret = secrets.token_urlsafe(64)
+        try:
+            with open(key_file, "w", encoding="utf-8") as f:
+                f.write(secret)
+        except Exception as e:
+            logger.warning(f"No se pudo persistir .jwt_secret.key: {e}")
+
     return secret
 
 

@@ -12,8 +12,8 @@ import subprocess
 import traceback
 import logging
 from dotenv import load_dotenv
-from fastapi import FastAPI, Depends, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, Depends, HTTPException, Request
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -50,8 +50,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "https://docia.qzz.io",
+        "https://www.docia.qzz.io",
         "https://docai.teleredtv.com",
-        "http://docai.teleredtv.com",
         "https://*.up.railway.app",
         "https://docai-production-6334.up.railway.app",
     ],
@@ -59,6 +60,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Cabeceras de seguridad HTTP y forzado de HTTPS (redirección 301 + HSTS + CSP) en producción."""
+    host = (request.headers.get("host") or "").lower()
+    is_local = host.startswith(("localhost", "127.0.0.1"))
+    forwarded_proto = (request.headers.get("x-forwarded-proto") or "").lower()
+
+    if not is_local and forwarded_proto == "http":
+        https_url = str(request.url).replace("http://", "https://", 1)
+        return RedirectResponse(url=https_url, status_code=301)
+
+    response = await call_next(request)
+
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+
+    if not is_local:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        response.headers["Content-Security-Policy"] = "upgrade-insecure-requests"
+
+    return response
 
 # ─── Routers ──────────────────────────────────────────────
 

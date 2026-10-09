@@ -16,9 +16,11 @@ __pycache__/
 build/
 *.egg-info/
 
-# Variables de entorno (¡contiene la API Key!)
+# Variables de entorno y claves secretas (¡no subir al repositorio!)
 .env
 .env.*
+*.key
+.jwt_secret.key
 
 # =====================
 # NODE — Frontend

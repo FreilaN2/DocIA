@@ -34,6 +34,7 @@ from core.schemas import DatosFinales, ParrafoCorregido
 from core.storage import storage, upload_storage
 from core.config import UPLOAD_DIR, PROCESSED_DIR, RE_SAFE_FILENAME, RE_SAFE_BASENAME
 from core.limiter import limiter
+from core.security_scanner import scan_docx_bytes
 from core.document_builder import (
     NORMAS_APA, FUENTES_APA, DEFAULT_APA_FONT, LETTER_PAGE,
     validar_fuente_apa, _normalizar_categoria,
@@ -104,8 +105,12 @@ async def upload_documento(
         raise HTTPException(status_code=400, detail="Solo se aceptan archivos .docx")
 
     contents   = await file.read()
-    upload_id  = str(uuid.uuid4())
     safe_name  = RE_SAFE_FILENAME.sub("_", file.filename) if file.filename else "upload.docx"
+
+    # Escaneo ligero anti-malware / macros / zip-bombs antes de guardar en disco
+    scan_docx_bytes(contents, safe_name)
+
+    upload_id  = str(uuid.uuid4())
     input_path = os.path.join(UPLOAD_DIR, f"{upload_id}_{safe_name}")
 
     with open(input_path, "wb") as f:
@@ -252,8 +257,13 @@ async def procesar_documento(
 ):
     background_tasks.add_task(limpiar_archivos_antiguos)
 
+    if not file.filename or not file.filename.lower().endswith(".docx"):
+        raise HTTPException(status_code=400, detail="Solo se aceptan archivos .docx")
+
     contents  = await file.read()
     safe_name = RE_SAFE_FILENAME.sub("_", file.filename) if file.filename else "upload.docx"
+
+    scan_docx_bytes(contents, safe_name)
 
     try:
         doc = Document(io.BytesIO(contents))
