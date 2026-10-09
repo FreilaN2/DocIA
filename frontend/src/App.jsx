@@ -38,6 +38,48 @@ function AppRoutes() {
 
   useEffect(() => {
     syncAuthState();
+
+    const seoByPath = {
+      '/': {
+        title: 'DocIA - Corrección de Formato APA 7 con Inteligencia Artificial',
+        desc: 'Automatiza el formateo de tus tesis y documentos de Word en Normas APA 7ma y 6ta Edición en segundos con Inteligencia Artificial.',
+      },
+      '/editor/free': {
+        title: 'Formateador Word a Normas APA 7 Gratis Online | DocIA',
+        desc: 'Sube tu documento Word (.docx) y aplícale el formato oficial Normas APA 7ma Edición gratis: márgenes, sangría, títulos y referencias.',
+      },
+      '/editor/pro': {
+        title: 'Editor APA Pro con Inteligencia Artificial | DocIA',
+        desc: 'Análisis estructural avanzado para tesis y documentos extensos en Normas APA 7ma y 6ta Edición.',
+      },
+      '/tools': {
+        title: 'Generador de Citas APA 7, Parafraseador y Detector de IA Gratis | DocIA',
+        desc: 'Herramientas académicas gratuitas: generador de referencias APA 7, parafraseador de tesis, detector de IA y contador de palabras.',
+      },
+      '/upgrade': {
+        title: 'Planes Pro y Tokens para Formatear Tesis en Normas APA | DocIA',
+        desc: 'Adquiere tokens o activa el Plan Pro de DocIA para formatear tesis completas en Word y PDF con Inteligencia Artificial.',
+      },
+      '/support': {
+        title: 'Centro de Soporte y Ayuda Académica | DocIA',
+        desc: '¿Necesitas ayuda con el formateo APA de tu documento o con tu cuenta? Contacta al equipo de soporte de DocIA.',
+      },
+      '/login': {
+        title: 'Iniciar Sesión | DocIA - Formato APA con IA',
+        desc: 'Inicia sesión en tu cuenta de DocIA para gestionar tus documentos y herramientas de formato APA.',
+      },
+      '/register': {
+        title: 'Crear Cuenta Gratis | DocIA - Formato APA con IA',
+        desc: 'Regístrate gratis en DocIA y formatea tus documentos universitarios y tesis en Normas APA 7 en segundos.',
+      },
+    };
+
+    const seo = seoByPath[location.pathname] || seoByPath['/'];
+    document.title = seo.title;
+    const metaDesc = document.querySelector('meta[name="description"]');
+    if (metaDesc && seo.desc) {
+      metaDesc.setAttribute('content', seo.desc);
+    }
   }, [location.pathname, syncAuthState]);
 
   useEffect(() => {

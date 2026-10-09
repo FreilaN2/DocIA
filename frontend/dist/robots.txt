@@ -2,10 +2,11 @@ User-agent: *
 Allow: /
 Allow: /editor/free
 Allow: /tools
-Allow: /pricing
+Allow: /upgrade
+Allow: /support
 Allow: /login
 Allow: /register
-Disallow: /admin
+Disallow: /panel
 Disallow: /api/
 Disallow: /profile
 Disallow: /pago/
