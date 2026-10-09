@@ -43,9 +43,10 @@ class User(Base):
     
     is_admin = Column(Boolean, default=False)              # Admin role flag
 
-    # ── Sistema de Referidos ──
+    # ── Sistema de Referidos y Feedback ──
     referral_code = Column(String(30), unique=True, index=True, nullable=True)
     referred_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    has_left_feedback = Column(Boolean, default=False, nullable=False)
 
     plan_id = Column(Integer, ForeignKey("plans.id"), default=1)
     created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
@@ -257,3 +258,21 @@ class CouponRedemption(Base):
 
     coupon = relationship("Coupon")
     user = relationship("User")
+
+# ─────────────────────────────────────────────
+# FEEDBACK
+# ─────────────────────────────────────────────
+class Feedback(Base):
+    __tablename__ = "feedbacks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    rating = Column(Integer, nullable=False) # 1: triste, 2: nulo, 3: feliz
+    q1_utility = Column(String(255), nullable=False)
+    q2_accuracy = Column(String(255), nullable=False)
+    q3_recommendation = Column(String(255), nullable=False)
+    comments = Column(String(1000), nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False)
+    created_at = Column(TIMESTAMP, server_default=text('CURRENT_TIMESTAMP'))
+
+    user = relationship("User")

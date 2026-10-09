@@ -77,7 +77,7 @@ export default function Footer() {
               {badges.map((badge) => (
                 <span
                   key={badge.icon}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100/80 dark:bg-surface-variant/50 text-slate-600 dark:text-on-surface-variant border border-slate-200/60 dark:border-outline-variant/30"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100/80 dark:bg-white/5 text-slate-600 dark:text-on-surface-variant border border-slate-200/60 dark:border-outline-variant/30"
                 >
                   <span className="material-symbols-outlined text-[14px] text-primary-container">
                     {badge.icon}

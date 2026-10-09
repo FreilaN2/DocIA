@@ -446,7 +446,7 @@ export default function Profile() {
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
               {/* Nombre */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.name')}
                 </p>
@@ -456,7 +456,7 @@ export default function Profile() {
               </div>
 
               {/* Email */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.email')}
                 </p>
@@ -466,7 +466,7 @@ export default function Profile() {
               </div>
 
               {/* País */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.country')}
                 </p>
@@ -476,7 +476,7 @@ export default function Profile() {
               </div>
 
               {/* Teléfono */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.phone')}
                 </p>
@@ -486,7 +486,7 @@ export default function Profile() {
               </div>
 
               {/* Plan */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.plan')}
                 </p>
@@ -503,7 +503,7 @@ export default function Profile() {
               </div>
 
               {/* Tokens Disponibles */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   Tokens DocIA
                 </p>
@@ -521,7 +521,7 @@ export default function Profile() {
               </div>
 
               {/* Última actividad */}
-              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-surface-container/30 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
+              <div className="p-3 sm:p-4 bg-surface-container/50 dark:bg-white/5 rounded-xl hover:bg-surface-container-high dark:hover:bg-surface-container/50 transition-colors">
                 <p className="text-[10px] sm:text-xs text-on-surface-variant uppercase font-black mb-1.5 sm:mb-2 tracking-wider">
                   {t('profile.last_activity')}
                 </p>
@@ -592,7 +592,7 @@ export default function Profile() {
                 )}
               </div>
             ) : (
-              <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-white/90 dark:bg-surface-container/50 border border-orange-200/80 dark:border-outline-variant/30 shadow-sm">
+              <div className="mb-6 p-4 sm:p-5 rounded-2xl bg-white/90 dark:bg-white/5 border border-orange-200/80 dark:border-outline-variant/30 shadow-sm">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                   <div className="flex items-start sm:items-center gap-3">
                     <div className="w-11 h-11 rounded-2xl bg-primary-container/10 text-primary-container flex items-center justify-center flex-shrink-0 shadow-sm">
@@ -640,7 +640,7 @@ export default function Profile() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 mb-6">
               {/* Código y Enlace */}
               <div className="lg:col-span-7 flex flex-col gap-3.5">
-                <div className="p-4 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                <div className="p-4 bg-white/80 dark:bg-white/5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
                   <div>
                     <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-on-surface-variant block mb-1">
                       Tu Código Personal
@@ -658,7 +658,7 @@ export default function Profile() {
                   </button>
                 </div>
 
-                <div className="p-4 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 shadow-sm">
+                <div className="p-4 bg-white/80 dark:bg-white/5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 shadow-sm">
                   <span className="text-[10px] sm:text-xs font-black uppercase tracking-wider text-on-surface-variant block mb-1.5">
                     Tu Enlace de Invitación Directo
                   </span>
@@ -682,7 +682,7 @@ export default function Profile() {
 
               {/* Estadísticas */}
               <div className="lg:col-span-5 grid grid-cols-3 gap-2.5">
-                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                <div className="p-3.5 bg-white/80 dark:bg-white/5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
                   <span className="material-symbols-outlined text-blue-500 text-xl sm:text-2xl mb-1">group</span>
                   <span className="text-xl sm:text-2xl font-black text-on-surface">
                     {referralData?.total_referrals ?? 0}
@@ -692,7 +692,7 @@ export default function Profile() {
                   </span>
                 </div>
 
-                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                <div className="p-3.5 bg-white/80 dark:bg-white/5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
                   <span className="material-symbols-outlined text-green-500 text-xl sm:text-2xl mb-1">verified</span>
                   <span className="text-xl sm:text-2xl font-black text-green-600 dark:text-green-400">
                     {referralData?.completed_referrals ?? 0}
@@ -702,7 +702,7 @@ export default function Profile() {
                   </span>
                 </div>
 
-                <div className="p-3.5 bg-white/80 dark:bg-surface-container/40 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
+                <div className="p-3.5 bg-white/80 dark:bg-white/5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 text-center flex flex-col justify-center items-center shadow-sm">
                   <span className="material-symbols-outlined text-primary-container text-xl sm:text-2xl mb-1">generating_tokens</span>
                   <span className="text-xl sm:text-2xl font-black text-primary-container">
                     {referralData?.total_tokens_earned ?? 0}

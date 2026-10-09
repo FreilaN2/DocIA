@@ -9,6 +9,7 @@ import PlanBadge from '../components/PlanBadge';
 import ParagraphCard from '../components/ParagraphCard';
 import DocumentPreview from '../components/DocumentPreview';
 import Footer from '../components/Footer';
+import FeedbackModal from '../components/FeedbackModal';
 import { 
   AdBanner, 
   AdBanner160x600, 
@@ -56,10 +57,12 @@ export default function Editor() {
   const [tiempoRestante, setTiempoRestante] = useState(null);
   const [modeloUsado, setModeloUsado] = useState('');
   const [errorProceso, setErrorProceso] = useState(null);
+  const [showFeedback, setShowFeedback] = useState(false);
   const esRef = useRef(null);
 
   const token = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
+  const parsedUser = storedUser ? JSON.parse(storedUser) : null;
   const isPremium = useIsPremium();
   const isPro = plan === 'pro' || isPremium;
   const shouldShowAds = !isPro && !isPremium;
@@ -152,6 +155,30 @@ export default function Editor() {
       }
     }
   }, [isPro, token, storedUser, navigate]);
+
+  // Persist current editing session
+  useEffect(() => {
+    if (result) {
+      sessionStorage.setItem('docai_current_result', JSON.stringify(result));
+      if (uploadId) sessionStorage.setItem('docai_current_upload_id', uploadId);
+      if (file && file.name) sessionStorage.setItem('docai_current_filename', file.name);
+    }
+  }, [result, uploadId, file]);
+
+  // Restore current editing session on mount
+  useEffect(() => {
+    const pendingResult = sessionStorage.getItem('docai_pending_result');
+    if (!pendingResult) {
+      const currentResult = sessionStorage.getItem('docai_current_result');
+      if (currentResult && !result && !file) {
+        setResult(JSON.parse(currentResult));
+        const sId = sessionStorage.getItem('docai_current_upload_id');
+        if (sId) setUploadId(sId);
+        const sName = sessionStorage.getItem('docai_current_filename');
+        if (sName) setFile({ name: sName });
+      }
+    }
+  }, []);
 
   useEffect(() => {
     if (shouldShowAds) {
@@ -397,6 +424,16 @@ export default function Editor() {
     }));
   };
 
+  const handleClear = () => {
+    setResult(null);
+    setFile(null);
+    setUploadId(null);
+    setFileMetrics(null);
+    sessionStorage.removeItem('docai_current_result');
+    sessionStorage.removeItem('docai_current_upload_id');
+    sessionStorage.removeItem('docai_current_filename');
+  };
+
   const handleConfirmarYDescargar = async () => {
     const currentToken = localStorage.getItem('token');
 
@@ -441,6 +478,19 @@ export default function Editor() {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
       
+      setTimeout(async () => {
+        if (token) {
+          try {
+            const resp = await api.get('/user/feedback/status');
+            if (!resp.data.has_left_feedback) {
+              setShowFeedback(true);
+            }
+          } catch (e) {
+            console.error("Error checking feedback status:", e);
+          }
+        }
+      }, 1500);
+      
     } catch (error) {
       alert(t('editor.generate_error'));
     } finally {
@@ -449,7 +499,7 @@ export default function Editor() {
   };
 
   const formatMiles = (n) => Number(n ?? 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-  const TOKEN_MAX_PRO = 500;
+  const TOKEN_MAX_PRO = 10000;
   const totalUserTokens = tokenBalance ? (tokenBalance.monthly_tokens + tokenBalance.extra_tokens) : 0;
   const maxBarTokens = tokenBalance?.max_tokens
     ? Math.max(tokenBalance.max_tokens, totalUserTokens, 1)
@@ -992,20 +1042,31 @@ export default function Editor() {
                 </div>
 
                 {/* Botón descargar */}
-                <button 
-                  onClick={handleConfirmarYDescargar} 
-                  disabled={loading}
-                  className="w-full py-4 sm:py-5 md:py-6 bg-primary-container text-white rounded-2xl sm:rounded-3xl font-black text-base sm:text-lg shadow-xl shadow-orange-200 hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 sm:gap-3"
-                >
-                  {loading ? (
-                    <Spinner />
-                  ) : (
-                    <>
-                      <span className="material-symbols-outlined text-lg sm:text-xl">download</span> 
-                      {t('editor.confirm')}
-                    </>
-                  )}
-                </button>
+                <div className="flex flex-col gap-4 sm:gap-5 mt-2">
+                  <button 
+                    onClick={handleConfirmarYDescargar} 
+                    disabled={loading}
+                    className="w-full py-4 sm:py-5 md:py-6 bg-primary-container text-white rounded-2xl sm:rounded-3xl font-black text-base sm:text-lg shadow-lg dark:shadow-none hover:opacity-90 transition-all active:scale-95 flex items-center justify-center gap-2 sm:gap-3"
+                  >
+                    {loading ? (
+                      <Spinner />
+                    ) : (
+                      <>
+                        <span className="material-symbols-outlined text-lg sm:text-xl">download</span> 
+                        {t('editor.confirm')}
+                      </>
+                    )}
+                  </button>
+                  
+                  <button
+                    onClick={handleClear}
+                    disabled={loading}
+                    className="w-full py-3 sm:py-4 bg-slate-100 dark:bg-black/20 text-slate-500 dark:text-slate-400 rounded-2xl font-black text-sm sm:text-base hover:bg-slate-200 dark:hover:bg-white/5 transition-all active:scale-95 flex items-center justify-center gap-2 relative z-10"
+                  >
+                    <span className="material-symbols-outlined text-lg">delete</span>
+                    {t('editor.new_document')}
+                  </button>
+                </div>
               </div>
             </motion.section>
           )}
@@ -1030,6 +1091,13 @@ export default function Editor() {
       )}
 
       <Footer />
+
+      <FeedbackModal 
+        isOpen={showFeedback} 
+        onClose={() => setShowFeedback(false)} 
+        user={parsedUser} 
+        onFeedbackSubmitted={() => setShowFeedback(false)}
+      />
     </div>
   );
 }

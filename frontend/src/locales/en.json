@@ -69,6 +69,7 @@
     "correction_title": "Final Review",
     "correction_subtitle": "Verify labels before downloading",
     "confirm": "Confirm & Download",
+    "new_document": "Process New Document",
     "rebuilding": "Generating document...",
     "watermark_notice": "Note: Free version includes a watermark.",
     "tokens_available": "Available Tokens",
@@ -212,7 +213,7 @@
     "month": "Month",
     "months": "Months",
     "per_month": "/mo",
-    "feat_tokens": "500 tokens/mo",
+    "feat_tokens": "10,000 tokens/mo",
     "feat_ai": "Unlimited AI analysis",
     "feat_watermark": "No watermark",
     "btn_subscribe": "Subscribe",
@@ -286,5 +287,24 @@
   "app": {
     "payment_approved": "Your payment has been approved! Your benefits have been activated.",
     "payment_rejected": "Your payment has been rejected. Please verify the details and try again."
+  },
+  "feedback": {
+    "title": "Your Opinion Helps Us",
+    "subtitle": "You have successfully used the tool. How would you rate your overall experience?",
+    "q1_title": "1. Did you find the tool useful?",
+    "q2_title": "2. Did the result meet your expectations?",
+    "q3_title": "3. Would you recommend the tool to others?",
+    "ans_yes": "Yes, very much.",
+    "ans_q1_mid": "Yes, but it needs improvement.",
+    "ans_q2_mid": "Yes, but some things didn't improve.",
+    "ans_q3_mid": "Yes, but I would like it to improve.",
+    "ans_no": "Absolutely not.",
+    "more_info": "Tell us more (Optional)",
+    "placeholder": "What did you like? What can we improve?",
+    "btn_back": "Back",
+    "btn_submit": "Submit Feedback",
+    "error_fill": "Please answer all main questions.",
+    "success": "Thank you, we really appreciate your feedback!",
+    "error_submit": "An error occurred while submitting your feedback."
   }
 }

@@ -13,7 +13,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests as google_requests
 
 from core.database import get_db
-from core.models import User, PagoMovilTransaction
+from core.models import User, PagoMovilTransaction, Feedback
 from core.auth import get_password_hash, verify_password, create_access_token
 from core.token_service import get_available_tokens
 from core.dependencies import get_current_user
@@ -25,6 +25,7 @@ from core.schemas import (
     SetPasswordRequest,
     UpdateProfileRequest,
     ApplyReferralRequest,
+    FeedbackCreate,
 )
 from core.limiter import limiter
 from core.referral_service import (
@@ -58,6 +59,8 @@ def _get_user_dict(u: User, db: Session) -> dict:
     referred_by_user = u.referred_by if getattr(u, 'referred_by', None) else None
     referred_by_name = f"{referred_by_user.first_name} {referred_by_user.last_name}".strip() if referred_by_user else None
 
+    has_feedback = db.query(Feedback).filter(Feedback.user_id == u.id).first() is not None
+
     return {
         "id": u.id,
         "email": u.email,
@@ -80,6 +83,7 @@ def _get_user_dict(u: User, db: Session) -> dict:
         "referredByName": referred_by_name,
         "lastPaymentId": latest_pago.id if latest_pago else None,
         "lastPaymentStatus": latest_pago.status if latest_pago else None,
+        "has_left_feedback": has_feedback,
     }
 
 
@@ -321,3 +325,37 @@ def change_password(
     current_user.password_setup_required = False
     db.commit()
     return {"status": "success", "message": "Contraseña actualizada correctamente", "user": _get_user_dict(current_user, db)}
+
+@router.get("/user/feedback/status")
+def check_feedback_status(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(Feedback).filter(Feedback.user_id == current_user.id).first()
+    return {"has_left_feedback": existing is not None}
+
+@router.post("/user/feedback")
+def submit_feedback(
+    data: FeedbackCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    existing = db.query(Feedback).filter(Feedback.user_id == current_user.id).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Ya has enviado tu feedback anteriormente.")
+        
+    new_feedback = Feedback(
+        user_id=current_user.id,
+        rating=data.rating,
+        q1_utility=data.q1_utility,
+        q2_accuracy=data.q2_accuracy,
+        q3_recommendation=data.q3_recommendation,
+        comments=data.comments
+    )
+    db.add(new_feedback)
+    
+    current_user.has_left_feedback = True
+    db.commit()
+    
+    return {"status": "success", "message": "Feedback guardado exitosamente."}
+

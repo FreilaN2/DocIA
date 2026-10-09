@@ -54,6 +54,11 @@ export default function AdminPanel() {
   const [referralActionLoading, setReferralActionLoading] = useState(null);
   const [deleteReferralModal, setDeleteReferralModal] = useState({ isOpen: false, referral: null });
 
+  // Feedbacks State
+  const [feedbacks, setFeedbacks] = useState([]);
+  const [feedbacksLoading, setFeedbacksLoading] = useState(false);
+  const [feedbacksFilter, setFeedbacksFilter] = useState('unread'); // 'all', 'unread', 'read'
+
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
   const [email, setEmail] = useState('');
@@ -70,7 +75,7 @@ export default function AdminPanel() {
 
   // Theme State for Dashboard
   const [theme, setTheme] = useState(localStorage.getItem('theme') || 'light');
-  
+
   // Profile State
   const [showProfile, setShowProfile] = useState(false);
   const [currentPassword, setCurrentPassword] = useState('');
@@ -157,7 +162,7 @@ export default function AdminPanel() {
               }
             });
         }
-        
+
         // Refrescar consumo IA si estamos en la pestaña
         if (activeTab === 'ai-status') {
           adminApi.get('/admin/ai-status')
@@ -182,10 +187,18 @@ export default function AdminPanel() {
             })
             .catch(err => console.error('Error auto-refrescando referidos', err));
         }
+
+        // Refrescar feedbacks si estamos en la pestaña
+        if (activeTab === 'feedbacks') {
+          const statusParam = feedbacksFilter === 'all' ? '' : feedbacksFilter;
+          adminApi.get(`/admin/feedbacks?status=${statusParam}`)
+            .then(resp => setFeedbacks(resp.data))
+            .catch(err => console.error('Error auto-refrescando feedbacks', err));
+        }
       }, 5000); // 5 segundos para que se sienta muy fluido en tiempo real
     }
     return () => clearInterval(interval);
-  }, [isAdmin, activeTab]);
+  }, [isAdmin, activeTab, feedbacksFilter]);
 
   const handleAdminLogin = async (e) => {
     e.preventDefault();
@@ -235,9 +248,11 @@ export default function AdminPanel() {
         fetchCoupons();
       } else if (activeTab === 'referrals') {
         fetchReferrals();
+      } else if (activeTab === 'feedbacks') {
+        fetchFeedbacks();
       }
     }
-  }, [historyFilter, isAdmin, activeTab]);
+  }, [historyFilter, isAdmin, activeTab, feedbacksFilter]);
 
   const fetchCoupons = async () => {
     setCouponsLoading(true);
@@ -376,6 +391,40 @@ export default function AdminPanel() {
     }
   };
 
+  const fetchFeedbacks = async () => {
+    setFeedbacksLoading(true);
+    try {
+      const statusParam = feedbacksFilter === 'all' ? '' : feedbacksFilter;
+      const resp = await adminApi.get(`/admin/feedbacks?status=${statusParam}`);
+      setFeedbacks(resp.data);
+    } catch (err) {
+      console.error('Error cargando feedbacks', err);
+      toast.error('Error cargando feedbacks');
+    } finally {
+      setFeedbacksLoading(false);
+    }
+  };
+
+  const markFeedbackAsRead = async (id) => {
+    try {
+      await adminApi.post(`/admin/feedbacks/${id}/read`);
+      fetchFeedbacks();
+      toast.success('Feedback marcado como leído');
+    } catch (err) {
+      toast.error('Error al marcar como leído');
+    }
+  };
+
+  const markAllFeedbacksAsRead = async () => {
+    try {
+      await adminApi.post('/admin/feedbacks/read-all');
+      fetchFeedbacks();
+      toast.success('Todos los feedbacks marcados como leídos');
+    } catch (err) {
+      toast.error('Error al marcar todos como leídos');
+    }
+  };
+
   const handleGrantReward = async (referral) => {
     setReferralActionLoading(referral.id);
     try {
@@ -495,13 +544,13 @@ export default function AdminPanel() {
     }
   };
 
-  const filteredPagos = (Array.isArray(pagos) ? pagos : []).filter(p => 
-    (p.user_email || '').toLowerCase().includes(pendingSearch.toLowerCase()) || 
+  const filteredPagos = (Array.isArray(pagos) ? pagos : []).filter(p =>
+    (p.user_email || '').toLowerCase().includes(pendingSearch.toLowerCase()) ||
     (p.reference_number || '').toLowerCase().includes(pendingSearch.toLowerCase())
   );
 
-  const filteredHistory = (Array.isArray(historialPagos) ? historialPagos : []).filter(p => 
-    (p.user_email || '').toLowerCase().includes(historySearch.toLowerCase()) || 
+  const filteredHistory = (Array.isArray(historialPagos) ? historialPagos : []).filter(p =>
+    (p.user_email || '').toLowerCase().includes(historySearch.toLowerCase()) ||
     (p.reference_number || '').toLowerCase().includes(historySearch.toLowerCase())
   );
 
@@ -586,8 +635,8 @@ export default function AdminPanel() {
           </form>
 
           <div className="mt-4 sm:mt-6 text-center">
-            <button 
-              onClick={() => navigate('/')} 
+            <button
+              onClick={() => navigate('/')}
               className="text-xs sm:text-sm font-bold text-gray-400 hover:text-white transition-colors"
             >
               &larr; Volver a DocAI
@@ -617,7 +666,7 @@ export default function AdminPanel() {
           >
             <span className="material-symbols-outlined text-lg sm:text-xl">person</span>
           </button>
-          
+
           <button
             onClick={toggleTheme}
             className="flex items-center justify-center p-1.5 sm:p-2 rounded-full bg-slate-100 dark:bg-surface-variant hover:bg-slate-200 dark:hover:bg-surface-container-high text-slate-600 dark:text-on-surface-variant transition-all active:scale-90"
@@ -641,7 +690,7 @@ export default function AdminPanel() {
       {/* Profile Modal */}
       {showProfile && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowProfile(false)}>
-          <div 
+          <div
             className="bg-white dark:bg-surface w-full max-w-sm sm:max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col p-4 sm:p-6 mx-2"
             onClick={(e) => e.stopPropagation()}
           >
@@ -654,7 +703,7 @@ export default function AdminPanel() {
                 <span className="material-symbols-outlined">close</span>
               </button>
             </div>
-            
+
             <div className="space-y-4 sm:space-y-6">
               <div>
                 <p className="text-xs sm:text-sm text-on-surface-variant mb-1 font-bold">Correo Electrónico</p>
@@ -666,12 +715,12 @@ export default function AdminPanel() {
 
               <form onSubmit={handleChangePassword} className="space-y-3 sm:space-y-4 pt-3 sm:pt-4 border-t border-outline/10">
                 <h4 className="font-bold text-on-surface text-sm sm:text-base">Cambiar Contraseña</h4>
-                
+
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">Contraseña Actual</label>
                   <div className="relative">
-                    <input 
-                      type={showCurrentPassword ? "text" : "password"} 
+                    <input
+                      type={showCurrentPassword ? "text" : "password"}
                       value={currentPassword}
                       onChange={(e) => setCurrentPassword(e.target.value)}
                       className="w-full pl-3 sm:pl-4 pr-10 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-slate-800 dark:text-white text-sm"
@@ -683,12 +732,12 @@ export default function AdminPanel() {
                     </button>
                   </div>
                 </div>
-                
+
                 <div>
                   <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">Nueva Contraseña</label>
                   <div className="relative">
-                    <input 
-                      type={showNewPassword ? "text" : "password"} 
+                    <input
+                      type={showNewPassword ? "text" : "password"}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       className="w-full pl-3 sm:pl-4 pr-10 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-slate-800 dark:text-white text-sm"
@@ -701,7 +750,7 @@ export default function AdminPanel() {
                   </div>
                 </div>
 
-                <button 
+                <button
                   type="submit"
                   disabled={passwordLoading}
                   className="w-full py-2.5 sm:py-3 bg-primary hover:bg-primary-container text-white rounded-xl font-bold text-sm transition-all active:scale-[0.98] flex justify-center items-center gap-2 mt-2"
@@ -724,7 +773,7 @@ export default function AdminPanel() {
       {/* Logout Confirmation Modal */}
       {showLogoutConfirm && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setShowLogoutConfirm(false)}>
-          <div 
+          <div
             className="bg-white dark:bg-surface w-full max-w-xs sm:max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col p-4 sm:p-6 text-center mx-2"
             onClick={(e) => e.stopPropagation()}
           >
@@ -736,13 +785,13 @@ export default function AdminPanel() {
               Estás a punto de salir del Panel de Administración.
             </p>
             <div className="flex gap-2 sm:gap-3">
-              <button 
+              <button
                 onClick={() => setShowLogoutConfirm(false)}
                 className="flex-1 py-2.5 sm:py-3 bg-surface-variant text-on-surface-variant hover:bg-outline/20 rounded-xl font-bold text-sm transition-all"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={() => {
                   localStorage.removeItem('admin_token');
                   localStorage.removeItem('admin_user');
@@ -763,15 +812,14 @@ export default function AdminPanel() {
       {/* Action Confirmation Modal */}
       {actionConfirm && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={() => setActionConfirm(null)}>
-          <div 
+          <div
             className="bg-white dark:bg-surface w-full max-w-xs sm:max-w-sm rounded-2xl shadow-2xl overflow-hidden flex flex-col p-4 sm:p-6 text-center border-2 border-slate-200 dark:border-outline-variant/30 mx-2"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 ${
-              actionConfirm.action === 'approve' 
-                ? 'bg-green-100 dark:bg-green-900/30 text-green-500' 
-                : 'bg-red-100 dark:bg-red-900/30 text-red-500'
-            }`}>
+            <div className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full flex items-center justify-center mx-auto mb-3 sm:mb-4 ${actionConfirm.action === 'approve'
+              ? 'bg-green-100 dark:bg-green-900/30 text-green-500'
+              : 'bg-red-100 dark:bg-red-900/30 text-red-500'
+              }`}>
               <span className="material-symbols-outlined text-2xl sm:text-3xl">
                 {actionConfirm.action === 'approve' ? 'check_circle' : 'cancel'}
               </span>
@@ -780,26 +828,25 @@ export default function AdminPanel() {
               {actionConfirm.action === 'approve' ? '¿Aprobar Pago?' : '¿Rechazar Pago?'}
             </h3>
             <p className="text-on-surface-variant mb-4 sm:mb-6 text-xs sm:text-sm">
-              {actionConfirm.action === 'approve' 
-                ? `Estás a punto de aprobar el pago del usuario ${actionConfirm.user_email}. Sus beneficios se activarán inmediatamente.` 
+              {actionConfirm.action === 'approve'
+                ? `Estás a punto de aprobar el pago del usuario ${actionConfirm.user_email}. Sus beneficios se activarán inmediatamente.`
                 : `Estás a punto de rechazar el pago del usuario ${actionConfirm.user_email}. No se activarán beneficios.`}
             </p>
             <div className="flex gap-2 sm:gap-3">
-              <button 
+              <button
                 onClick={() => setActionConfirm(null)}
                 disabled={actionLoading === actionConfirm.id}
                 className="flex-1 py-2.5 sm:py-3 bg-surface-variant text-on-surface-variant hover:bg-outline/20 rounded-xl font-bold text-sm transition-all disabled:opacity-50"
               >
                 Cancelar
               </button>
-              <button 
+              <button
                 onClick={() => handleAction(actionConfirm.id, actionConfirm.action)}
                 disabled={actionLoading === actionConfirm.id}
-                className={`flex-1 py-2.5 sm:py-3 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-md ${
-                  actionConfirm.action === 'approve' 
-                    ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20' 
-                    : 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
-                }`}
+                className={`flex-1 py-2.5 sm:py-3 text-white rounded-xl font-bold text-sm transition-all disabled:opacity-50 flex justify-center items-center gap-2 shadow-md ${actionConfirm.action === 'approve'
+                  ? 'bg-green-500 hover:bg-green-600 shadow-green-500/20'
+                  : 'bg-red-500 hover:bg-red-600 shadow-red-500/20'
+                  }`}
               >
                 {actionLoading === actionConfirm.id ? (
                   <Spinner className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -818,66 +865,70 @@ export default function AdminPanel() {
         <div className="flex gap-2 sm:gap-4 mb-4 sm:mb-6 border-b border-outline/20 overflow-x-auto">
           <button
             onClick={() => setActiveTab('pending')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-              activeTab === 'pending' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'pending'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             Pendientes
           </button>
           <button
             onClick={() => setActiveTab('history')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-              activeTab === 'history' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'history'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             Historial
           </button>
           <button
             onClick={() => setActiveTab('admins')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${
-              activeTab === 'admins' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 ${activeTab === 'admins'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             Administradores
           </button>
           <button
             onClick={() => setActiveTab('ai-status')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1 ${
-              activeTab === 'ai-status' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1 ${activeTab === 'ai-status'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             <span className="material-symbols-outlined text-sm sm:text-base">memory</span>
             Consumo IA
           </button>
           <button
             onClick={() => setActiveTab('coupons')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'coupons' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'coupons'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             <span className="material-symbols-outlined text-sm sm:text-base">confirmation_number</span>
             Cupones
           </button>
           <button
             onClick={() => setActiveTab('referrals')}
-            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${
-              activeTab === 'referrals' 
-                ? 'border-primary text-primary' 
-                : 'border-transparent text-on-surface-variant hover:text-on-surface'
-            }`}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'referrals'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
           >
             <span className="material-symbols-outlined text-sm sm:text-base">share</span>
             Referidos
+          </button>
+          <button
+            onClick={() => setActiveTab('feedbacks')}
+            className={`pb-2 sm:pb-3 font-bold text-sm sm:text-base md:text-lg px-1.5 sm:px-2 border-b-2 transition-colors whitespace-nowrap flex-shrink-0 flex items-center gap-1.5 ${activeTab === 'feedbacks'
+              ? 'border-primary text-primary'
+              : 'border-transparent text-on-surface-variant hover:text-on-surface'
+              }`}
+          >
+            <span className="material-symbols-outlined text-sm sm:text-base">forum</span>
+            Feedback
           </button>
         </div>
 
@@ -921,9 +972,9 @@ export default function AdminPanel() {
                     placeholder="••••••••"
                     required
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowNewAdminPassword(!showNewAdminPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAdminPassword(!showNewAdminPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-gray-400 hover:text-slate-600 dark:hover:text-white"
                   >
                     <span className="material-symbols-outlined text-lg">{showNewAdminPassword ? 'visibility_off' : 'visibility'}</span>
@@ -944,9 +995,9 @@ export default function AdminPanel() {
                     placeholder="••••••••"
                     required
                   />
-                  <button 
-                    type="button" 
-                    onClick={() => setShowNewAdminConfirmPassword(!showNewAdminConfirmPassword)} 
+                  <button
+                    type="button"
+                    onClick={() => setShowNewAdminConfirmPassword(!showNewAdminConfirmPassword)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-gray-400 hover:text-slate-600 dark:hover:text-white"
                   >
                     <span className="material-symbols-outlined text-lg">{showNewAdminConfirmPassword ? 'visibility_off' : 'visibility'}</span>
@@ -981,7 +1032,7 @@ export default function AdminPanel() {
                   Estadísticas históricas de llamadas a la API, tokens descontados a usuarios Pro y costos reales.
                 </p>
               </div>
-              <button 
+              <button
                 onClick={() => {
                   fetchAiStatus();
                   fetchAiConsumption(aiSearch);
@@ -1067,22 +1118,20 @@ export default function AdminPanel() {
             <div className="flex gap-2 border-b border-outline/20 pb-2">
               <button
                 onClick={() => setAiViewMode('history')}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
-                  aiViewMode === 'history'
-                    ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${aiViewMode === 'history'
+                  ? 'bg-primary text-white shadow-md shadow-primary/20'
+                  : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
+                  }`}
               >
                 <span className="material-symbols-outlined text-base">history_edu</span>
                 Historial de Documentos
               </button>
               <button
                 onClick={() => setAiViewMode('keys')}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${
-                  aiViewMode === 'keys'
-                    ? 'bg-primary text-white shadow-md shadow-primary/20'
-                    : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
-                }`}
+                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-2 ${aiViewMode === 'keys'
+                  ? 'bg-primary text-white shadow-md shadow-primary/20'
+                  : 'bg-surface-variant/50 text-on-surface-variant hover:text-on-surface'
+                  }`}
               >
                 <span className="material-symbols-outlined text-base">key</span>
                 Estado de Claves API & Rotación ({aiStatus?.total_keys || 0})
@@ -1101,7 +1150,7 @@ export default function AdminPanel() {
                       Tokens reales consumidos por DeepSeek vs Tokens cobrados a DocAI.
                     </p>
                   </div>
-                  <form 
+                  <form
                     onSubmit={(e) => {
                       e.preventDefault();
                       fetchAiConsumption(aiSearch);
@@ -1109,9 +1158,9 @@ export default function AdminPanel() {
                     className="relative w-full sm:w-72"
                   >
                     <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                    <input 
-                      type="text" 
-                      placeholder="Buscar por usuario o documento..." 
+                    <input
+                      type="text"
+                      placeholder="Buscar por usuario o documento..."
                       value={aiSearch}
                       onChange={(e) => setAiSearch(e.target.value)}
                       className="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary text-slate-800 dark:text-white placeholder-slate-400 transition-all"
@@ -1257,12 +1306,11 @@ export default function AdminPanel() {
                                 <span className="font-black text-on-surface">{k.consumo_pct_ligero}%</span>
                               </div>
                               <div className="w-full bg-slate-100 dark:bg-surface-variant rounded-full h-2.5 overflow-hidden shadow-inner">
-                                <div 
-                                  className={`h-full rounded-full transition-all duration-1000 ${
-                                    k.consumo_pct_ligero > 90 ? 'bg-red-500' : 
-                                    k.consumo_pct_ligero > 70 ? 'bg-orange-500' : 
-                                    'bg-primary'
-                                  }`} 
+                                <div
+                                  className={`h-full rounded-full transition-all duration-1000 ${k.consumo_pct_ligero > 90 ? 'bg-red-500' :
+                                    k.consumo_pct_ligero > 70 ? 'bg-orange-500' :
+                                      'bg-primary'
+                                    }`}
                                   style={{ width: `${Math.min(k.consumo_pct_ligero, 100)}%` }}
                                 ></div>
                               </div>
@@ -1486,11 +1534,10 @@ export default function AdminPanel() {
                               <button
                                 onClick={() => handleToggleCoupon(c.id)}
                                 disabled={couponActionLoading === c.id}
-                                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all ${
-                                  c.is_active
-                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200'
-                                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200'
-                                }`}
+                                className={`px-2.5 py-1 rounded-full text-xs font-bold transition-all ${c.is_active
+                                  ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200'
+                                  : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200'
+                                  }`}
                               >
                                 {couponActionLoading === c.id ? (
                                   <Spinner className="h-3 w-3 inline" />
@@ -2076,9 +2123,9 @@ export default function AdminPanel() {
               </h2>
               <div className="relative w-full sm:w-56 md:w-64">
                 <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                <input 
-                  type="text" 
-                  placeholder="Buscar ref o correo..." 
+                <input
+                  type="text"
+                  placeholder="Buscar ref o correo..."
                   value={pendingSearch}
                   onChange={(e) => setPendingSearch(e.target.value)}
                   className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 transition-all"
@@ -2158,7 +2205,7 @@ export default function AdminPanel() {
               </div>
             )}
           </div>
-        ) : (
+        ) : activeTab === 'history' ? (
           /* Tab: Historial */
           <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 shadow-sm">
             <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 sm:mb-6 gap-3 sm:gap-4">
@@ -2169,42 +2216,39 @@ export default function AdminPanel() {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full lg:w-auto">
                 <div className="relative w-full sm:w-56 md:w-64">
                   <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                  <input 
-                    type="text" 
-                    placeholder="Buscar ref o correo..." 
+                  <input
+                    type="text"
+                    placeholder="Buscar ref o correo..."
                     value={historySearch}
                     onChange={(e) => setHistorySearch(e.target.value)}
                     className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 transition-all"
                   />
                 </div>
                 <div className="flex gap-1.5 sm:gap-2 flex-wrap">
-                  <button 
+                  <button
                     onClick={() => setHistoryFilter('all')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
-                      historyFilter === 'all' 
-                        ? 'bg-primary/10 text-primary dark:bg-primary/20' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                    }`}
+                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'all'
+                      ? 'bg-primary/10 text-primary dark:bg-primary/20'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
+                      }`}
                   >
                     Todas
                   </button>
-                  <button 
+                  <button
                     onClick={() => setHistoryFilter('approved')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
-                      historyFilter === 'approved' 
-                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                    }`}
+                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'approved'
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
+                      }`}
                   >
                     Aprobados
                   </button>
-                  <button 
+                  <button
                     onClick={() => setHistoryFilter('rejected')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${
-                      historyFilter === 'rejected' 
-                        ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' 
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                    }`}
+                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'rejected'
+                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
+                      }`}
                   >
                     Rechazados
                   </button>
@@ -2279,7 +2323,107 @@ export default function AdminPanel() {
               </div>
             )}
           </div>
-        )}
+        ) : activeTab === 'feedbacks' ? (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-primary">forum</span>
+                Bandeja de Feedback
+              </h2>
+              <p className="text-xs sm:text-sm text-on-surface-variant font-medium mt-0.5">
+                Revisa las opiniones y calificaciones de los usuarios sobre la herramienta.
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={markAllFeedbacksAsRead}
+                className="px-3 sm:px-4 py-2 sm:py-2.5 bg-surface-variant text-on-surface hover:bg-outline/20 font-bold text-xs sm:text-sm rounded-xl transition-all shadow-sm active:scale-95 whitespace-nowrap"
+              >
+                Marcar todos como leídos
+              </button>
+              <div className="relative">
+                <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">filter_list</span>
+                <select
+                  value={feedbacksFilter}
+                  onChange={(e) => setFeedbacksFilter(e.target.value)}
+                  className="w-full sm:w-auto pl-10 pr-8 py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm font-bold appearance-none cursor-pointer text-slate-700 dark:text-white transition-colors"
+                >
+                  <option value="all">Todos los feedbacks</option>
+                  <option value="unread">No leídos</option>
+                  <option value="read">Leídos</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* Feedbacks Grid */}
+          {feedbacksLoading ? (
+            <div className="p-12 text-center bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 shadow-sm">
+              <Spinner className="h-8 w-8 mx-auto text-primary mb-3" />
+              <p className="text-xs text-on-surface-variant font-bold">Cargando feedbacks...</p>
+            </div>
+          ) : feedbacks.length === 0 ? (
+            <div className="p-8 sm:p-12 text-center bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 shadow-sm">
+              <span className="material-symbols-outlined text-4xl sm:text-5xl text-slate-300 dark:text-slate-600 mb-2">inbox</span>
+              <p className="text-sm sm:text-base font-bold text-on-surface-variant">No hay feedbacks en esta bandeja</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {feedbacks.map((f) => (
+                <div key={f.id} className={`p-4 sm:p-5 rounded-2xl sm:rounded-3xl border-2 shadow-sm transition-colors relative ${f.is_read ? 'bg-white dark:bg-surface border-slate-200 dark:border-outline-variant/30' : 'bg-primary/5 dark:bg-primary/10 border-primary/30 dark:border-primary/20'}`}>
+                  {!f.is_read && (
+                    <span className="absolute top-4 right-4 h-3 w-3 bg-red-500 rounded-full shadow-sm animate-pulse"></span>
+                  )}
+                  <div className="flex justify-between items-start mb-3">
+                    <div>
+                      <p className="font-black text-on-surface text-base sm:text-lg">{f.user_name}</p>
+                      <p className="text-xs text-on-surface-variant font-medium">{f.user_email}</p>
+                      <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{new Date(f.created_at).toLocaleString()}</p>
+                    </div>
+                    <div className="text-2xl sm:text-3xl">
+                      {f.rating === 3 ? '😁' : f.rating === 2 ? '😐' : '😞'}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 mb-4">
+                    <div className="bg-slate-50 dark:bg-black/20 p-2.5 rounded-xl border border-outline/10">
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">¿Útil?</p>
+                      <p className="text-xs font-medium text-on-surface">{f.q1_utility}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-black/20 p-2.5 rounded-xl border border-outline/10">
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">¿Resultado esperado?</p>
+                      <p className="text-xs font-medium text-on-surface">{f.q2_accuracy}</p>
+                    </div>
+                    <div className="bg-slate-50 dark:bg-black/20 p-2.5 rounded-xl border border-outline/10">
+                      <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-wider mb-1">¿Lo recomendaría?</p>
+                      <p className="text-xs font-medium text-on-surface">{f.q3_recommendation}</p>
+                    </div>
+                  </div>
+
+                  {f.comments && (
+                    <div className="mb-4">
+                      <p className="text-xs font-bold text-on-surface-variant mb-1">Comentarios adicionales:</p>
+                      <p className="text-sm text-on-surface italic bg-slate-50 dark:bg-black/20 p-3 rounded-xl border border-outline/10">"{f.comments}"</p>
+                    </div>
+                  )}
+
+                  {!f.is_read && (
+                    <button
+                      onClick={() => markFeedbackAsRead(f.id)}
+                      className="w-full py-2 bg-white dark:bg-surface-variant text-slate-700 dark:text-white border border-slate-200 dark:border-white/10 rounded-xl font-bold text-xs hover:bg-slate-50 dark:hover:bg-outline/20 transition-colors flex justify-center items-center gap-1.5"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">check_circle</span>
+                      Marcar como leído
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        ) : null}
       </main>
     </div>
   );

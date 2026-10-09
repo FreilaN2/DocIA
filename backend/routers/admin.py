@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption, Referral
+from core.models import User, Plan, Subscription, TokenPack, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
 from core.token_service import assign_monthly_tokens, add_extra_tokens
@@ -514,3 +514,56 @@ async def eliminar_referido_admin(
     db.delete(ref)
     db.commit()
     return {"status": "success", "message": "Vinculación de referido eliminada correctamente."}
+
+
+@router.get("/feedbacks")
+def get_feedbacks(
+    status: Optional[str] = Query(None),
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    query = db.query(Feedback, User).join(User, Feedback.user_id == User.id)
+    if status == 'unread':
+        query = query.filter(Feedback.is_read == False)
+    elif status == 'read':
+        query = query.filter(Feedback.is_read == True)
+    
+    results = query.order_by(Feedback.created_at.desc()).all()
+    out = []
+    for f, u in results:
+        out.append({
+            "id": f.id,
+            "user_id": f.user_id,
+            "user_name": f"{u.first_name} {u.last_name}",
+            "user_email": u.email,
+            "rating": f.rating,
+            "q1_utility": f.q1_utility,
+            "q2_accuracy": f.q2_accuracy,
+            "q3_recommendation": f.q3_recommendation,
+            "comments": f.comments,
+            "is_read": f.is_read,
+            "created_at": f.created_at
+        })
+    return out
+
+@router.post("/feedbacks/{feedback_id}/read")
+def mark_feedback_read(
+    feedback_id: int,
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    feedback = db.query(Feedback).filter(Feedback.id == feedback_id).first()
+    if not feedback:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    feedback.is_read = True
+    db.commit()
+    return {"status": "success"}
+
+@router.post("/feedbacks/read-all")
+def mark_all_feedbacks_read(
+    db: Session = Depends(get_db),
+    admin_user: User = Depends(get_admin_user)
+):
+    db.query(Feedback).filter(Feedback.is_read == False).update({"is_read": True})
+    db.commit()
+    return {"status": "success"}

@@ -64,6 +64,14 @@ class ChangePasswordRequest(BaseModel):
     current_password: str
     new_password: str
 
+class FeedbackCreate(BaseModel):
+    rating: int
+    q1_utility: str
+    q2_accuracy: str
+    q3_recommendation: str
+    comments: Optional[str] = None
+
+
 
 class SetPasswordRequest(BaseModel):
     new_password: str

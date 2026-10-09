@@ -69,6 +69,7 @@
     "correction_title": "Revisión Final",
     "correction_subtitle": "Verifica las etiquetas antes de descargar",
     "confirm": "Confirmar y Descargar",
+    "new_document": "Procesar Nuevo Documento",
     "rebuilding": "Generando documento...",
     "watermark_notice": "Nota: La versión gratuita incluye una marca de agua.",
     "tokens_available": "Tokens Disponibles",
@@ -213,7 +214,7 @@
     "month": "Mes",
     "months": "Meses",
     "per_month": "/mes",
-    "feat_tokens": "500 tokens/mes",
+    "feat_tokens": "10.000 tokens/mes",
     "feat_ai": "Análisis IA ilimitado",
     "feat_watermark": "Sin marca de agua",
     "btn_subscribe": "Suscribirme",
@@ -287,5 +288,24 @@
   "app": {
     "payment_approved": "¡Tu pago ha sido aprobado! Tus beneficios han sido activados.",
     "payment_rejected": "Tu pago ha sido rechazado. Verifica los datos y vuelve a intentarlo."
+  },
+  "feedback": {
+    "title": "Tu Opinión nos Ayuda",
+    "subtitle": "Has utilizado la herramienta con éxito. ¿Cómo calificarías tu experiencia general?",
+    "q1_title": "1. ¿Te pareció útil la herramienta?",
+    "q2_title": "2. ¿El resultado se acercó a lo que necesitabas?",
+    "q3_title": "3. ¿Recomendarías la herramienta a más personas?",
+    "ans_yes": "Sí, mucho.",
+    "ans_q1_mid": "Sí, pero necesita mejorar.",
+    "ans_q2_mid": "Sí, pero hay cosas que no mejoró.",
+    "ans_q3_mid": "Sí, pero me gustaría que mejorara.",
+    "ans_no": "Absolutamente no.",
+    "more_info": "Cuéntanos más (Opcional)",
+    "placeholder": "¿Qué te gustó? ¿Qué podemos mejorar?",
+    "btn_back": "Volver",
+    "btn_submit": "Enviar Feedback",
+    "error_fill": "Por favor, responde todas las preguntas principales.",
+    "success": "¡Gracias, apreciamos mucho tu opinión!",
+    "error_submit": "Ocurrió un error al enviar tu feedback."
   }
 }
