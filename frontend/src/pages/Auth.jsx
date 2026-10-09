@@ -122,7 +122,8 @@ const Pupil = React.memo(({ size = 12, maxDistance = 5, pupilColor = "black", fo
 
 // ─── COMPONENTE PRINCIPAL ───
 export default function Auth() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = (i18n.language || 'es').startsWith('en');
   const navigate = useNavigate();
   const location = useLocation();
   const [isLogin, setIsLogin] = useState(location.pathname !== '/register');
@@ -145,6 +146,8 @@ export default function Auth() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsModalOpen, setTermsModalOpen] = useState(false);
 
   // Recuperación de contraseña
   const [forgotModalOpen, setForgotModalOpen] = useState(false);
@@ -307,6 +310,15 @@ export default function Auth() {
       // Validar requisitos de la contraseña
       if (!hasStrongPassword(formData.password)) {
         setError(t('auth.error_password_weak'));
+        setLoading(false);
+        return;
+      }
+      if (!acceptedTerms) {
+        setError(
+          isEn
+            ? 'You must read and accept the Terms and Conditions to register.'
+            : 'Debes leer y aceptar los Términos y Condiciones para registrarte.'
+        );
         setLoading(false);
         return;
       }
@@ -795,14 +807,53 @@ export default function Auth() {
                     </div>
                   </motion.div>
                 )}
+                {!isLogin && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="pt-2 overflow-hidden"
+                  >
+                    <div className="flex items-start gap-2.5">
+                      <input
+                        id="accept-terms-checkbox"
+                        type="checkbox"
+                        checked={acceptedTerms}
+                        onChange={(e) => {
+                          setAcceptedTerms(e.target.checked);
+                          if (e.target.checked) setError('');
+                        }}
+                        className="mt-0.5 w-4 h-4 accent-blue-600 rounded cursor-pointer flex-shrink-0"
+                      />
+                      <label
+                        htmlFor="accept-terms-checkbox"
+                        className="text-xs sm:text-sm text-on-surface-variant leading-snug cursor-pointer select-none"
+                      >
+                        {isEn ? 'I have read and accept the ' : 'He leído y acepto los '}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            setTermsModalOpen(true);
+                          }}
+                          className="text-blue-600 dark:text-blue-400 font-bold hover:underline focus:outline-none"
+                        >
+                          {isEn ? 'Terms and Conditions' : 'Términos y Condiciones'}
+                        </button>
+                        {isEn ? ' of the platform.' : ' de la plataforma.'}
+                      </label>
+                    </div>
+                  </motion.div>
+                )}
               </AnimatePresence>
 
               {/* Botón submit */}
               <button
-                disabled={loading}
+                disabled={loading || (!isLogin && !acceptedTerms)}
                 type="submit"
                 className={`w-full h-[44px] sm:h-[48px] md:h-[52px] lg:h-[56px] rounded-xl font-black text-sm sm:text-base shadow-lg transition-all duration-200 mt-4 sm:mt-6 flex items-center justify-center gap-2 sm:gap-3 active:scale-[0.98] hover:-translate-y-0.5
-                  ${loading ? 'bg-surface-variant text-on-surface-variant/50 cursor-not-allowed shadow-none' : 'bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container shadow-primary/20'}`}
+                  ${loading || (!isLogin && !acceptedTerms) ? 'bg-surface-variant text-on-surface-variant/50 cursor-not-allowed shadow-none' : 'bg-primary text-on-primary hover:bg-primary-container hover:text-on-primary-container shadow-primary/20'}`}
               >
                 {loading ? (
                   <Spinner />
@@ -839,6 +890,243 @@ export default function Auth() {
           </div>
         </div>
       </div>
+
+      {/* Subventana simple: Términos y Condiciones */}
+      {termsModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+          onClick={() => setTermsModalOpen(false)}
+        >
+          <div
+            className="bg-white dark:bg-[#18181b] text-slate-800 dark:text-slate-200 rounded-lg border border-slate-300 dark:border-slate-700 shadow-xl w-full max-w-2xl max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera simple */}
+            <div className="flex items-center justify-between px-5 py-3.5 border-b border-slate-200 dark:border-slate-700">
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
+                {isEn
+                  ? 'Terms and Conditions of Use — DocIA'
+                  : 'Términos y Condiciones de Uso — DocIA'}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setTermsModalOpen(false)}
+                className="text-slate-500 hover:text-slate-800 dark:hover:text-white text-xl leading-none px-1"
+                aria-label="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Contenido legal desplazable */}
+            <div className="p-5 overflow-y-auto text-xs sm:text-sm leading-relaxed space-y-4 font-sans">
+              {isEn ? (
+                <>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Last updated: October 2026
+                  </p>
+                  <p>
+                    By creating an account or using the <strong>DocIA</strong> platform (<strong>docia.qzz.io</strong>), you (the &ldquo;User&rdquo;) expressly agree to be bound by these Terms and Conditions of Use. If you do not agree with any of these terms, you must refrain from registering or using the system.
+                  </p>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      1. Legal Framework and Acceptance
+                    </h3>
+                    <p>
+                      This agreement constitutes a valid adhesion contract under the laws of the <strong>Bolivarian Republic of Venezuela</strong>, including the Civil Code, the Commercial Code, and the Law on Data Messages and Electronic Signatures (<em>Ley sobre Mensajes de Datos y Firmas Electrónicas</em>). By checking the acceptance box, the User declares to be of legal age or to act with due legal authorization.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      2. Nature of the System and Academic Disclaimer
+                    </h3>
+                    <p>
+                      DocIA is an automated technological assistant designed to format academic and professional documents according to APA 6th and 7th Edition guidelines and provide writing utilities. <strong>DocIA does NOT replace human proofreading, methodological review, or academic advising.</strong> The User is the sole and exclusive party responsible for reviewing, verifying, and validating the final downloaded document (<code>.docx</code> or <code>.pdf</code>) prior to submitting it to any university, institution, or publisher. DocIA and its creators are completely exempt from any liability regarding academic grades, thesis rejections, committee observations, or institutional template discrepancies.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      3. Third-Party Artificial Intelligence Processing (DeepSeek API)
+                    </h3>
+                    <p>
+                      To perform intelligent paragraph classification and structural analysis in Pro features, the system transmits text fragments over encrypted connections (HTTPS/TLS) to third-party large language model providers, specifically the <strong>DeepSeek API</strong>, in addition to proprietary rule engines. Text is processed strictly on a transient basis to structure the manuscript. However, the User agrees not to upload classified state secrets, unlawful material, or sensitive third-party confidential data without authorization.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      4. Intellectual Property and Temporary File Storage
+                    </h3>
+                    <p>
+                      The User retains 100% of the copyright and intellectual property rights over the documents uploaded to the platform, in accordance with the Copyright Law (<em>Ley sobre el Derecho de Autor</em>) of the Bolivarian Republic of Venezuela. Uploaded and generated files are stored only temporarily to enable processing, previewing, and downloading, and may be automatically purged from our servers at any time without notice. DocIA is not a cloud backup service; the User must always keep original copies of their files.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      5. Tokens, Subscriptions, Payments (Pago Móvil / BCV) and No-Refund Policy
+                    </h3>
+                    <p>
+                      Premium features operate via monthly subscriptions and/or DocIA Token packs. Payments made in Venezuelan Bolívares (VES) via <strong>Pago Móvil</strong> are calculated at the official exchange rate published by the <strong>Central Bank of Venezuela (BCV)</strong> valid on the date of the transaction and require reference verification. Submitting forged, altered, or duplicate payment references will result in immediate and permanent account termination. Because document analysis immediately consumes computational resources and third-party API credits, <strong>used tokens and activated plans are non-refundable</strong>, except in cases of verifiable technical failure exclusively attributable to DocIA.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      6. Computer Security and Prohibited Conduct
+                    </h3>
+                    <p>
+                      It is strictly prohibited to upload files containing malware, macros (VBA), trojans, ZIP bombs, XXE/DDE exploits, or executable binaries disguised as documents, as well as to attempt reverse engineering, unauthorized access, scraping, or denial-of-service attacks against the platform. Any violation will be automatically blocked and may be reported to competent authorities pursuant to the <strong>Special Law Against Computer Crimes (<em>Ley Especial contra los Delitos Informáticos</em>, Official Gazette No. 37.313)</strong> of the Bolivarian Republic of Venezuela.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      7. Third-Party Advertising in Free Mode
+                    </h3>
+                    <p>
+                      The Free Plan is supported by third-party advertising networks. DocIA does not control, endorse, or assume liability for external products, services, or websites displayed in third-party advertisements. Interacting with external ads is done at the User&apos;s own risk.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      8. Personal Data Protection and Privacy
+                    </h3>
+                    <p>
+                      In compliance with Articles 28 and 60 of the Constitution of the Bolivarian Republic of Venezuela, personal data collected during registration (full name, email address, country, and phone number) is used strictly for account authentication, password recovery, security notifications, and payment verification. DocIA does not sell or lease personal data to third parties.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      9. Service Availability, Modifications, and Governing Law
+                    </h3>
+                    <p>
+                      DocIA is provided on an &ldquo;as is&rdquo; and &ldquo;as available&rdquo; basis. We reserve the right to update these terms, adjust token pricing, or suspend accounts that breach these rules. Any dispute arising from the use of this system shall be governed by the laws of the <strong>Bolivarian Republic of Venezuela</strong> and submitted to its competent courts.
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Última actualización: Octubre 2026
+                  </p>
+                  <p>
+                    Al crear una cuenta o utilizar el sistema <strong>DocIA</strong> (<strong>docia.qzz.io</strong>), usted (en adelante, el &ldquo;Usuario&rdquo;) acepta de manera expresa e incondicional los presentes Términos y Condiciones de Uso. Si no está de acuerdo con alguno de estos puntos, deberá abstenerse de registrarse o utilizar la plataforma.
+                  </p>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      1. Marco Legal y Aceptación del Contrato de Adhesión
+                    </h3>
+                    <p>
+                      El presente documento constituye un contrato de adhesión válido y vinculante conforme al ordenamiento jurídico de la <strong>República Bolivariana de Venezuela</strong>, incluyendo el Código Civil, el Código de Comercio y el <em>Decreto con Fuerza de Ley sobre Mensajes de Datos y Firmas Electrónicas</em>. Al marcar la casilla de aceptación en el registro, el Usuario declara ser mayor de edad o contar con autorización legal suficiente para obligarse.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      2. Naturaleza del Sistema y Exoneración de Responsabilidad Académica
+                    </h3>
+                    <p>
+                      DocIA es una herramienta tecnológica automatizada de asistencia para la estructuración y formateo de documentos según los lineamientos de las Normas APA (6ª y 7ª edición) y utilidades de redacción. <strong>DocIA NO sustituye la revisión humana, metodológica, ortográfica ni el criterio de tutores o jurados académicos.</strong> El Usuario es el <strong>único y exclusivo responsable</strong> de revisar, verificar y validar la totalidad del documento final descargado (<code>.docx</code> o <code>.pdf</code>) antes de su entrega oficial ante cualquier universidad, colegio o institución. DocIA, sus propietarios y desarrolladores quedan totalmente exonerados de responsabilidad directa o indirecta por calificaciones académicas, observaciones de jurados, rechazos de entregas o diferencias con manuales internos de cada universidad.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      3. Procesamiento mediante Inteligencia Artificial de Terceros (DeepSeek API)
+                    </h3>
+                    <p>
+                      Para ejecutar el análisis estructural y clasificación inteligente de párrafos en las funciones Pro, el sistema transmite fragmentos del texto mediante conexiones cifradas (HTTPS/TLS) a servicios de procesamiento de lenguaje natural e Inteligencia Artificial de terceros, específicamente a través de la API de <strong>DeepSeek</strong>, en conjunto con motores algorítmicos propios. El procesamiento se realiza de forma estrictamente automatizada y transitoria con el único fin de estructurar el documento del Usuario. No obstante, el Usuario se compromete a no subir información clasificada, secretos industriales o datos sensibles de terceros sin contar con la debida autorización.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      4. Propiedad Intelectual y Custodia Temporal de Documentos
+                    </h3>
+                    <p>
+                      El Usuario conserva en todo momento el cien por ciento (100%) de los derechos morales y patrimoniales de autor sobre los textos y documentos que procesa en la plataforma, conforme a la <em>Ley sobre el Derecho de Autor</em> vigente en la República Bolivariana de Venezuela. Los archivos subidos y generados se almacenan únicamente de manera temporal para permitir su procesamiento, vista previa y descarga, pudiendo ser eliminados automáticamente de los servidores en cualquier momento sin previo aviso. DocIA no es un servicio de almacenamiento o respaldo en la nube; el Usuario debe conservar siempre el respaldo original de sus documentos en su propio dispositivo.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      5. Sistema de Tokens, Planes, Pagos (Pago Móvil / BCV) y Política de No Reembolso
+                    </h3>
+                    <p>
+                      Las herramientas avanzadas operan bajo un esquema de suscripción mensual y/o paquetes de Tokens DocIA. Los pagos realizados en moneda nacional (Bolívares - VES) mediante <strong>Pago Móvil</strong> se calculan de acuerdo con la tasa oficial vigente del <strong>Banco Central de Venezuela (BCV)</strong> al momento del reporte y están sujetos a la validación del número de referencia bancaria. El envío de referencias falsas, alteradas o duplicadas ocasionará el bloqueo inmediato y definitivo de la cuenta sin derecho a reclamo. Dado que el análisis documental consume recursos de servidor y créditos de IA de forma inmediata e irreversible, <strong>los tokens consumidos y los planes activados no son reembolsables</strong>, salvo fallas técnicas comprobables imputables exclusivamente al sistema.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      6. Seguridad Informática y Prohibición de Uso Ilícito (Ley Especial contra los Delitos Informáticos)
+                    </h3>
+                    <p>
+                      Queda terminantemente prohibido subir archivos que contengan virus, ejecutables ocultos, macros maliciosas (VBA), bombas de descompresión (Zip Bombs), exploits XML/DDE, así como intentar vulnerar la seguridad del servidor, realizar ingeniería inversa, extracción automatizada (scraping) o ataques de denegación de servicio. Todo archivo es inspeccionado por filtros de seguridad y cualquier intento de sabotaje o acceso indebido dará lugar a la cancelación de la cuenta y a las acciones legales pertinentes de conformidad con la <strong>Ley Especial contra los Delitos Informáticos</strong> de la República Bolivariana de Venezuela (Gaceta Oficial N° 37.313).
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      7. Publicidad de Terceros en el Plan Gratuito
+                    </h3>
+                    <p>
+                      El acceso mediante el Plan Gratuito se sustenta a través de anuncios publicitarios suministrados por redes externas de terceros. DocIA no controla, avala ni se hace responsable por el contenido, productos, servicios o sitios web externos a los que redirijan dichos anuncios; cualquier interacción con la publicidad corre por cuenta y riesgo exclusivo del Usuario.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      8. Protección de Datos Personales y Privacidad
+                    </h3>
+                    <p>
+                      En estricto apego a los artículos 28 y 60 de la <strong>Constitución de la República Bolivariana de Venezuela</strong>, los datos personales suministrados en el registro (nombre, apellido, correo electrónico, país y número telefónico) son tratados de forma confidencial y utilizados exclusivamente para la autenticación del Usuario, recuperación de contraseñas, seguridad de la cuenta y verificación de pagos. DocIA no comercializa, alquila ni cede datos personales a terceros.
+                    </p>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-slate-900 dark:text-white mb-1">
+                      9. Disponibilidad del Servicio, Modificaciones y Jurisdicción Aplicable
+                    </h3>
+                    <p>
+                      El sistema se ofrece &ldquo;tal cual&rdquo; y según disponibilidad técnica. DocIA se reserva el derecho de actualizar estos Términos y Condiciones, ajustar costos de tokens o suspender cuentas que infrinjan estas disposiciones. Para todos los efectos legales derivados del uso de la plataforma, las partes eligen como domicilio especial y excluyente las leyes de la <strong>República Bolivariana de Venezuela</strong> y la jurisdicción de sus tribunales competentes.
+                    </p>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Pie simple con botón de cerrar y aceptar */}
+            <div className="flex items-center justify-end gap-2 px-5 py-3 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-black/20 rounded-b-lg">
+              <button
+                type="button"
+                onClick={() => setTermsModalOpen(false)}
+                className="px-4 py-2 rounded border border-slate-300 dark:border-slate-600 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5"
+              >
+                {isEn ? 'Close' : 'Cerrar'}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAcceptedTerms(true);
+                  setError('');
+                  setTermsModalOpen(false);
+                }}
+                className="px-4 py-2 rounded bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-bold"
+              >
+                {isEn ? 'I have read and accept' : 'He leído y acepto'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal: Recuperar Contraseña */}
       <AnimatePresence>
