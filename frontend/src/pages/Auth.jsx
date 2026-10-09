@@ -343,8 +343,9 @@ export default function Auth() {
         if (response.data.user.passwordSetupRequired) {
           navigate('/profile', { replace: true });
         } else {
-          const userPlan = response.data.user.plan === 'pro' ? 'pro' : 'free';
-          navigate(`/editor/${userPlan}`);
+          const u = response.data.user;
+          const userPlan = (u.plan === 'pro' || u.isAdmin || Number(u.tokens || u.totalTokens || 0) > 0) ? 'pro' : 'free';
+          navigate(`/editor/${userPlan}`, { replace: true });
         }
       }
     } catch (err) {
@@ -374,8 +375,9 @@ export default function Auth() {
           navigate('/profile', { replace: true });
         } else {
           toast.success(t('auth.welcome'), { style: { background: '#1a1512', color: '#fff', borderRadius: '15px' }, icon: '🚀' });
-          const userPlan = response.data.user.plan === 'pro' ? 'pro' : 'free';
-          navigate(`/editor/${userPlan}`);
+          const u = response.data.user;
+          const userPlan = (u.plan === 'pro' || u.isAdmin || Number(u.tokens || u.totalTokens || 0) > 0) ? 'pro' : 'free';
+          navigate(`/editor/${userPlan}`, { replace: true });
         }
       }
     } catch (err) {

@@ -1,34 +1,35 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import api from '../api';
 
 // ─── Estilos APA por categoría ────────────────────────────────────────────────
 const APA_STYLES = {
-  TITULO_N1:     { label: 'Título N1',      color: '#2563eb', bold: true,  italic: false, defaultAlign: 'center', indent: '0',      paddingLeft: '0' },
-  TITULO_N2:     { label: 'Título N2',      color: '#4f46e5', bold: true,  italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0' },
-  TITULO_N3:     { label: 'Título N3',      color: '#7c3aed', bold: true,  italic: false, defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
-  TITULO_N4:     { label: 'Título N4',      color: '#9333ea', bold: true,  italic: true,  defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
-  TITULO_N5:     { label: 'Título N5',      color: '#a855f7', bold: false, italic: true,  defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
-  PARRAFO_NORMAL:{ label: 'Párrafo',        color: '#64748b', bold: false, italic: false, defaultAlign: 'justify', indent: '0.5in',  paddingLeft: '0' },
-  REFERENCIA:    { label: 'Referencia',     color: '#059669', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0.5in' },
-  CITA_LARGA:    { label: 'Cita larga',     color: '#d97706', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0.5in' },
-  PORTADA_IMAGEN:{ label: 'Imagen portada', color: '#0ea5e9', bold: false, italic: false, defaultAlign: 'center', indent: '0',      paddingLeft: '0' },
-  PORTADA_ESPACIO:{ label: 'Espacio',       color: '#cbd5e1', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0' },
-  PORTADA_BLOQUE: { label: 'Portada (Protegida)', color: '#334155', bold: true, italic: false, defaultAlign: 'center', indent: '0', paddingLeft: '0' },
+  TITULO_N1:     { label: 'Título N1',      labelEn: 'Heading 1',      color: '#2563eb', bold: true,  italic: false, defaultAlign: 'center', indent: '0',      paddingLeft: '0' },
+  TITULO_N2:     { label: 'Título N2',      labelEn: 'Heading 2',      color: '#4f46e5', bold: true,  italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0' },
+  TITULO_N3:     { label: 'Título N3',      labelEn: 'Heading 3',      color: '#7c3aed', bold: true,  italic: false, defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
+  TITULO_N4:     { label: 'Título N4',      labelEn: 'Heading 4',      color: '#9333ea', bold: true,  italic: true,  defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
+  TITULO_N5:     { label: 'Título N5',      labelEn: 'Heading 5',      color: '#a855f7', bold: false, italic: true,  defaultAlign: 'left',   indent: '0.5in',  paddingLeft: '0' },
+  PARRAFO_NORMAL:{ label: 'Párrafo',        labelEn: 'Paragraph',      color: '#64748b', bold: false, italic: false, defaultAlign: 'justify', indent: '0.5in',  paddingLeft: '0' },
+  REFERENCIA:    { label: 'Referencia',     labelEn: 'Reference',      color: '#059669', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0.5in' },
+  CITA_LARGA:    { label: 'Cita larga',     labelEn: 'Block Quote',    color: '#d97706', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0.5in' },
+  PORTADA_IMAGEN:{ label: 'Imagen portada', labelEn: 'Cover Image',    color: '#0ea5e9', bold: false, italic: false, defaultAlign: 'center', indent: '0',      paddingLeft: '0' },
+  PORTADA_ESPACIO:{ label: 'Espacio',       labelEn: 'Space',          color: '#cbd5e1', bold: false, italic: false, defaultAlign: 'left',   indent: '0',      paddingLeft: '0' },
+  PORTADA_BLOQUE: { label: 'Portada (Protegida)', labelEn: 'Cover (Protected)', color: '#334155', bold: true, italic: false, defaultAlign: 'center', indent: '0', paddingLeft: '0' },
 };
 
 const CATEGORY_OPTIONS = [
-  { id: 'PARRAFO_NORMAL',  label: 'Párrafo normal', color: '#94a3b8' },
-  { id: 'TITULO_N1',       label: 'Título N1',      color: '#2563eb' },
-  { id: 'TITULO_N2',       label: 'Título N2',      color: '#4f46e5' },
-  { id: 'TITULO_N3',       label: 'Título N3',      color: '#7c3aed' },
-  { id: 'TITULO_N4',       label: 'Título N4',      color: '#9333ea' },
-  { id: 'TITULO_N5',       label: 'Título N5',      color: '#a855f7' },
-  { id: 'REFERENCIA',      label: 'Referencia',     color: '#059669' },
-  { id: 'CITA_LARGA',      label: 'Cita larga',     color: '#d97706' },
+  { id: 'PARRAFO_NORMAL',  label: 'Párrafo normal', labelEn: 'Normal Paragraph', color: '#94a3b8' },
+  { id: 'TITULO_N1',       label: 'Título N1',      labelEn: 'Heading Level 1',  color: '#2563eb' },
+  { id: 'TITULO_N2',       label: 'Título N2',      labelEn: 'Heading Level 2',  color: '#4f46e5' },
+  { id: 'TITULO_N3',       label: 'Título N3',      labelEn: 'Heading Level 3',  color: '#7c3aed' },
+  { id: 'TITULO_N4',       label: 'Título N4',      labelEn: 'Heading Level 4',  color: '#9333ea' },
+  { id: 'TITULO_N5',       label: 'Título N5',      labelEn: 'Heading Level 5',  color: '#a855f7' },
+  { id: 'REFERENCIA',      label: 'Referencia',     labelEn: 'Reference',        color: '#059669' },
+  { id: 'CITA_LARGA',      label: 'Cita larga',     labelEn: 'Block Quote',      color: '#d97706' },
 ];
 
-// ─── Botón de alineación pequeño ─────────────────────────────────────────────
+// ─── Botón de alineación ─────────────────────────────────────────────────────
 function AlignBtn({ icon, active, onClick, title }) {
   return (
     <button
@@ -37,14 +38,14 @@ function AlignBtn({ icon, active, onClick, title }) {
       title={title}
       className="flex items-center justify-center transition-all"
       style={{
-        width: '20px', height: '20px', borderRadius: '4px', border: 'none',
+        width: '26px', height: '26px', borderRadius: '6px', border: 'none',
         cursor: 'pointer',
-        background: active ? '#2563eb' : 'rgba(255,255,255,0.85)',
+        background: active ? '#2563eb' : 'rgba(255,255,255,0.92)',
         color: active ? '#fff' : '#475569',
-        boxShadow: active ? '0 1px 4px rgba(37,99,235,0.4)' : '0 1px 2px rgba(0,0,0,0.08)',
+        boxShadow: active ? '0 1px 4px rgba(37,99,235,0.4)' : '0 1px 3px rgba(0,0,0,0.1)',
       }}
     >
-      <span className="material-symbols-outlined" style={{ fontSize: '13px', lineHeight: 1 }}>{icon}</span>
+      <span className="material-symbols-outlined" style={{ fontSize: '15px', lineHeight: 1 }}>{icon}</span>
     </button>
   );
 }
@@ -58,6 +59,8 @@ function EditableParagraph({
   onDragStart, onDragOver, onDragEnd,
   isPortada = false,
 }) {
+  const { i18n } = useTranslation();
+  const isEn = (i18n.language || 'es').startsWith('en');
   const [isEditing, setIsEditing]     = useState(false);
   const [showCatMenu, setShowCatMenu] = useState(false);
   const [hovered, setHovered]         = useState(false);
@@ -124,7 +127,7 @@ function EditableParagraph({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={{ duration: 0.12 }}
-          className="flex items-center gap-1 sm:gap-1.5"
+          className="flex items-center gap-1.5"
           style={{
             position: 'absolute', top: '2px', right: '0', zIndex: 30,
             pointerEvents: 'auto',
@@ -133,43 +136,43 @@ function EditableParagraph({
           {/* Grip handle - oculto en móviles */}
           <div
             {...dragHandlers}
-            title="Arrastrar para reordenar"
+            title={isEn ? 'Drag to reorder' : 'Arrastrar para reordenar'}
             className="hidden sm:flex items-center justify-center"
             style={{
-              width: '20px', height: '20px', borderRadius: '4px',
-              background: 'rgba(255,255,255,0.85)', cursor: 'grab',
-              boxShadow: '0 1px 2px rgba(0,0,0,0.08)',
-              color: '#94a3b8', fontSize: '13px',
+              width: '26px', height: '26px', borderRadius: '6px',
+              background: 'rgba(255,255,255,0.92)', cursor: 'grab',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+              color: '#94a3b8', fontSize: '15px',
               userSelect: 'none',
             }}
           >
-            <span className="material-symbols-outlined" style={{ fontSize: '14px', lineHeight: 1 }}>drag_indicator</span>
+            <span className="material-symbols-outlined" style={{ fontSize: '16px', lineHeight: 1 }}>drag_indicator</span>
           </div>
 
           {/* Separador - oculto en móviles */}
-          <div className="hidden sm:block" style={{ width: '1px', height: '16px', background: '#e2e8f0' }} />
+          <div className="hidden sm:block" style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
 
           {/* Alineación — solo para no-imagen y en desktop */}
           {item.categoria !== 'PORTADA_IMAGEN' && (
             <div className="hidden sm:flex items-center gap-1">
-              <AlignBtn icon="format_align_left"   active={textAlign === 'left'}    title="Alinear izquierda" onClick={() => onAlignChange(item.id, 'left')} />
-              <AlignBtn icon="format_align_center" active={textAlign === 'center'}  title="Centrar"           onClick={() => onAlignChange(item.id, 'center')} />
-              <AlignBtn icon="format_align_right"  active={textAlign === 'right'}   title="Alinear derecha"  onClick={() => onAlignChange(item.id, 'right')} />
-              <AlignBtn icon="format_align_justify" active={textAlign === 'justify'} title="Justificar"       onClick={() => onAlignChange(item.id, 'justify')} />
-              <div style={{ width: '1px', height: '16px', background: '#e2e8f0' }} />
+              <AlignBtn icon="format_align_left"   active={textAlign === 'left'}    title={isEn ? 'Align left' : 'Alinear izquierda'} onClick={() => onAlignChange(item.id, 'left')} />
+              <AlignBtn icon="format_align_center" active={textAlign === 'center'}  title={isEn ? 'Center' : 'Centrar'}               onClick={() => onAlignChange(item.id, 'center')} />
+              <AlignBtn icon="format_align_right"  active={textAlign === 'right'}   title={isEn ? 'Align right' : 'Alinear derecha'}  onClick={() => onAlignChange(item.id, 'right')} />
+              <AlignBtn icon="format_align_justify" active={textAlign === 'justify'} title={isEn ? 'Justify' : 'Justificar'}          onClick={() => onAlignChange(item.id, 'justify')} />
+              <div style={{ width: '1px', height: '18px', background: '#e2e8f0' }} />
             </div>
           )}
 
-          {/* Badge de categoría + dropdown */}
+          {/* Badge de categoría + dropdown ampliado */}
           <div style={{ position: 'relative' }}>
             <button
               onClick={() => setShowCatMenu(v => !v)}
-              className="flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-md text-[8px] sm:text-[9px] font-black uppercase tracking-widest text-white shadow-md transition-all hover:brightness-110 whitespace-nowrap"
-              style={{ backgroundColor: style.color, lineHeight: '1.6', border: 'none', cursor: 'pointer' }}
+              className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-black uppercase tracking-wider text-white shadow-md transition-all hover:brightness-110 whitespace-nowrap"
+              style={{ backgroundColor: style.color, lineHeight: '1.5', border: 'none', cursor: 'pointer' }}
             >
-              <span className="material-symbols-outlined" style={{ fontSize: '9px', lineHeight: '1' }}>label</span>
-              <span className="hidden sm:inline">{style.label}</span>
-              <span className="material-symbols-outlined" style={{ fontSize: '9px', lineHeight: '1', opacity: 0.8 }}>
+              <span className="material-symbols-outlined" style={{ fontSize: '12px', lineHeight: '1' }}>label</span>
+              <span>{isEn ? style.labelEn : style.label}</span>
+              <span className="material-symbols-outlined" style={{ fontSize: '13px', lineHeight: '1', opacity: 0.9 }}>
                 {showCatMenu ? 'expand_less' : 'expand_more'}
               </span>
             </button>
@@ -181,26 +184,26 @@ function EditableParagraph({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -6, scale: 0.95 }}
                   transition={{ duration: 0.12 }}
-                  className="absolute top-full right-0 mt-1 z-50 bg-white rounded-xl shadow-xl border border-slate-200 py-1 overflow-hidden"
-                  style={{ minWidth: '150px', maxWidth: '200px' }}
+                  className="absolute top-full right-0 mt-1.5 z-50 bg-white rounded-xl shadow-2xl border border-slate-200 py-1.5 overflow-hidden"
+                  style={{ minWidth: '180px', maxWidth: '230px' }}
                 >
                   {CATEGORY_OPTIONS.map(opt => (
                     <button
                       key={opt.id}
                       onClick={() => { onLabelChange(item.id, opt.id); setShowCatMenu(false); }}
-                      className="w-full flex items-center gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-[11px] font-bold transition-colors text-left"
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs sm:text-[13px] font-bold transition-colors text-left"
                       style={{
-                        color: item.categoria === opt.id ? '#0f172a' : '#64748b',
+                        color: item.categoria === opt.id ? '#0f172a' : '#475569',
                         background: item.categoria === opt.id ? opt.color + '15' : 'transparent',
                         border: 'none', cursor: 'pointer',
                       }}
                       onMouseEnter={e => e.currentTarget.style.background = opt.color + '20'}
                       onMouseLeave={e => e.currentTarget.style.background = item.categoria === opt.id ? opt.color + '15' : 'transparent'}
                     >
-                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
-                      <span className="truncate">{opt.label}</span>
+                      <span style={{ width: '9px', height: '9px', borderRadius: '50%', background: opt.color, flexShrink: 0 }} />
+                      <span className="truncate">{isEn ? opt.labelEn : opt.label}</span>
                       {item.categoria === opt.id && (
-                        <span className="material-symbols-outlined ml-auto flex-shrink-0" style={{ fontSize: '14px', color: opt.color }}>check</span>
+                        <span className="material-symbols-outlined ml-auto flex-shrink-0" style={{ fontSize: '15px', color: opt.color }}>check</span>
                       )}
                     </button>
                   ))}

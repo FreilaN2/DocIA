@@ -25,10 +25,10 @@ export default function ParagraphCard({ item, onLabelChange }) {
           </p>
           
           {/* Controles de categoría */}
-          <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-3">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2.5 sm:gap-3">
             {/* Badge de categoría actual */}
-            <span className={`text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg uppercase tracking-widest whitespace-nowrap ${currentCat.light} ${currentCat.text}`}>
-              {isReadOnly ? 'PORTADA PROTEGIDA' : t(`categories.${currentCat.id}`)}
+            <span className={`text-[11px] sm:text-xs font-black px-3 py-1.5 rounded-lg uppercase tracking-wider whitespace-nowrap ${currentCat.light} ${currentCat.text}`}>
+              {isReadOnly ? t('categories.PORTADA_BLOQUE') : t(`categories.${currentCat.id}`)}
             </span>
             
             {!isReadOnly && (
@@ -36,27 +36,27 @@ export default function ParagraphCard({ item, onLabelChange }) {
                 {/* Separador - visible en sm+ */}
                 <div className="hidden sm:block h-4 w-[1px] bg-slate-200 dark:bg-outline-variant/30"></div>
             
-            {/* Selector de categorías */}
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-[9px] sm:text-[10px] font-bold text-slate-400 dark:text-on-surface-variant uppercase tracking-tighter whitespace-nowrap">
-                Cambiar a:
-              </span>
-              <div className="flex gap-1 sm:gap-1.5 flex-wrap">
-                {CATEGORIES_LIST.filter(c => c.id !== 'PORTADA_BLOQUE').map(cat => (
-                  <button
-                    key={cat.id}
-                    title={t(`categories.${cat.id}`)}
-                    onClick={() => onLabelChange(item.id, cat.id)}
-                    className={`w-5 h-5 sm:w-6 sm:h-6 rounded-full transition-all transform hover:scale-125 active:scale-110 ${cat.color} ${
-                      item.categoria === cat.id 
-                        ? 'ring-2 ring-offset-2 dark:ring-offset-[#1a1512] ring-slate-400 dark:ring-on-surface-variant scale-110' 
-                        : 'opacity-40 hover:opacity-100'
-                    }`}
-                    aria-label={t(`categories.${cat.id}`)}
-                  />
-                ))}
-              </div>
-            </div>
+                {/* Selector de categorías */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] sm:text-xs font-bold text-slate-500 dark:text-on-surface-variant uppercase tracking-tight whitespace-nowrap">
+                    {t('categories.change_to')}
+                  </span>
+                  <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+                    {CATEGORIES_LIST.filter(c => c.id !== 'PORTADA_BLOQUE').map(cat => (
+                      <button
+                        key={cat.id}
+                        title={t(`categories.${cat.id}`)}
+                        onClick={() => onLabelChange(item.id, cat.id)}
+                        className={`w-6 h-6 sm:w-7 sm:h-7 rounded-full transition-all transform hover:scale-125 active:scale-110 ${cat.color} ${
+                          item.categoria === cat.id 
+                            ? 'ring-2 ring-offset-2 dark:ring-offset-[#1a1512] ring-slate-400 dark:ring-on-surface-variant scale-110' 
+                            : 'opacity-45 hover:opacity-100'
+                        }`}
+                        aria-label={t(`categories.${cat.id}`)}
+                      />
+                    ))}
+                  </div>
+                </div>
               </>
             )}
           </div>

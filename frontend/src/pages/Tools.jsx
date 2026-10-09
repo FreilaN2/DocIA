@@ -1,127 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-
-/**
- * Catálogo principal del Grid de Herramientas.
- * Cada elemento es una herramienta independiente en el Grid inicial.
- * Al hacer clic en una tarjeta, el Grid desaparece y se abre únicamente esa herramienta.
- */
-const TOOLS_CATALOG = [
-  {
-    id: 'apa',
-    title: 'Normas APA 7ª Edición',
-    badge: 'Citas y Referencias',
-    icon: 'menu_book',
-    description:
-      'Genera citas en el texto, referencias con sangría francesa, verifica citas de 40 palabras y consulta niveles de títulos.',
-    available: true,
-  },
-  {
-    id: 'writing',
-    title: 'Asistente de Redacción y Extensión',
-    badge: 'Tesis y Ensayos',
-    icon: 'edit_note',
-    description:
-      'Calcula cuántas páginas ocupará tu texto a doble espacio y encuentra conectores académicos listos para usar.',
-    available: true,
-  },
-  {
-    id: 'coming_soon',
-    title: 'Próximas Herramientas',
-    badge: 'En desarrollo',
-    icon: 'auto_awesome',
-    description:
-      'Espacio reservado para futuras utilidades académicas y de investigación dentro de DocIA.',
-    available: false,
-  },
-];
-
-const SOURCE_TYPES = [
-  { id: 'book', label: 'Libro', icon: 'menu_book' },
-  { id: 'web', label: 'Página Web', icon: 'language' },
-  { id: 'journal', label: 'Artículo / Paper', icon: 'science' },
-  { id: 'thesis', label: 'Tesis', icon: 'school' },
-];
-
-const APA_HEADING_LEVELS = [
-  {
-    level: 1,
-    name: 'Nivel 1 · Título Principal',
-    rules: ['Centrado', 'Negrita', 'Sin punto final'],
-    alignment: 'text-center font-bold',
-    inlineText: false,
-  },
-  {
-    level: 2,
-    name: 'Nivel 2 · Subtítulo de Sección',
-    rules: ['Alineado a la izquierda', 'Negrita', 'Sin punto final'],
-    alignment: 'text-left font-bold',
-    inlineText: false,
-  },
-  {
-    level: 3,
-    name: 'Nivel 3 · Subtítulo de Tercer Nivel',
-    rules: ['Alineado a la izquierda', 'Negrita y Cursiva', 'Sin punto final'],
-    alignment: 'text-left font-bold italic',
-    inlineText: false,
-  },
-  {
-    level: 4,
-    name: 'Nivel 4 · Encabezado de Párrafo',
-    rules: ['Sangría de 1.27 cm', 'Negrita', 'Con punto final (el texto sigue en la misma línea)'],
-    alignment: 'text-left font-bold pl-8',
-    inlineText: true,
-  },
-  {
-    level: 5,
-    name: 'Nivel 5 · Encabezado en Cursiva',
-    rules: ['Sangría de 1.27 cm', 'Negrita y Cursiva', 'Con punto final (el texto sigue en la misma línea)'],
-    alignment: 'text-left font-bold italic pl-8',
-    inlineText: true,
-  },
-];
-
-const ACADEMIC_CONNECTORS = [
-  {
-    category: 'Para introducir un tema u objetivo',
-    icon: 'flag',
-    items: [
-      'El propósito principal de este estudio consiste en...',
-      'En el marco de la presente investigación se analiza...',
-      'Desde una perspectiva teórica y metodológica, cabe señalar que...',
-    ],
-  },
-  {
-    category: 'Para citar autores en el texto',
-    icon: 'record_voice_over',
-    items: [
-      'De acuerdo con los planteamientos de Apellido (Año), ...',
-      'Tal como sostiene Apellido (Año) en su análisis sobre...',
-      'Siguiendo a Apellido et al. (Año), resulta fundamental considerar...',
-    ],
-  },
-  {
-    category: 'Para contrastar o contraponer ideas',
-    icon: 'compare_arrows',
-    items: [
-      'No obstante, diversos autores difieren en cuanto a...',
-      'Por el contrario, la evidencia empírica sugiere que...',
-      'A pesar de los hallazgos previos, cabe advertir que...',
-    ],
-  },
-  {
-    category: 'Para concluir o sintetizar',
-    icon: 'task_alt',
-    items: [
-      'En síntesis, los resultados obtenidos demuestran que...',
-      'A partir del análisis precedente, se concluye que...',
-      'En definitiva, la evidencia expuesta respalda que...',
-    ],
-  },
-];
 
 function toInitials(firstName = '') {
   return firstName
@@ -141,11 +23,177 @@ function formatAuthorReference(author) {
 }
 
 export default function Tools() {
+  const { i18n } = useTranslation();
+  const isEn = (i18n.language || 'es').startsWith('en');
+
   // null = muestra SOLO el Grid de herramientas; 'apa' | 'writing' = oculta el Grid y muestra esa herramienta
   const [selectedTool, setSelectedTool] = useState(null);
 
   // Sub-pestaña interna de la herramienta Normas APA para no saturar la pantalla
   const [apaTab, setApaTab] = useState('citas'); // 'citas' | 'cuarenta' | 'titulos' | 'guardadas'
+
+  const toolsCatalog = useMemo(
+    () => [
+      {
+        id: 'apa',
+        title: isEn ? 'APA 7th Edition Rules' : 'Normas APA 7ª Edición',
+        badge: isEn ? 'Citations & References' : 'Citas y Referencias',
+        icon: 'menu_book',
+        description: isEn
+          ? 'Generate in-text citations, hanging-indent references, check 40-word quotes, and preview APA heading levels.'
+          : 'Genera citas en el texto, referencias con sangría francesa, verifica citas de 40 palabras y consulta niveles de títulos.',
+        available: true,
+      },
+      {
+        id: 'writing',
+        title: isEn ? 'Writing & Length Assistant' : 'Asistente de Redacción y Extensión',
+        badge: isEn ? 'Theses & Essays' : 'Tesis y Ensayos',
+        icon: 'edit_note',
+        description: isEn
+          ? 'Estimate how many double-spaced pages your text will take and find ready-to-use academic connectors.'
+          : 'Calcula cuántas páginas ocupará tu texto a doble espacio y encuentra conectores académicos listos para usar.',
+        available: true,
+      },
+      {
+        id: 'coming_soon',
+        title: isEn ? 'Upcoming Tools' : 'Próximas Herramientas',
+        badge: isEn ? 'In Development' : 'En desarrollo',
+        icon: 'auto_awesome',
+        description: isEn
+          ? 'Space reserved for upcoming academic and research utilities inside DocIA.'
+          : 'Espacio reservado para futuras utilidades académicas y de investigación dentro de DocIA.',
+        available: false,
+      },
+    ],
+    [isEn]
+  );
+
+  const sourceTypes = useMemo(
+    () => [
+      { id: 'book', label: isEn ? 'Book' : 'Libro', icon: 'menu_book' },
+      { id: 'web', label: isEn ? 'Website' : 'Página Web', icon: 'language' },
+      { id: 'journal', label: isEn ? 'Journal / Paper' : 'Artículo / Paper', icon: 'science' },
+      { id: 'thesis', label: isEn ? 'Thesis' : 'Tesis', icon: 'school' },
+    ],
+    [isEn]
+  );
+
+  const apaHeadingLevels = useMemo(
+    () => [
+      {
+        level: 1,
+        name: isEn ? 'Level 1 · Main Heading' : 'Nivel 1 · Título Principal',
+        rules: isEn
+          ? ['Centered', 'Bold', 'No period at the end']
+          : ['Centrado', 'Negrita', 'Sin punto final'],
+        alignment: 'text-center font-bold',
+        inlineText: false,
+      },
+      {
+        level: 2,
+        name: isEn ? 'Level 2 · Section Subheading' : 'Nivel 2 · Subtítulo de Sección',
+        rules: isEn
+          ? ['Left-aligned', 'Bold', 'No period at the end']
+          : ['Alineado a la izquierda', 'Negrita', 'Sin punto final'],
+        alignment: 'text-left font-bold',
+        inlineText: false,
+      },
+      {
+        level: 3,
+        name: isEn ? 'Level 3 · Third-Level Subheading' : 'Nivel 3 · Subtítulo de Tercer Nivel',
+        rules: isEn
+          ? ['Left-aligned', 'Bold & Italic', 'No period at the end']
+          : ['Alineado a la izquierda', 'Negrita y Cursiva', 'Sin punto final'],
+        alignment: 'text-left font-bold italic',
+        inlineText: false,
+      },
+      {
+        level: 4,
+        name: isEn ? 'Level 4 · Paragraph Heading' : 'Nivel 4 · Encabezado de Párrafo',
+        rules: isEn
+          ? ['Indented 1.27 cm (0.5 in)', 'Bold', 'Ends with a period (text continues on same line)']
+          : ['Sangría de 1.27 cm', 'Negrita', 'Con punto final (el texto sigue en la misma línea)'],
+        alignment: 'text-left font-bold pl-8',
+        inlineText: true,
+      },
+      {
+        level: 5,
+        name: isEn ? 'Level 5 · Italic Paragraph Heading' : 'Nivel 5 · Encabezado en Cursiva',
+        rules: isEn
+          ? ['Indented 1.27 cm (0.5 in)', 'Bold & Italic', 'Ends with a period (text continues on same line)']
+          : ['Sangría de 1.27 cm', 'Negrita y Cursiva', 'Con punto final (el texto sigue en la misma línea)'],
+        alignment: 'text-left font-bold italic pl-8',
+        inlineText: true,
+      },
+    ],
+    [isEn]
+  );
+
+  const academicConnectors = useMemo(
+    () => [
+      {
+        category: isEn ? 'To introduce a topic or objective' : 'Para introducir un tema u objetivo',
+        icon: 'flag',
+        items: isEn
+          ? [
+              'The primary purpose of this study is to examine...',
+              'Within the framework of the present research, we analyze...',
+              'From a theoretical and methodological perspective, it should be noted that...',
+            ]
+          : [
+              'El propósito principal de este estudio consiste en...',
+              'En el marco de la presente investigación se analiza...',
+              'Desde una perspectiva teórica y metodológica, cabe señalar que...',
+            ],
+      },
+      {
+        category: isEn ? 'To cite authors in the text' : 'Para citar autores en el texto',
+        icon: 'record_voice_over',
+        items: isEn
+          ? [
+              'According to the findings of Lastname (Year), ...',
+              'As argued by Lastname (Year) in their analysis of...',
+              'Following Lastname et al. (Year), it is essential to consider...',
+            ]
+          : [
+              'De acuerdo con los planteamientos de Apellido (Año), ...',
+              'Tal como sostiene Apellido (Año) en su análisis sobre...',
+              'Siguiendo a Apellido et al. (Año), resulta fundamental considerar...',
+            ],
+      },
+      {
+        category: isEn ? 'To contrast or oppose ideas' : 'Para contrastar o contraponer ideas',
+        icon: 'compare_arrows',
+        items: isEn
+          ? [
+              'However, several authors differ regarding...',
+              'Conversely, empirical evidence suggests that...',
+              'Despite previous findings, it is worth noting that...',
+            ]
+          : [
+              'No obstante, diversos autores difieren en cuanto a...',
+              'Por el contrario, la evidencia empírica sugiere que...',
+              'A pesar de los hallazgos previos, cabe advertir que...',
+            ],
+      },
+      {
+        category: isEn ? 'To conclude or synthesize' : 'Para concluir o sintetizar',
+        icon: 'task_alt',
+        items: isEn
+          ? [
+              'In summary, the results obtained demonstrate that...',
+              'Based on the preceding analysis, it is concluded that...',
+              'Ultimately, the evidence presented supports that...',
+            ]
+          : [
+              'En síntesis, los resultados obtenidos demuestran que...',
+              'A partir del análisis precedente, se concluye que...',
+              'En definitiva, la evidencia expuesta respalda que...',
+            ],
+      },
+    ],
+    [isEn]
+  );
 
   // === Estados de Normas APA ===
   const [sourceType, setSourceType] = useState('book');
@@ -220,75 +268,76 @@ export default function Tools() {
   };
 
   const generated = useMemo(() => {
-    const yearStr = fields.noDate ? 's.f.' : (fields.year || '').trim() || 's.f.';
-    const cleanTitle = (fields.title || '').trim() || 'Título del documento';
+    const noDateLabel = isEn ? 'n.d.' : 's.f.';
+    const andConj = isEn ? '&' : 'y';
+    const yearStr = fields.noDate ? noDateLabel : (fields.year || '').trim() || noDateLabel;
+    const cleanTitle = (fields.title || '').trim() || (isEn ? 'Document title' : 'Título del documento');
     const pageSuffix = (fields.quotePage || '').trim() ? `, p. ${fields.quotePage.trim()}` : '';
 
-    let inTextAuthor = 'Apellido';
-    let refAuthorsStr = 'Apellido, A.';
+    let inTextAuthor = isEn ? 'Lastname' : 'Apellido';
+    let refAuthorsStr = isEn ? 'Lastname, A.' : 'Apellido, A.';
     let sortKey = 'apellido';
 
     if (isCorporateAuthor) {
-      const corp = corporateName.trim() || 'Nombre de la Organización';
+      const corp = corporateName.trim() || (isEn ? 'Organization Name' : 'Nombre de la Organización');
       inTextAuthor = corp;
       refAuthorsStr = `${corp}.`;
       sortKey = corp.toLowerCase();
     } else {
       const validAuthors = authors.filter((a) => a.lastName.trim() || a.firstName.trim());
       if (validAuthors.length === 1) {
-        inTextAuthor = validAuthors[0].lastName.trim() || 'Apellido';
+        inTextAuthor = validAuthors[0].lastName.trim() || (isEn ? 'Lastname' : 'Apellido');
         refAuthorsStr = formatAuthorReference(validAuthors[0]);
         sortKey = inTextAuthor.toLowerCase();
       } else if (validAuthors.length === 2) {
-        const l1 = validAuthors[0].lastName.trim() || 'Autor 1';
-        const l2 = validAuthors[1].lastName.trim() || 'Autor 2';
-        inTextAuthor = `${l1} y ${l2}`;
-        refAuthorsStr = `${formatAuthorReference(validAuthors[0])} y ${formatAuthorReference(validAuthors[1])}`;
+        const l1 = validAuthors[0].lastName.trim() || (isEn ? 'Author 1' : 'Autor 1');
+        const l2 = validAuthors[1].lastName.trim() || (isEn ? 'Author 2' : 'Autor 2');
+        inTextAuthor = `${l1} ${andConj} ${l2}`;
+        refAuthorsStr = `${formatAuthorReference(validAuthors[0])} ${andConj} ${formatAuthorReference(validAuthors[1])}`;
         sortKey = l1.toLowerCase();
       } else if (validAuthors.length >= 3) {
-        const l1 = validAuthors[0].lastName.trim() || 'Autor 1';
+        const l1 = validAuthors[0].lastName.trim() || (isEn ? 'Author 1' : 'Autor 1');
         inTextAuthor = `${l1} et al.`;
         const formattedList = validAuthors.map(formatAuthorReference).filter(Boolean);
-        const lastFormatted = formattedList.pop();
-        refAuthorsStr = `${formattedList.join(', ')} y ${lastFormatted}`;
+        if (formattedList.length > 1) {
+          const lastOne = formattedList[formattedList.length - 1];
+          refAuthorsStr = `${formattedList.slice(0, -1).join(', ')} ${andConj} ${lastOne}`;
+        } else {
+          refAuthorsStr = formattedList[0] || (isEn ? 'Lastname, A.' : 'Apellido, A.');
+        }
         sortKey = l1.toLowerCase();
       }
     }
 
     const parentheticalCitation = `(${inTextAuthor}, ${yearStr}${pageSuffix})`;
-    const narrativeCitation = pageSuffix
-      ? `${inTextAuthor} (${yearStr}${pageSuffix})`
-      : `${inTextAuthor} (${yearStr})`;
+    const narrativeCitation = `${inTextAuthor} (${yearStr}${pageSuffix})`;
 
+    const urlPart = (fields.url || '').trim() ? ` ${fields.url.trim()}` : '';
     let plainReference = '';
     let richParts = { beforeItalic: '', italic: '', afterItalic: '' };
-    const urlPart = fields.url.trim() ? ` ${fields.url.trim()}` : '';
 
     if (sourceType === 'book') {
-      const edPart = fields.edition.trim() ? ` (${fields.edition.trim()} ed.).` : '.';
-      const pubPart = fields.publisher.trim() ? ` ${fields.publisher.trim()}.` : '';
+      const pub = (fields.publisher || '').trim() || (isEn ? 'Publisher' : 'Editorial');
+      const ed = (fields.edition || '').trim() ? ` (${fields.edition.trim()} ed.)` : '';
       richParts = {
         beforeItalic: `${refAuthorsStr} (${yearStr}). `,
         italic: cleanTitle,
-        afterItalic: `${edPart}${pubPart}${urlPart}`,
+        afterItalic: `${ed}. ${pub}.${urlPart}`,
       };
       plainReference = `${richParts.beforeItalic}${richParts.italic}${richParts.afterItalic}`;
     } else if (sourceType === 'web') {
-      const sitePart =
-        fields.siteName.trim() && fields.siteName.trim() !== corporateName.trim()
-          ? ` ${fields.siteName.trim()}.`
-          : '';
+      const site = (fields.siteName || '').trim() ? ` ${fields.siteName.trim()}.` : '';
       richParts = {
         beforeItalic: `${refAuthorsStr} (${yearStr}). `,
-        italic: `${cleanTitle}.`,
-        afterItalic: `${sitePart}${urlPart}`,
+        italic: cleanTitle,
+        afterItalic: `.${site}${urlPart}`,
       };
       plainReference = `${richParts.beforeItalic}${richParts.italic}${richParts.afterItalic}`;
     } else if (sourceType === 'journal') {
-      const journal = fields.journalName.trim() || 'Nombre de la Revista';
-      const vol = fields.volume.trim();
-      const iss = fields.issue.trim();
-      const pgs = fields.pages.trim();
+      const journal = (fields.journalName || '').trim() || (isEn ? 'Journal Name' : 'Nombre de la Revista');
+      const vol = (fields.volume || '').trim();
+      const iss = (fields.issue || '').trim();
+      const pgs = (fields.pages || '').trim();
       const issuePart = iss ? `(${iss})` : '';
       const pagesPart = pgs ? `, ${pgs}` : '';
       richParts = {
@@ -298,12 +347,12 @@ export default function Tools() {
       };
       plainReference = `${richParts.beforeItalic}${richParts.italic}${richParts.afterItalic}`;
     } else if (sourceType === 'thesis') {
-      const tType = fields.thesisType || 'Tesis de grado';
-      const univ = fields.university.trim() ? `, ${fields.university.trim()}` : '';
+      const tType = (fields.thesisType || '').trim() || (isEn ? "Bachelor's thesis" : 'Tesis de grado');
+      const uni = (fields.university || '').trim() || (isEn ? 'University Name' : 'Nombre de la Universidad');
       richParts = {
         beforeItalic: `${refAuthorsStr} (${yearStr}). `,
         italic: cleanTitle,
-        afterItalic: ` [${tType}${univ}].${urlPart}`,
+        afterItalic: ` [${tType}, ${uni}].${urlPart}`,
       };
       plainReference = `${richParts.beforeItalic}${richParts.italic}${richParts.afterItalic}`;
     }
@@ -311,25 +360,18 @@ export default function Tools() {
     return {
       parentheticalCitation,
       narrativeCitation,
-      plainReference: plainReference.replace(/\s+/g, ' ').trim(),
+      plainReference,
       richParts,
       sortKey,
-      sourceType,
     };
-  }, [sourceType, isCorporateAuthor, corporateName, authors, fields]);
+  }, [sourceType, isCorporateAuthor, corporateName, authors, fields, isEn]);
 
-  const copyText = (text, label = 'Copiado al portapapeles') => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(text);
-      toast.success(label, { icon: '📋', duration: 2000 });
-    }
+  const copyText = (text, label = isEn ? 'Copied to clipboard' : 'Copiado al portapapeles') => {
+    navigator.clipboard.writeText(text);
+    toast.success(label, { duration: 2200, icon: '📋' });
   };
 
   const handleSaveReference = () => {
-    if (!fields.title.trim()) {
-      toast.error('Escribe al menos el título de la obra para guardarla');
-      return;
-    }
     const newItem = {
       id: Date.now().toString(),
       plainReference: generated.plainReference,
@@ -337,9 +379,9 @@ export default function Tools() {
       sortKey: generated.sortKey,
     };
     setSavedRefs((prev) =>
-      [...prev, newItem].sort((a, b) => a.sortKey.localeCompare(b.sortKey, 'es'))
+      [...prev, newItem].sort((a, b) => a.sortKey.localeCompare(b.sortKey, isEn ? 'en' : 'es'))
     );
-    toast.success('Guardada en Mi Bibliografía', { icon: '📚' });
+    toast.success(isEn ? 'Saved to My Bibliography' : 'Guardada en Mi Bibliografía', { icon: '📚' });
   };
 
   const handleRemoveRef = (id) => {
@@ -349,7 +391,7 @@ export default function Tools() {
   const handleCopyAllBibliography = () => {
     if (savedRefs.length === 0) return;
     const allText = savedRefs.map((r) => r.plainReference).join('\n\n');
-    copyText(allText, '¡Bibliografía completa copiada (A-Z)!');
+    copyText(allText, isEn ? 'Full bibliography copied (A-Z)!' : '¡Bibliografía completa copiada (A-Z)!');
   };
 
   const handleClearForm = () => {
@@ -366,7 +408,7 @@ export default function Tools() {
       volume: '',
       issue: '',
       pages: '',
-      thesisType: 'Tesis de licenciatura',
+      thesisType: isEn ? "Bachelor's thesis" : 'Tesis de licenciatura',
       university: '',
       url: '',
       quotePage: '',
@@ -379,17 +421,20 @@ export default function Tools() {
     const wordCount = words.length;
     const isBlockQuote = wordCount >= 40;
 
-    const author = quoteAuthor.trim() || 'Apellido';
+    const author = quoteAuthor.trim() || (isEn ? 'Lastname' : 'Apellido');
     const year = quoteYear.trim() || '2024';
     const page = quotePageNum.trim() ? `p. ${quotePageNum.trim()}` : 'p. X';
     const cleanWithoutEndDot = clean.replace(/\.+$/, '');
+    const defaultText = isEn ? 'Type or paste the exact quote here...' : 'Escribe aquí el fragmento textual...';
 
     if (!isBlockQuote) {
       return {
         wordCount,
         isBlockQuote: false,
-        parenthetical: `"${cleanWithoutEndDot || 'Escribe aquí el fragmento textual...'}" (${author}, ${year}, ${page}).`,
-        narrative: `Según ${author} (${year}), "${cleanWithoutEndDot || 'Escribe aquí el fragmento textual...'}" (${page}).`,
+        parenthetical: `"${cleanWithoutEndDot || defaultText}" (${author}, ${year}, ${page}).`,
+        narrative: isEn
+          ? `According to ${author} (${year}), "${cleanWithoutEndDot || defaultText}" (${page}).`
+          : `Según ${author} (${year}), "${cleanWithoutEndDot || defaultText}" (${page}).`,
       };
     }
 
@@ -397,9 +442,11 @@ export default function Tools() {
       wordCount,
       isBlockQuote: true,
       parenthetical: `${cleanWithoutEndDot}. (${author}, ${year}, ${page})`,
-      narrative: `${author} (${year}) señala lo siguiente:\n\n    ${cleanWithoutEndDot}. (${page})`,
+      narrative: isEn
+        ? `${author} (${year}) states the following:\n\n    ${cleanWithoutEndDot}. (${page})`
+        : `${author} (${year}) señala lo siguiente:\n\n    ${cleanWithoutEndDot}. (${page})`,
     };
-  }, [quoteText, quoteAuthor, quoteYear, quotePageNum]);
+  }, [quoteText, quoteAuthor, quoteYear, quotePageNum, isEn]);
 
   const essayMetrics = useMemo(() => {
     const trimmed = essayText.trim();
@@ -411,14 +458,14 @@ export default function Tools() {
   }, [essayText]);
 
   const activeHeadingObj = useMemo(
-    () => APA_HEADING_LEVELS.find((h) => h.level === selectedHeadingLevel) || APA_HEADING_LEVELS[0],
-    [selectedHeadingLevel]
+    () => apaHeadingLevels.find((h) => h.level === selectedHeadingLevel) || apaHeadingLevels[0],
+    [selectedHeadingLevel, apaHeadingLevels]
   );
 
   const inputClass =
-    'w-full px-3.5 py-2.5 rounded-xl bg-slate-100/90 dark:bg-black/30 border border-slate-200 dark:border-outline/30 text-xs sm:text-sm text-on-surface focus:outline-none focus:border-primary-container transition-colors';
+    'w-full px-3.5 py-3 rounded-xl bg-slate-100/90 dark:bg-black/30 border border-slate-200 dark:border-outline/30 text-sm sm:text-base text-on-surface focus:outline-none focus:border-primary-container transition-colors';
   const labelClass =
-    'block text-[10px] sm:text-[11px] font-black uppercase tracking-wider text-on-surface-variant mb-1.5';
+    'block text-xs sm:text-sm font-black uppercase tracking-wider text-on-surface-variant mb-1.5';
 
   return (
     <div className="min-h-screen bg-background text-on-background font-sans flex flex-col">
@@ -438,21 +485,23 @@ export default function Tools() {
               transition={{ duration: 0.2 }}
               className="space-y-8"
             >
-              <div className="text-center max-w-2xl mx-auto space-y-2">
-                <span className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-primary-container/10 text-primary-container text-xs font-black">
-                  <span className="material-symbols-outlined text-sm">apps</span>
-                  Centro de Utilidades DocIA
+              <div className="text-center max-w-2xl mx-auto space-y-2.5">
+                <span className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-primary-container/10 text-primary-container text-xs sm:text-sm font-black">
+                  <span className="material-symbols-outlined text-base">apps</span>
+                  {isEn ? 'DocIA Utility Hub' : 'Centro de Utilidades DocIA'}
                 </span>
                 <h1 className="text-2xl sm:text-3xl md:text-4xl font-black text-on-surface tracking-tight">
-                  Herramientas Académicas
+                  {isEn ? 'Academic Tools' : 'Herramientas Académicas'}
                 </h1>
-                <p className="text-xs sm:text-sm text-on-surface-variant">
-                  Selecciona una herramienta del catálogo para abrirla.
+                <p className="text-sm sm:text-base text-on-surface-variant">
+                  {isEn
+                    ? 'Select a tool from the catalog to open it.'
+                    : 'Selecciona una herramienta del catálogo para abrirla.'}
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                {TOOLS_CATALOG.map((tool) => (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
+                {toolsCatalog.map((tool) => (
                   <div
                     key={tool.id}
                     onClick={() => tool.available && setSelectedTool(tool.id)}
@@ -464,7 +513,7 @@ export default function Tools() {
                         setSelectedTool(tool.id);
                       }
                     }}
-                    className={`group rounded-3xl border p-6 flex flex-col justify-between gap-5 transition-all duration-200 ${
+                    className={`group rounded-3xl border p-6 sm:p-7 flex flex-col justify-between gap-5 transition-all duration-200 ${
                       tool.available
                         ? 'bg-white/90 dark:bg-[#1a1512]/90 border-slate-200/80 dark:border-outline-variant/30 hover:border-primary-container hover:shadow-xl hover:-translate-y-1 cursor-pointer'
                         : 'bg-slate-50/60 dark:bg-white/[0.02] border-dashed border-slate-300/70 dark:border-white/10 opacity-70 cursor-default'
@@ -473,16 +522,16 @@ export default function Tools() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2">
                         <div
-                          className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${
+                          className={`w-13 h-13 sm:w-14 sm:h-14 rounded-2xl flex items-center justify-center transition-colors ${
                             tool.available
                               ? 'bg-primary-container/15 text-primary-container group-hover:bg-primary-container group-hover:text-white'
                               : 'bg-slate-200/70 dark:bg-white/10 text-on-surface-variant'
                           }`}
                         >
-                          <span className="material-symbols-outlined text-2xl">{tool.icon}</span>
+                          <span className="material-symbols-outlined text-2xl sm:text-3xl">{tool.icon}</span>
                         </div>
                         <span
-                          className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full ${
+                          className={`text-xs font-black uppercase tracking-wider px-3.5 py-1.5 rounded-full ${
                             tool.available
                               ? 'bg-orange-50 dark:bg-orange-950/40 text-primary-container'
                               : 'bg-slate-200/60 dark:bg-white/10 text-on-surface-variant'
@@ -493,25 +542,29 @@ export default function Tools() {
                       </div>
 
                       <div>
-                        <h2 className="text-lg font-black text-on-surface group-hover:text-primary-container transition-colors">
+                        <h2 className="text-lg sm:text-xl font-black text-on-surface group-hover:text-primary-container transition-colors">
                           {tool.title}
                         </h2>
-                        <p className="text-xs sm:text-sm text-on-surface-variant mt-1.5 leading-relaxed">
+                        <p className="text-sm text-on-surface-variant mt-2 leading-relaxed">
                           {tool.description}
                         </p>
                       </div>
                     </div>
 
-                    <div className="pt-3 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-xs font-black">
+                    <div className="pt-3.5 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-sm font-black">
                       {tool.available ? (
                         <>
-                          <span className="text-primary-container">Abrir herramienta</span>
-                          <span className="material-symbols-outlined text-lg text-primary-container group-hover:translate-x-1 transition-transform">
+                          <span className="text-primary-container">
+                            {isEn ? 'Open tool' : 'Abrir herramienta'}
+                          </span>
+                          <span className="material-symbols-outlined text-xl text-primary-container group-hover:translate-x-1 transition-transform">
                             arrow_forward
                           </span>
                         </>
                       ) : (
-                        <span className="text-on-surface-variant">Próximamente</span>
+                        <span className="text-on-surface-variant">
+                          {isEn ? 'Coming soon' : 'Próximamente'}
+                        </span>
                       )}
                     </div>
                   </div>
@@ -533,42 +586,46 @@ export default function Tools() {
               className="space-y-6"
             >
               {/* Barra Superior: Botón Volver al Grid + Selector simple de modo APA */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-2 border-b border-slate-200/70 dark:border-white/10">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-3 border-b border-slate-200/70 dark:border-white/10">
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
                     onClick={() => setSelectedTool(null)}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1a1512] border border-slate-200 dark:border-white/10 text-xs font-black text-on-surface hover:border-primary-container hover:text-primary-container transition-colors shadow-sm"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#1a1512] border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black text-on-surface hover:border-primary-container hover:text-primary-container transition-colors shadow-sm"
                   >
-                    <span className="material-symbols-outlined text-base">arrow_back</span>
-                    Herramientas
+                    <span className="material-symbols-outlined text-lg">arrow_back</span>
+                    {isEn ? 'Tools' : 'Herramientas'}
                   </button>
                   <div>
                     <h1 className="text-lg sm:text-xl font-black text-on-surface">
-                      Normas APA 7ª Edición
+                      {isEn ? 'APA 7th Edition Rules' : 'Normas APA 7ª Edición'}
                     </h1>
                   </div>
                 </div>
 
-                {/* Pestañas internas minimalistas para que no sea abrumador */}
-                <div className="flex items-center gap-1 bg-white/80 dark:bg-[#1a1512]/80 p-1 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 self-start overflow-x-auto max-w-full">
+                {/* Pestañas internas más grandes y legibles en móvil y web */}
+                <div className="flex items-center gap-1.5 bg-white/80 dark:bg-[#1a1512]/80 p-1.5 rounded-2xl border border-slate-200/80 dark:border-outline-variant/30 self-start overflow-x-auto max-w-full">
                   {[
-                    { id: 'citas', label: 'Citar Fuente', icon: 'local_library' },
-                    { id: 'cuarenta', label: 'Cita 40 Palabras', icon: 'format_quote' },
-                    { id: 'titulos', label: 'Títulos APA', icon: 'format_size' },
-                    { id: 'guardadas', label: `Guardadas (${savedRefs.length})`, icon: 'bookmarks' },
+                    { id: 'citas', label: isEn ? 'Cite Source' : 'Citar Fuente', icon: 'local_library' },
+                    { id: 'cuarenta', label: isEn ? '40-Word Quote' : 'Cita 40 Palabras', icon: 'format_quote' },
+                    { id: 'titulos', label: isEn ? 'APA Headings' : 'Títulos APA', icon: 'format_size' },
+                    {
+                      id: 'guardadas',
+                      label: isEn ? `Saved (${savedRefs.length})` : `Guardadas (${savedRefs.length})`,
+                      icon: 'bookmarks',
+                    },
                   ].map((tab) => (
                     <button
                       key={tab.id}
                       type="button"
                       onClick={() => setApaTab(tab.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black whitespace-nowrap transition-all ${
+                      className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-black whitespace-nowrap transition-all ${
                         apaTab === tab.id
                           ? 'bg-primary-container text-white shadow-sm'
                           : 'text-on-surface-variant hover:text-on-surface'
                       }`}
                     >
-                      <span className="material-symbols-outlined text-base">{tab.icon}</span>
+                      <span className="material-symbols-outlined text-lg">{tab.icon}</span>
                       {tab.label}
                     </button>
                   ))}
@@ -581,23 +638,23 @@ export default function Tools() {
                   {/* Formulario Izquierdo */}
                   <div className="lg:col-span-7 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm space-y-5">
                     <div>
-                      <label className={labelClass}>Tipo de fuente</label>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                        {SOURCE_TYPES.map((st) => {
+                      <label className={labelClass}>{isEn ? 'Source type' : 'Tipo de fuente'}</label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {sourceTypes.map((st) => {
                           const active = sourceType === st.id;
                           return (
                             <button
                               key={st.id}
                               type="button"
                               onClick={() => setSourceType(st.id)}
-                              className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1 ${
+                              className={`p-3 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 ${
                                 active
                                   ? 'border-primary-container bg-orange-50/80 dark:bg-orange-950/30 text-primary-container'
                                   : 'border-slate-200/80 dark:border-white/10 bg-slate-50/50 dark:bg-white/[0.02] text-on-surface-variant hover:text-on-surface'
                               }`}
                             >
-                              <span className="material-symbols-outlined text-lg">{st.icon}</span>
-                              <span className="text-xs font-black text-on-surface">{st.label}</span>
+                              <span className="material-symbols-outlined text-xl">{st.icon}</span>
+                              <span className="text-xs sm:text-sm font-black text-on-surface">{st.label}</span>
                             </button>
                           );
                         })}
@@ -606,18 +663,24 @@ export default function Tools() {
 
                     {/* Autor */}
                     <div className="space-y-2.5 pt-2 border-t border-slate-100 dark:border-white/5">
-                      <div className="flex items-center justify-between">
-                        <label className={labelClass}>Autor(es)</label>
+                      <div className="flex items-center justify-between gap-2">
+                        <label className={labelClass}>{isEn ? 'Author(s)' : 'Autor(es)'}</label>
                         <button
                           type="button"
                           onClick={() => setIsCorporateAuthor(!isCorporateAuthor)}
-                          className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                          className={`text-xs font-bold px-3 py-1.5 rounded-lg border transition-colors ${
                             isCorporateAuthor
                               ? 'bg-primary-container text-white border-primary-container'
                               : 'bg-slate-100 dark:bg-white/5 text-on-surface-variant border-slate-200 dark:border-white/10'
                           }`}
                         >
-                          {isCorporateAuthor ? '✓ Autor Institucional' : '¿Es institución u organización?'}
+                          {isCorporateAuthor
+                            ? isEn
+                              ? '✓ Institutional Author'
+                              : '✓ Autor Institucional'
+                            : isEn
+                            ? 'Is it an organization?'
+                            : '¿Es institución u organización?'}
                         </button>
                       </div>
 
@@ -626,11 +689,11 @@ export default function Tools() {
                           type="text"
                           value={corporateName}
                           onChange={(e) => setCorporateName(e.target.value)}
-                          placeholder="Ej: Organización Mundial de la Salud"
+                          placeholder={isEn ? 'E.g., World Health Organization' : 'Ej: Organización Mundial de la Salud'}
                           className={inputClass}
                         />
                       ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-2.5">
                           {authors.map((author, idx) => (
                             <div key={idx} className="flex items-center gap-2">
                               <div className="flex-1 grid grid-cols-1 sm:grid-cols-2 gap-2">
@@ -638,14 +701,14 @@ export default function Tools() {
                                   type="text"
                                   value={author.lastName}
                                   onChange={(e) => handleAuthorChange(idx, 'lastName', e.target.value)}
-                                  placeholder="Apellido (Ej: Hernández)"
+                                  placeholder={isEn ? 'Last name (e.g., Smith)' : 'Apellido (Ej: Hernández)'}
                                   className={inputClass}
                                 />
                                 <input
                                   type="text"
                                   value={author.firstName}
                                   onChange={(e) => handleAuthorChange(idx, 'firstName', e.target.value)}
-                                  placeholder="Nombre (Ej: Roberto)"
+                                  placeholder={isEn ? 'First name (e.g., Robert)' : 'Nombre (Ej: Roberto)'}
                                   className={inputClass}
                                 />
                               </div>
@@ -653,9 +716,9 @@ export default function Tools() {
                                 <button
                                   type="button"
                                   onClick={() => removeAuthor(idx)}
-                                  className="p-2 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                  className="p-2.5 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
                                 >
-                                  <span className="material-symbols-outlined text-base">close</span>
+                                  <span className="material-symbols-outlined text-lg">close</span>
                                 </button>
                               )}
                             </div>
@@ -663,10 +726,10 @@ export default function Tools() {
                           <button
                             type="button"
                             onClick={addAuthor}
-                            className="text-xs font-black text-primary-container hover:underline inline-flex items-center gap-1"
+                            className="text-xs sm:text-sm font-black text-primary-container hover:underline inline-flex items-center gap-1"
                           >
-                            <span className="material-symbols-outlined text-sm">add</span>
-                            Añadir otro autor
+                            <span className="material-symbols-outlined text-base">add</span>
+                            {isEn ? 'Add another author' : 'Añadir otro autor'}
                           </button>
                         </div>
                       )}
@@ -677,21 +740,23 @@ export default function Tools() {
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div>
                           <div className="flex items-center justify-between mb-1.5">
-                            <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">Año</span>
-                            <label className="flex items-center gap-1 text-[10px] font-bold text-on-surface-variant cursor-pointer">
+                            <span className="text-xs sm:text-sm font-black uppercase tracking-wider text-on-surface-variant">
+                              {isEn ? 'Year' : 'Año'}
+                            </span>
+                            <label className="flex items-center gap-1 text-xs font-bold text-on-surface-variant cursor-pointer">
                               <input
                                 type="checkbox"
                                 checked={fields.noDate}
                                 onChange={(e) => handleFieldChange('noDate', e.target.checked)}
                                 className="accent-primary-container"
                               />
-                              s.f.
+                              {isEn ? 'n.d.' : 's.f.'}
                             </label>
                           </div>
                           <input
                             type="text"
                             disabled={fields.noDate}
-                            value={fields.noDate ? 's.f.' : fields.year}
+                            value={fields.noDate ? (isEn ? 'n.d.' : 's.f.') : fields.year}
                             onChange={(e) => handleFieldChange('year', e.target.value)}
                             placeholder="2024"
                             className={`${inputClass} disabled:opacity-50`}
@@ -699,12 +764,12 @@ export default function Tools() {
                         </div>
 
                         <div className="sm:col-span-2">
-                          <label className={labelClass}>Título</label>
+                          <label className={labelClass}>{isEn ? 'Title' : 'Título'}</label>
                           <input
                             type="text"
                             value={fields.title}
                             onChange={(e) => handleFieldChange('title', e.target.value)}
-                            placeholder="Ej: Metodología de la investigación"
+                            placeholder={isEn ? 'E.g., Research Methodology' : 'Ej: Metodología de la investigación'}
                             className={inputClass}
                           />
                         </div>
@@ -713,7 +778,7 @@ export default function Tools() {
                       {sourceType === 'book' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className={labelClass}>Editorial</label>
+                            <label className={labelClass}>{isEn ? 'Publisher' : 'Editorial'}</label>
                             <input
                               type="text"
                               value={fields.publisher}
@@ -723,12 +788,14 @@ export default function Tools() {
                             />
                           </div>
                           <div>
-                            <label className={labelClass}>Edición (Opcional)</label>
+                            <label className={labelClass}>
+                              {isEn ? 'Edition (Optional)' : 'Edición (Opcional)'}
+                            </label>
                             <input
                               type="text"
                               value={fields.edition}
                               onChange={(e) => handleFieldChange('edition', e.target.value)}
-                              placeholder="Ej: 6ª"
+                              placeholder={isEn ? 'E.g., 6th' : 'Ej: 6ª'}
                               className={inputClass}
                             />
                           </div>
@@ -737,12 +804,14 @@ export default function Tools() {
 
                       {sourceType === 'web' && (
                         <div>
-                          <label className={labelClass}>Nombre del Sitio Web</label>
+                          <label className={labelClass}>
+                            {isEn ? 'Website Name' : 'Nombre del Sitio Web'}
+                          </label>
                           <input
                             type="text"
                             value={fields.siteName}
                             onChange={(e) => handleFieldChange('siteName', e.target.value)}
-                            placeholder="Ej: SciELO / OMS"
+                            placeholder="Ej: SciELO / WHO"
                             className={inputClass}
                           />
                         </div>
@@ -751,17 +820,17 @@ export default function Tools() {
                       {sourceType === 'journal' && (
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                           <div className="sm:col-span-2">
-                            <label className={labelClass}>Revista</label>
+                            <label className={labelClass}>{isEn ? 'Journal' : 'Revista'}</label>
                             <input
                               type="text"
                               value={fields.journalName}
                               onChange={(e) => handleFieldChange('journalName', e.target.value)}
-                              placeholder="Nombre de la revista científica"
+                              placeholder={isEn ? 'Scientific journal name' : 'Nombre de la revista científica'}
                               className={inputClass}
                             />
                           </div>
                           <div>
-                            <label className={labelClass}>Vol. / Páginas</label>
+                            <label className={labelClass}>{isEn ? 'Vol. / Pages' : 'Vol. / Páginas'}</label>
                             <div className="grid grid-cols-2 gap-1.5">
                               <input
                                 type="text"
@@ -785,24 +854,30 @@ export default function Tools() {
                       {sourceType === 'thesis' && (
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           <div>
-                            <label className={labelClass}>Tipo de Tesis</label>
+                            <label className={labelClass}>{isEn ? 'Thesis Type' : 'Tipo de Tesis'}</label>
                             <select
                               value={fields.thesisType}
                               onChange={(e) => handleFieldChange('thesisType', e.target.value)}
                               className={inputClass}
                             >
-                              <option value="Tesis de licenciatura">Tesis de pregrado / licenciatura</option>
-                              <option value="Tesis de maestría">Tesis de maestría</option>
-                              <option value="Tesis doctoral">Tesis doctoral</option>
+                              <option value="Tesis de licenciatura">
+                                {isEn ? "Bachelor's thesis" : 'Tesis de pregrado / licenciatura'}
+                              </option>
+                              <option value="Tesis de maestría">
+                                {isEn ? "Master's thesis" : 'Tesis de maestría'}
+                              </option>
+                              <option value="Tesis doctoral">
+                                {isEn ? 'Doctoral dissertation' : 'Tesis doctoral'}
+                              </option>
                             </select>
                           </div>
                           <div>
-                            <label className={labelClass}>Universidad</label>
+                            <label className={labelClass}>{isEn ? 'University' : 'Universidad'}</label>
                             <input
                               type="text"
                               value={fields.university}
                               onChange={(e) => handleFieldChange('university', e.target.value)}
-                              placeholder="Nombre de la institución"
+                              placeholder={isEn ? 'Institution name' : 'Nombre de la institución'}
                               className={inputClass}
                             />
                           </div>
@@ -811,7 +886,9 @@ export default function Tools() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         <div className="sm:col-span-2">
-                          <label className={labelClass}>Enlace URL o DOI (Opcional)</label>
+                          <label className={labelClass}>
+                            {isEn ? 'URL or DOI Link (Optional)' : 'Enlace URL o DOI (Opcional)'}
+                          </label>
                           <input
                             type="text"
                             value={fields.url}
@@ -821,12 +898,14 @@ export default function Tools() {
                           />
                         </div>
                         <div>
-                          <label className={labelClass}>Página (Opcional)</label>
+                          <label className={labelClass}>
+                            {isEn ? 'Page (Optional)' : 'Página (Opcional)'}
+                          </label>
                           <input
                             type="text"
                             value={fields.quotePage}
                             onChange={(e) => handleFieldChange('quotePage', e.target.value)}
-                            placeholder="Ej: 45"
+                            placeholder="45"
                             className={inputClass}
                           />
                         </div>
@@ -837,63 +916,75 @@ export default function Tools() {
                   {/* Tarjeta Derecha: Resultado limpio */}
                   <div className="lg:col-span-5 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-md space-y-4">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-base font-black text-on-surface">
-                        Resultado listo para copiar
+                      <h2 className="text-base sm:text-lg font-black text-on-surface">
+                        {isEn ? 'Ready to copy' : 'Resultado listo para copiar'}
                       </h2>
                       <button
                         type="button"
                         onClick={handleClearForm}
-                        className="text-xs font-bold text-on-surface-variant hover:text-primary-container"
+                        className="text-xs sm:text-sm font-bold text-on-surface-variant hover:text-primary-container"
                       >
-                        Limpiar
+                        {isEn ? 'Clear' : 'Limpiar'}
                       </button>
                     </div>
 
                     {/* Cita Parentética */}
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant block">
-                          Cita entre paréntesis
+                        <span className="text-xs font-black uppercase tracking-wider text-on-surface-variant block">
+                          {isEn ? 'Parenthetical citation' : 'Cita entre paréntesis'}
                         </span>
-                        <p className="text-sm font-bold text-on-surface mt-0.5 truncate">
+                        <p className="text-sm sm:text-base font-bold text-on-surface mt-0.5 truncate">
                           {generated.parentheticalCitation}
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => copyText(generated.parentheticalCitation, 'Cita copiada')}
-                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-black/30 border border-slate-200 dark:border-white/10 text-xs font-black text-on-surface hover:border-primary-container"
+                        onClick={() =>
+                          copyText(
+                            generated.parentheticalCitation,
+                            isEn ? 'Citation copied' : 'Cita copiada'
+                          )
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-white dark:bg-black/30 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black text-on-surface hover:border-primary-container"
                       >
-                        Copiar
+                        {isEn ? 'Copy' : 'Copiar'}
                       </button>
                     </div>
 
                     {/* Cita Narrativa */}
                     <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant block">
-                          Cita narrativa
+                        <span className="text-xs font-black uppercase tracking-wider text-on-surface-variant block">
+                          {isEn ? 'Narrative citation' : 'Cita narrativa'}
                         </span>
-                        <p className="text-sm font-bold text-on-surface mt-0.5 truncate">
+                        <p className="text-sm sm:text-base font-bold text-on-surface mt-0.5 truncate">
                           {generated.narrativeCitation}
                         </p>
                       </div>
                       <button
                         type="button"
-                        onClick={() => copyText(generated.narrativeCitation, 'Cita narrativa copiada')}
-                        className="px-3 py-1.5 rounded-xl bg-white dark:bg-black/30 border border-slate-200 dark:border-white/10 text-xs font-black text-on-surface hover:border-primary-container"
+                        onClick={() =>
+                          copyText(
+                            generated.narrativeCitation,
+                            isEn ? 'Narrative citation copied' : 'Cita narrativa copiada'
+                          )
+                        }
+                        className="px-3.5 py-2 rounded-xl bg-white dark:bg-black/30 border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black text-on-surface hover:border-primary-container"
                       >
-                        Copiar
+                        {isEn ? 'Copy' : 'Copiar'}
                       </button>
                     </div>
 
                     {/* Referencia Bibliográfica */}
                     <div className="p-4 rounded-2xl bg-orange-50/60 dark:bg-orange-950/20 border border-orange-200/70 dark:border-orange-500/25 space-y-3">
-                      <span className="text-[10px] font-black uppercase tracking-wider text-primary-container block">
-                        Referencia Bibliográfica (Sangría Francesa)
+                      <span className="text-xs font-black uppercase tracking-wider text-primary-container block">
+                        {isEn
+                          ? 'Bibliographic Reference (Hanging Indent)'
+                          : 'Referencia Bibliográfica (Sangría Francesa)'}
                       </span>
 
-                      <div className="bg-white dark:bg-black/30 p-3.5 rounded-xl border border-orange-100 dark:border-white/5 text-xs sm:text-sm text-on-surface leading-relaxed pl-9 -indent-6 font-serif break-words">
+                      <div className="bg-white dark:bg-black/30 p-3.5 rounded-xl border border-orange-100 dark:border-white/5 text-sm text-on-surface leading-relaxed pl-9 -indent-6 font-serif break-words">
                         <span>{generated.richParts.beforeItalic}</span>
                         <em className="italic">{generated.richParts.italic}</em>
                         <span>{generated.richParts.afterItalic}</span>
@@ -902,19 +993,26 @@ export default function Tools() {
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => copyText(generated.plainReference, 'Referencia copiada')}
-                          className="flex-1 py-2.5 px-3 rounded-xl bg-primary-container hover:opacity-90 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm"
+                          onClick={() =>
+                            copyText(
+                              generated.plainReference,
+                              isEn ? 'Reference copied' : 'Referencia copiada'
+                            )
+                          }
+                          className="flex-1 py-2.5 px-3 rounded-xl bg-primary-container hover:opacity-90 text-white text-xs sm:text-sm font-black flex items-center justify-center gap-1.5 shadow-sm"
                         >
                           <span className="material-symbols-outlined text-base">content_copy</span>
-                          Copiar Referencia
+                          {isEn ? 'Copy Reference' : 'Copiar Referencia'}
                         </button>
                         <button
                           type="button"
                           onClick={handleSaveReference}
-                          className="py-2.5 px-3.5 rounded-xl bg-white dark:bg-white/10 text-on-surface border border-slate-200 dark:border-white/10 text-xs font-black flex items-center gap-1"
+                          className="py-2.5 px-3.5 rounded-xl bg-white dark:bg-white/10 text-on-surface border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black flex items-center gap-1"
                         >
-                          <span className="material-symbols-outlined text-base text-primary-container">bookmark_add</span>
-                          Guardar
+                          <span className="material-symbols-outlined text-base text-primary-container">
+                            bookmark_add
+                          </span>
+                          {isEn ? 'Save' : 'Guardar'}
                         </button>
                       </div>
                     </div>
@@ -927,7 +1025,9 @@ export default function Tools() {
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   <div className="lg:col-span-6 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm space-y-4">
                     <div className="flex items-center justify-between">
-                      <h2 className="text-base font-black text-on-surface">Fragmento a citar</h2>
+                      <h2 className="text-base sm:text-lg font-black text-on-surface">
+                        {isEn ? 'Quote passage' : 'Fragmento a citar'}
+                      </h2>
                       <span
                         className={`px-3 py-1 rounded-full text-xs font-black ${
                           quoteAnalysis.isBlockQuote
@@ -935,8 +1035,14 @@ export default function Tools() {
                             : 'bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300'
                         }`}
                       >
-                        {quoteAnalysis.wordCount} palabras ·{' '}
-                        {quoteAnalysis.isBlockQuote ? 'Cita en Bloque (≥40)' : 'Cita Corta (<40)'}
+                        {quoteAnalysis.wordCount} {isEn ? 'words' : 'palabras'} ·{' '}
+                        {quoteAnalysis.isBlockQuote
+                          ? isEn
+                            ? 'Block Quote (≥40)'
+                            : 'Cita en Bloque (≥40)'
+                          : isEn
+                          ? 'Short Quote (<40)'
+                          : 'Cita Corta (<40)'}
                       </span>
                     </div>
 
@@ -944,13 +1050,17 @@ export default function Tools() {
                       rows={5}
                       value={quoteText}
                       onChange={(e) => setQuoteText(e.target.value)}
-                      placeholder="Pega aquí el texto exacto que vas a citar..."
+                      placeholder={
+                        isEn
+                          ? 'Paste the exact text you want to quote here...'
+                          : 'Pega aquí el texto exacto que vas a citar...'
+                      }
                       className={`${inputClass} resize-none leading-relaxed`}
                     />
 
                     <div className="grid grid-cols-3 gap-2.5">
                       <div>
-                        <label className={labelClass}>Apellido</label>
+                        <label className={labelClass}>{isEn ? 'Last name' : 'Apellido'}</label>
                         <input
                           type="text"
                           value={quoteAuthor}
@@ -960,7 +1070,7 @@ export default function Tools() {
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Año</label>
+                        <label className={labelClass}>{isEn ? 'Year' : 'Año'}</label>
                         <input
                           type="text"
                           value={quoteYear}
@@ -970,7 +1080,7 @@ export default function Tools() {
                         />
                       </div>
                       <div>
-                        <label className={labelClass}>Página</label>
+                        <label className={labelClass}>{isEn ? 'Page' : 'Página'}</label>
                         <input
                           type="text"
                           value={quotePageNum}
@@ -983,50 +1093,64 @@ export default function Tools() {
                   </div>
 
                   <div className="lg:col-span-6 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-md space-y-4">
-                    <div className="p-3.5 rounded-2xl bg-orange-50/70 dark:bg-orange-950/25 border border-orange-200/60 dark:border-orange-500/20 text-xs text-on-surface">
+                    <div className="p-3.5 rounded-2xl bg-orange-50/70 dark:bg-orange-950/25 border border-orange-200/60 dark:border-orange-500/20 text-xs sm:text-sm text-on-surface">
                       {quoteAnalysis.isBlockQuote ? (
                         <p>
-                          <strong>40 palabras o más (Cita en Bloque):</strong> Va en un párrafo aparte con sangría de 1.27 cm, <strong>sin comillas</strong> y con el punto final antes del paréntesis.
+                          <strong>
+                            {isEn ? '40 words or more (Block Quote):' : '40 palabras o más (Cita en Bloque):'}
+                          </strong>{' '}
+                          {isEn
+                            ? 'Placed in a standalone paragraph indented 1.27 cm (0.5 in), without quotation marks, and with the final period before the parentheses.'
+                            : 'Va en un párrafo aparte con sangría de 1.27 cm, sin comillas y con el punto final antes del paréntesis.'}
                         </p>
                       ) : (
                         <p>
-                          <strong>Menos de 40 palabras (Cita Corta):</strong> Va integrada en tu párrafo <strong>entre comillas dobles</strong> y el punto final va después del paréntesis.
+                          <strong>
+                            {isEn ? 'Fewer than 40 words (Short Quote):' : 'Menos de 40 palabras (Cita Corta):'}
+                          </strong>{' '}
+                          {isEn
+                            ? 'Integrated into your paragraph inside double quotation marks, with the period placed after the parentheses.'
+                            : 'Va integrada en tu párrafo entre comillas dobles y el punto final va después del paréntesis.'}
                         </p>
                       )}
                     </div>
 
                     <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
-                          Formato Parentético
+                        <span className="text-xs font-black uppercase tracking-wider text-on-surface-variant">
+                          {isEn ? 'Parenthetical Format' : 'Formato Parentético'}
                         </span>
                         <button
                           type="button"
-                          onClick={() => copyText(quoteAnalysis.parenthetical, 'Cita copiada')}
-                          className="px-3 py-1 rounded-lg bg-primary-container text-white text-xs font-black"
+                          onClick={() =>
+                            copyText(quoteAnalysis.parenthetical, isEn ? 'Quote copied' : 'Cita copiada')
+                          }
+                          className="px-3.5 py-1.5 rounded-lg bg-primary-container text-white text-xs sm:text-sm font-black"
                         >
-                          Copiar
+                          {isEn ? 'Copy' : 'Copiar'}
                         </button>
                       </div>
-                      <p className="text-xs sm:text-sm font-serif text-on-surface leading-relaxed whitespace-pre-wrap">
+                      <p className="text-sm font-serif text-on-surface leading-relaxed whitespace-pre-wrap">
                         {quoteAnalysis.parenthetical}
                       </p>
                     </div>
 
                     <div className="p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 space-y-2">
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
-                          Formato Narrativo
+                        <span className="text-xs font-black uppercase tracking-wider text-on-surface-variant">
+                          {isEn ? 'Narrative Format' : 'Formato Narrativo'}
                         </span>
                         <button
                           type="button"
-                          onClick={() => copyText(quoteAnalysis.narrative, 'Cita copiada')}
-                          className="px-3 py-1 rounded-lg bg-primary-container text-white text-xs font-black"
+                          onClick={() =>
+                            copyText(quoteAnalysis.narrative, isEn ? 'Quote copied' : 'Cita copiada')
+                          }
+                          className="px-3.5 py-1.5 rounded-lg bg-primary-container text-white text-xs sm:text-sm font-black"
                         >
-                          Copiar
+                          {isEn ? 'Copy' : 'Copiar'}
                         </button>
                       </div>
-                      <p className="text-xs sm:text-sm font-serif text-on-surface leading-relaxed whitespace-pre-wrap">
+                      <p className="text-sm font-serif text-on-surface leading-relaxed whitespace-pre-wrap">
                         {quoteAnalysis.narrative}
                       </p>
                     </div>
@@ -1038,22 +1162,26 @@ export default function Tools() {
               {apaTab === 'titulos' && (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                   <div className="lg:col-span-5 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm space-y-3">
-                    <label className={labelClass}>Selecciona el Nivel (1 al 5)</label>
-                    {APA_HEADING_LEVELS.map((item) => {
+                    <label className={labelClass}>
+                      {isEn ? 'Select Heading Level (1 to 5)' : 'Selecciona el Nivel (1 al 5)'}
+                    </label>
+                    {apaHeadingLevels.map((item) => {
                       const active = selectedHeadingLevel === item.level;
                       return (
                         <button
                           key={item.level}
                           type="button"
                           onClick={() => setSelectedHeadingLevel(item.level)}
-                          className={`w-full text-left p-3 rounded-2xl border transition-all flex items-center justify-between ${
+                          className={`w-full text-left p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
                             active
                               ? 'border-primary-container bg-orange-50/80 dark:bg-orange-950/30 text-on-surface'
                               : 'border-slate-200/80 dark:border-white/10 text-on-surface-variant hover:text-on-surface'
                           }`}
                         >
                           <span className="text-xs sm:text-sm font-black">{item.name}</span>
-                          <span className="text-xs font-black text-primary-container">N{item.level}</span>
+                          <span className="text-xs sm:text-sm font-black text-primary-container">
+                            N{item.level}
+                          </span>
                         </button>
                       );
                     })}
@@ -1061,7 +1189,9 @@ export default function Tools() {
 
                   <div className="lg:col-span-7 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-md space-y-4">
                     <div>
-                      <label className={labelClass}>Texto de prueba para tu título</label>
+                      <label className={labelClass}>
+                        {isEn ? 'Sample text for your heading' : 'Texto de prueba para tu título'}
+                      </label>
                       <input
                         type="text"
                         value={headingSampleText}
@@ -1074,7 +1204,7 @@ export default function Tools() {
                       {activeHeadingObj.rules.map((r, i) => (
                         <span
                           key={i}
-                          className="px-3 py-1 rounded-xl bg-slate-100 dark:bg-white/5 text-xs font-bold text-on-surface"
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-xs sm:text-sm font-bold text-on-surface"
                         >
                           ✓ {r}
                         </span>
@@ -1085,18 +1215,29 @@ export default function Tools() {
                       {!activeHeadingObj.inlineText ? (
                         <>
                           <div className={`${activeHeadingObj.alignment} text-on-surface`}>
-                            {(headingSampleText || 'Título de Ejemplo').replace(/\.+$/, '')}
+                            {(headingSampleText || (isEn ? 'Sample Heading' : 'Título de Ejemplo')).replace(
+                              /\.+$/,
+                              ''
+                            )}
                           </div>
                           <p className="indent-8 text-on-surface-variant">
-                            El párrafo comienza debajo con sangría de primera línea de 1.27 cm y doble espacio.
+                            {isEn
+                              ? 'The paragraph begins on the next line with a 1.27 cm (0.5 in) first-line indent and double spacing.'
+                              : 'El párrafo comienza debajo con sangría de primera línea de 1.27 cm y doble espacio.'}
                           </p>
                         </>
                       ) : (
                         <p className="text-on-surface-variant">
                           <span className={`${activeHeadingObj.alignment} text-on-surface mr-2`}>
-                            {(headingSampleText || 'Título de Ejemplo').replace(/\.+$/, '')}.
+                            {(headingSampleText || (isEn ? 'Sample Heading' : 'Título de Ejemplo')).replace(
+                              /\.+$/,
+                              ''
+                            )}
+                            .
                           </span>
-                          El texto del párrafo comienza inmediatamente en la misma línea después del punto.
+                          {isEn
+                            ? 'The paragraph text starts immediately on the same line right after the period.'
+                            : 'El texto del párrafo comienza inmediatamente en la misma línea después del punto.'}
                         </p>
                       )}
                     </div>
@@ -1107,23 +1248,25 @@ export default function Tools() {
               {/* Sub-vista D: Referencias Guardadas (A-Z) */}
               {apaTab === 'guardadas' && (
                 <div className="bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
                       <h2 className="text-base sm:text-lg font-black text-on-surface">
-                        Mi Bibliografía Ordenada (A-Z)
+                        {isEn ? 'My Sorted Bibliography (A-Z)' : 'Mi Bibliografía Ordenada (A-Z)'}
                       </h2>
-                      <p className="text-xs text-on-surface-variant">
-                        Todas las fuentes que guardes se ordenan automáticamente alfabéticamente.
+                      <p className="text-xs sm:text-sm text-on-surface-variant">
+                        {isEn
+                          ? 'Every reference you save is automatically sorted alphabetically.'
+                          : 'Todas las fuentes que guardes se ordenan automáticamente alfabéticamente.'}
                       </p>
                     </div>
                     {savedRefs.length > 0 && (
                       <button
                         type="button"
                         onClick={handleCopyAllBibliography}
-                        className="px-4 py-2 rounded-xl bg-primary-container text-white text-xs font-black flex items-center gap-1.5"
+                        className="px-4 py-2.5 rounded-xl bg-primary-container text-white text-xs sm:text-sm font-black flex items-center gap-1.5"
                       >
-                        <span className="material-symbols-outlined text-sm">content_copy</span>
-                        Copiar toda la bibliografía
+                        <span className="material-symbols-outlined text-base">content_copy</span>
+                        {isEn ? 'Copy full bibliography' : 'Copiar toda la bibliografía'}
                       </button>
                     )}
                   </div>
@@ -1134,7 +1277,15 @@ export default function Tools() {
                         bookmark_border
                       </span>
                       <p className="text-xs sm:text-sm text-on-surface-variant">
-                        Aún no has guardado referencias. Crea una en la pestaña <strong>Citar Fuente</strong> y pulsa <strong>Guardar</strong>.
+                        {isEn ? (
+                          <>
+                            You haven't saved any references yet. Create one in the <strong>Cite Source</strong> tab and click <strong>Save</strong>.
+                          </>
+                        ) : (
+                          <>
+                            Aún no has guardado referencias. Crea una en la pestaña <strong>Citar Fuente</strong> y pulsa <strong>Guardar</strong>.
+                          </>
+                        )}
                       </p>
                     </div>
                   ) : (
@@ -1152,9 +1303,14 @@ export default function Tools() {
                           <div className="flex items-center gap-1 flex-shrink-0">
                             <button
                               type="button"
-                              onClick={() => copyText(item.plainReference, 'Referencia copiada')}
+                              onClick={() =>
+                                copyText(
+                                  item.plainReference,
+                                  isEn ? 'Reference copied' : 'Referencia copiada'
+                                )
+                              }
                               className="p-2 rounded-xl hover:bg-slate-200 dark:hover:bg-white/10 text-on-surface-variant"
-                              title="Copiar"
+                              title={isEn ? 'Copy' : 'Copiar'}
                             >
                               <span className="material-symbols-outlined text-base">content_copy</span>
                             </button>
@@ -1162,7 +1318,7 @@ export default function Tools() {
                               type="button"
                               onClick={() => handleRemoveRef(item.id)}
                               className="p-2 rounded-xl hover:bg-red-100 dark:hover:bg-red-950/40 text-red-500"
-                              title="Eliminar"
+                              title={isEn ? 'Remove' : 'Eliminar'}
                             >
                               <span className="material-symbols-outlined text-base">delete</span>
                             </button>
@@ -1188,33 +1344,33 @@ export default function Tools() {
               transition={{ duration: 0.2 }}
               className="space-y-6"
             >
-              <div className="flex items-center gap-3 pb-2 border-b border-slate-200/70 dark:border-white/10">
+              <div className="flex items-center gap-3 pb-3 border-b border-slate-200/70 dark:border-white/10">
                 <button
                   type="button"
                   onClick={() => setSelectedTool(null)}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white dark:bg-[#1a1512] border border-slate-200 dark:border-white/10 text-xs font-black text-on-surface hover:border-primary-container hover:text-primary-container transition-colors shadow-sm"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white dark:bg-[#1a1512] border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black text-on-surface hover:border-primary-container hover:text-primary-container transition-colors shadow-sm"
                 >
-                  <span className="material-symbols-outlined text-base">arrow_back</span>
-                  Herramientas
+                  <span className="material-symbols-outlined text-lg">arrow_back</span>
+                  {isEn ? 'Tools' : 'Herramientas'}
                 </button>
                 <h1 className="text-lg sm:text-xl font-black text-on-surface">
-                  Asistente de Redacción y Extensión
+                  {isEn ? 'Writing & Length Assistant' : 'Asistente de Redacción y Extensión'}
                 </h1>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                 <div className="lg:col-span-6 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-sm space-y-4">
                   <div className="flex items-center justify-between">
-                    <h2 className="text-base font-black text-on-surface">
-                      Calculadora de Páginas (Doble Espacio)
+                    <h2 className="text-base sm:text-lg font-black text-on-surface">
+                      {isEn ? 'Page Calculator (Double-Spaced)' : 'Calculadora de Páginas (Doble Espacio)'}
                     </h2>
                     {essayText && (
                       <button
                         type="button"
                         onClick={() => setEssayText('')}
-                        className="text-xs font-bold text-on-surface-variant hover:text-primary-container"
+                        className="text-xs sm:text-sm font-bold text-on-surface-variant hover:text-primary-container"
                       >
-                        Limpiar
+                        {isEn ? 'Clear' : 'Limpiar'}
                       </button>
                     )}
                   </div>
@@ -1223,68 +1379,100 @@ export default function Tools() {
                     rows={6}
                     value={essayText}
                     onChange={(e) => setEssayText(e.target.value)}
-                    placeholder="Pega tu texto aquí para estimar cuántas páginas ocupará con interlineado doble..."
+                    placeholder={
+                      isEn
+                        ? 'Paste your text here to estimate how many double-spaced pages it will take...'
+                        : 'Pega tu texto aquí para estimar cuántas páginas ocupará con interlineado doble...'
+                    }
                     className={`${inputClass} resize-none leading-relaxed`}
                   />
 
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-center">
-                      <span className="text-lg font-black text-primary-container block">{essayMetrics.words}</span>
-                      <span className="text-[10px] font-black uppercase text-on-surface-variant">Palabras</span>
+                      <span className="text-lg font-black text-primary-container block">
+                        {essayMetrics.words}
+                      </span>
+                      <span className="text-xs font-black uppercase text-on-surface-variant">
+                        {isEn ? 'Words' : 'Palabras'}
+                      </span>
                     </div>
                     <div className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-center">
-                      <span className="text-lg font-black text-on-surface block">~{essayMetrics.apaPages}</span>
-                      <span className="text-[10px] font-black uppercase text-on-surface-variant">Páginas APA</span>
+                      <span className="text-lg font-black text-on-surface block">
+                        ~{essayMetrics.apaPages}
+                      </span>
+                      <span className="text-xs font-black uppercase text-on-surface-variant">
+                        {isEn ? 'APA Pages' : 'Páginas APA'}
+                      </span>
                     </div>
                     <div className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-center">
-                      <span className="text-lg font-black text-on-surface block">{essayMetrics.paragraphs}</span>
-                      <span className="text-[10px] font-black uppercase text-on-surface-variant">Párrafos</span>
+                      <span className="text-lg font-black text-on-surface block">
+                        {essayMetrics.paragraphs}
+                      </span>
+                      <span className="text-xs font-black uppercase text-on-surface-variant">
+                        {isEn ? 'Paragraphs' : 'Párrafos'}
+                      </span>
                     </div>
                     <div className="p-3 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 text-center">
-                      <span className="text-lg font-black text-on-surface block">{essayMetrics.readingMinutes} min</span>
-                      <span className="text-[10px] font-black uppercase text-on-surface-variant">Lectura</span>
+                      <span className="text-lg font-black text-on-surface block">
+                        {essayMetrics.readingMinutes} min
+                      </span>
+                      <span className="text-xs font-black uppercase text-on-surface-variant">
+                        {isEn ? 'Reading' : 'Lectura'}
+                      </span>
                     </div>
                   </div>
                 </div>
 
                 <div className="lg:col-span-6 bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-5 sm:p-6 shadow-md space-y-4">
-                  <h2 className="text-base font-black text-on-surface">Conectores Académicos</h2>
+                  <h2 className="text-base sm:text-lg font-black text-on-surface">
+                    {isEn ? 'Academic Connectors' : 'Conectores Académicos'}
+                  </h2>
                   <input
                     type="text"
                     value={connectorSearch}
                     onChange={(e) => setConnectorSearch(e.target.value)}
-                    placeholder="Buscar conector (ej. citar, contrastar, concluir)..."
+                    placeholder={
+                      isEn
+                        ? 'Search connector (e.g., cite, contrast, conclude)...'
+                        : 'Buscar conector (ej. citar, contrastar, concluir)...'
+                    }
                     className={inputClass}
                   />
                   <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
-                    {ACADEMIC_CONNECTORS.filter(
-                      (g) =>
-                        !connectorSearch.trim() ||
-                        g.category.toLowerCase().includes(connectorSearch.toLowerCase()) ||
-                        g.items.some((i) => i.toLowerCase().includes(connectorSearch.toLowerCase()))
-                    ).map((group, idx) => (
-                      <div
-                        key={idx}
-                        className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 space-y-2"
-                      >
-                        <span className="text-xs font-black text-primary-container block">{group.category}</span>
-                        {group.items.map((phrase, pIdx) => (
-                          <div
-                            key={pIdx}
-                            className="flex items-center justify-between gap-2 p-2 rounded-xl bg-white dark:bg-black/30 text-xs text-on-surface"
-                          >
-                            <span className="truncate">{phrase}</span>
-                            <button
-                              type="button"
-                              onClick={() => copyText(phrase, 'Conector copiado')}
-                              className="px-2.5 py-1 rounded-lg bg-primary-container/10 hover:bg-primary-container hover:text-white text-primary-container text-[11px] font-black"
+                    {academicConnectors
+                      .filter(
+                        (g) =>
+                          !connectorSearch.trim() ||
+                          g.category.toLowerCase().includes(connectorSearch.toLowerCase()) ||
+                          g.items.some((i) => i.toLowerCase().includes(connectorSearch.toLowerCase()))
+                      )
+                      .map((group, idx) => (
+                        <div
+                          key={idx}
+                          className="p-3.5 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/70 dark:border-white/10 space-y-2"
+                        >
+                          <span className="text-xs sm:text-sm font-black text-primary-container block">
+                            {group.category}
+                          </span>
+                          {group.items.map((phrase, pIdx) => (
+                            <div
+                              key={pIdx}
+                              className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-white dark:bg-black/30 text-xs sm:text-sm text-on-surface"
                             >
-                              Copiar
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    ))}
+                              <span className="truncate">{phrase}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  copyText(phrase, isEn ? 'Connector copied' : 'Conector copiado')
+                                }
+                                className="px-3 py-1.5 rounded-lg bg-primary-container/10 hover:bg-primary-container hover:text-white text-primary-container text-xs font-black"
+                              >
+                                {isEn ? 'Copy' : 'Copiar'}
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      ))}
                   </div>
                 </div>
               </div>

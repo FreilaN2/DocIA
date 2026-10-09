@@ -9,7 +9,11 @@ export function isPremiumUser() {
     const userStr = localStorage.getItem('user');
     if (!userStr) return false;
     const user = JSON.parse(userStr);
-    return user?.plan === 'pro' || user?.isAdmin === true;
+    return (
+      user?.plan === 'pro' ||
+      user?.isAdmin === true ||
+      Number(user?.tokens || user?.totalTokens || 0) > 0
+    );
   } catch {
     return false;
   }
@@ -22,7 +26,11 @@ export function useIsPremium() {
   const [isPremium, setIsPremium] = useState(isPremiumUser);
 
   useEffect(() => {
-    const check = () => setIsPremium(isPremiumUser());
+    const check = () => {
+      const prem = isPremiumUser();
+      setIsPremium(prem);
+      if (prem) cleanupAds();
+    };
     check();
     window.addEventListener('storage', check);
     window.addEventListener('authChange', check);
@@ -41,17 +49,27 @@ export function useIsPremium() {
  */
 export function cleanupAds() {
   try {
-    // 1. Eliminar scripts inyectados
+    // 1. Eliminar scripts inyectados de redes publicitarias
     document.querySelectorAll(
-      'script[src*="profitableratecpmnetwork"], script[src*="highrevenueformat"], script[src*="effectivecpmnetwork"], script[src*="highperformanceformat"]'
+      'script[src*="profitableratecpmnetwork"], script[src*="highrevenueformat"], script[src*="effectivecpmnetwork"], script[src*="highperformanceformat"], script[src*="googlesyndication"]'
     ).forEach(el => el.remove());
 
     // 2. Eliminar iframes o contenedores flotantes inyectados en body
     document.querySelectorAll(
-      'iframe[src*="profitableratecpmnetwork"], iframe[src*="highrevenueformat"], iframe[src*="effectivecpmnetwork"], [data-docai-pushed]'
+      'iframe[src*="profitableratecpmnetwork"], iframe[src*="highrevenueformat"], iframe[src*="effectivecpmnetwork"], [data-docai-pushed], ins.adsbygoogle'
     ).forEach(el => el.remove());
 
-    // 3. Eliminar estilos de override
+    // 3. Eliminar cualquier nodo flotante ajeno a #root inyectado por Social Bar / Popunder directamente en body
+    document.querySelectorAll('body > div:not(#root), body > iframe').forEach(el => {
+      if (el.hasAttribute('data-adblock-bait')) return;
+      const id = (typeof el.id === 'string') ? el.id.toLowerCase() : '';
+      const cls = (typeof el.className === 'string') ? el.className.toLowerCase() : '';
+      if (!id.includes('react') && !cls.includes('toast') && !cls.includes('modal') && !cls.includes('adsbox')) {
+        el.remove();
+      }
+    });
+
+    // 4. Eliminar estilos de override
     const styleTag = document.getElementById('docai-ad-override');
     if (styleTag && styleTag.parentNode) {
       styleTag.parentNode.removeChild(styleTag);
@@ -359,27 +377,37 @@ export function AdGlobal() {
       });
     }, 300);
 
-    // 3. Inyectar Social Bar y Popunder
-    let script1 = document.querySelector(`script[src="${AD_CONFIG.SOCIAL_BAR_SRC}"]`);
-    if (!script1) {
-      script1 = document.createElement('script');
-      script1.src = AD_CONFIG.SOCIAL_BAR_SRC;
-      script1.async = true;
-      script1.defer = true;
-      document.body.appendChild(script1);
-    }
+    // 3. Inyectar Social Bar y Popunder (esperar breve sincronización si hay sesión activa para evitar falsos positivos en móvil)
+    const injectGlobalScripts = () => {
+      if (isPremiumUser()) {
+        cleanupAds();
+        return;
+      }
+      let script1 = document.querySelector(`script[src="${AD_CONFIG.SOCIAL_BAR_SRC}"]`);
+      if (!script1) {
+        script1 = document.createElement('script');
+        script1.src = AD_CONFIG.SOCIAL_BAR_SRC;
+        script1.async = true;
+        script1.defer = true;
+        document.body.appendChild(script1);
+      }
 
-    let script2 = document.querySelector(`script[src="${AD_CONFIG.POPUNDER_SRC}"]`);
-    if (!script2) {
-      script2 = document.createElement('script');
-      script2.src = AD_CONFIG.POPUNDER_SRC;
-      script2.async = true;
-      script2.defer = true;
-      document.body.appendChild(script2);
-    }
+      let script2 = document.querySelector(`script[src="${AD_CONFIG.POPUNDER_SRC}"]`);
+      if (!script2) {
+        script2 = document.createElement('script');
+        script2.src = AD_CONFIG.POPUNDER_SRC;
+        script2.async = true;
+        script2.defer = true;
+        document.body.appendChild(script2);
+      }
+    };
+
+    const hasToken = !!localStorage.getItem('token');
+    const scriptTimer = setTimeout(injectGlobalScripts, hasToken ? 900 : 50);
 
     return () => {
       clearInterval(intervalId);
+      clearTimeout(scriptTimer);
       cleanupAds();
     };
   }, [isPremium]);

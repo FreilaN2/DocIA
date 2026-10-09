@@ -852,8 +852,6 @@ async def generar_final(
 
     if datos.incluir_indice and datos.plan == "pro":
         _force_update_fields(doc)
-    if datos.plan == "free":
-        añadir_marca_de_agua(doc)
 
     try:
         logger.info(f"Guardando DOCX en {out_docx}...")

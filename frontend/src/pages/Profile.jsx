@@ -20,7 +20,8 @@ const countryList = [
 ];
 
 export default function Profile() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = (i18n.language || 'es').startsWith('en');
   const [user, setUser] = useState(null);
 
   const [isCountryDropdownOpen, setIsCountryDropdownOpen] = useState(false);
@@ -461,17 +462,19 @@ export default function Profile() {
     user.tokens?.next_reset_at ||
     null;
 
+  const isUserPro = Boolean(user.plan === 'pro' || user.isAdmin || getDisplayTokens(user) > 0);
+
   const formattedPlanExpiration = rawExpiresAt
     ? new Date(rawExpiresAt).toLocaleDateString()
-    : user.plan === 'pro'
-      ? 'Renovación mensual'
-      : 'Sin vencimiento';
+    : isUserPro
+      ? (isEn ? 'No expiration' : 'Sin vencimiento')
+      : (isEn ? 'No active plan' : 'Sin plan actual');
 
   const tabs = [
-    { id: 'cuenta', label: 'Mi Cuenta', icon: 'person' },
-    { id: 'documentos', label: 'Documentos', icon: 'description' },
-    { id: 'referidos', label: 'Referidos', icon: 'group_add' },
-    { id: 'canjear', label: 'Canjear Códigos', icon: 'redeem' },
+    { id: 'cuenta', label: isEn ? 'My Account' : 'Mi Cuenta', icon: 'person' },
+    { id: 'documentos', label: isEn ? 'Documents' : 'Documentos', icon: 'description' },
+    { id: 'referidos', label: isEn ? 'Referrals' : 'Referidos', icon: 'group_add' },
+    { id: 'canjear', label: isEn ? 'Redeem Codes' : 'Canjear Códigos', icon: 'redeem' },
   ];
 
   return (
@@ -494,7 +497,7 @@ export default function Profile() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs sm:text-sm font-black text-amber-900 dark:text-amber-200">
-                    Pago Móvil en revisión
+                    {isEn ? 'Pago Móvil under review' : 'Pago Móvil en revisión'}
                   </p>
                   {user.lastPaymentRef && (
                     <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-md bg-amber-200/60 dark:bg-amber-900/50 text-amber-800 dark:text-amber-300">
@@ -503,7 +506,9 @@ export default function Profile() {
                   )}
                 </div>
                 <p className="text-xs text-amber-800/80 dark:text-amber-300/80 mt-0.5">
-                  Tu reporte de pago{user.lastPaymentAmountVes ? ` por Bs. ${user.lastPaymentAmountVes}` : ''} está siendo verificado por nuestro equipo. Tus tokens o plan se acreditarán automáticamente en cuanto sea aprobado.
+                  {isEn
+                    ? `Your payment report${user.lastPaymentAmountVes ? ` for Bs. ${user.lastPaymentAmountVes}` : ''} is being verified by our team. Your tokens or plan will be credited automatically once approved.`
+                    : `Tu reporte de pago${user.lastPaymentAmountVes ? ` por Bs. ${user.lastPaymentAmountVes}` : ''} está siendo verificado por nuestro equipo. Tus tokens o plan se acreditarán automáticamente en cuanto sea aprobado.`}
                 </p>
               </div>
             </div>
@@ -523,7 +528,7 @@ export default function Profile() {
               <div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-xs sm:text-sm font-black text-red-900 dark:text-red-200">
-                    Reporte de Pago Móvil no verificado
+                    {isEn ? 'Pago Móvil report not verified' : 'Reporte de Pago Móvil no verificado'}
                   </p>
                   {user.lastPaymentRef && (
                     <span className="text-[10px] font-mono font-black px-2 py-0.5 rounded-md bg-red-200/60 dark:bg-red-900/50 text-red-800 dark:text-red-300">
@@ -532,7 +537,9 @@ export default function Profile() {
                   )}
                 </div>
                 <p className="text-xs text-red-800/80 dark:text-red-300/80 mt-0.5">
-                  No pudimos confirmar tu último comprobante. Verifica el número de referencia y vuelve a reportarlo o contáctanos en Soporte.
+                  {isEn
+                    ? 'We could not confirm your last receipt. Check the reference number and report it again or contact Support.'
+                    : 'No pudimos confirmar tu último comprobante. Verifica el número de referencia y vuelve a reportarlo o contáctanos en Soporte.'}
                 </p>
               </div>
             </div>
@@ -541,13 +548,13 @@ export default function Profile() {
                 to="/upgrade"
                 className="px-3.5 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-black transition-colors no-underline"
               >
-                Reportar de nuevo
+                {isEn ? 'Report again' : 'Reportar de nuevo'}
               </Link>
               <button
                 onClick={() => handleDismissPaymentAlert(user.lastPaymentId)}
                 className="px-3 py-2 rounded-xl bg-red-100 dark:bg-red-900/40 hover:bg-red-200 text-red-800 dark:text-red-200 text-xs font-bold transition-colors"
               >
-                Entendido
+                {isEn ? 'Got it' : 'Entendido'}
               </button>
             </div>
           </motion.div>
@@ -572,7 +579,7 @@ export default function Profile() {
                     {user.firstName} {user.lastName}
                   </h1>
                   <div className="mt-1.5">
-                    <PlanBadge plan={user.plan === 'pro' ? 'pro' : 'free'} />
+                    <PlanBadge plan={isUserPro ? 'pro' : 'free'} />
                   </div>
 
                   <div className="mt-2 flex items-center justify-center sm:justify-start gap-1.5 text-xs sm:text-sm text-on-surface-variant">
@@ -592,7 +599,7 @@ export default function Profile() {
                 </div>
               </div>
 
-              {/* Resumen de Tokens + Vencimiento del Plan */}
+              {/* Resumen de Tokens + Estado/Vencimiento del Plan */}
               <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-4 lg:pt-0 border-t lg:border-t-0 border-slate-100 dark:border-white/5 flex-wrap">
                 {/* Tarjeta compacta de Tokens */}
                 <div className="px-4 py-3 rounded-2xl bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200/60 dark:border-orange-500/20 flex items-center justify-between sm:justify-start gap-3">
@@ -601,7 +608,7 @@ export default function Profile() {
                   </div>
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant block">
-                      Tokens Disponibles
+                      {t('editor.tokens_available')}
                     </span>
                     <div className="flex items-center gap-2">
                       <span className="text-lg sm:text-xl font-black text-primary-container leading-none">
@@ -610,7 +617,7 @@ export default function Profile() {
                       {getExtraTokens(user) > 0 && (
                         <span
                           className="text-[10px] bg-orange-200/70 dark:bg-orange-900/50 text-primary-container font-black px-2 py-0.5 rounded-full"
-                          title="Tokens extra que nunca expiran"
+                          title={isEn ? 'Extra tokens that never expire' : 'Tokens extra que nunca expiran'}
                         >
                           +{formatMiles(getExtraTokens(user))} Extra
                         </span>
@@ -619,18 +626,34 @@ export default function Profile() {
                   </div>
                 </div>
 
-                {/* Tarjeta de Vencimiento del Plan */}
+                {/* Tarjeta de Estado / Vencimiento del Plan */}
                 <div className="px-4 py-3 rounded-2xl bg-surface-container/40 dark:bg-white/5 border border-slate-200/70 dark:border-outline-variant/30 flex items-center justify-between sm:justify-start gap-3">
                   <div className="w-10 h-10 rounded-xl bg-slate-200/70 dark:bg-white/10 text-on-surface-variant flex items-center justify-center flex-shrink-0">
-                    <span className="material-symbols-outlined text-xl">event_upcoming</span>
+                    <span className="material-symbols-outlined text-xl">
+                      {isUserPro ? 'event_upcoming' : 'workspace_premium'}
+                    </span>
                   </div>
                   <div>
                     <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant block">
-                      {user.plan === 'pro' ? 'Vence el' : 'Vigencia del Plan'}
+                      {isUserPro
+                        ? rawExpiresAt
+                          ? (isEn ? 'Expires on' : 'Vence el')
+                          : (isEn ? 'Plan Validity' : 'Vigencia del Plan')
+                        : (isEn ? 'Plan Status' : 'Estado del Plan')}
                     </span>
-                    <span className="text-sm sm:text-base font-black text-on-surface leading-tight block">
-                      {formattedPlanExpiration}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm sm:text-base font-black text-on-surface leading-tight block">
+                        {formattedPlanExpiration}
+                      </span>
+                      {!isUserPro && (
+                        <Link
+                          to="/upgrade"
+                          className="text-[11px] font-black text-primary-container hover:underline no-underline whitespace-nowrap"
+                        >
+                          {isEn ? 'Upgrade →' : 'Mejorar →'}
+                        </Link>
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

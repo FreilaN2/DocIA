@@ -23,7 +23,7 @@ export default function Navbar() {
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
-        return parsed.plan === 'pro';
+        return parsed.plan === 'pro' || parsed.isAdmin === true || Number(parsed.tokens || parsed.totalTokens || 0) > 0;
       }
       return false;
     } catch (e) {
@@ -60,7 +60,7 @@ export default function Navbar() {
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
         setUser(parsed);
-        setIsPro(parsed.plan === 'pro');
+        setIsPro(parsed.plan === 'pro' || parsed.isAdmin === true || Number(parsed.tokens || parsed.totalTokens || 0) > 0);
       } else {
         setUser(null);
         setIsPro(false);
@@ -137,12 +137,12 @@ export default function Navbar() {
     return (
       <Link
         to={to}
-        className={`flex items-center gap-2 transition-all duration-200 no-underline ${isActive
-            ? "text-primary-container font-bold"
-            : "text-slate-600 dark:text-on-surface-variant font-medium hover:text-primary-container dark:hover:text-primary-container"
+        className={`flex items-center gap-2.5 text-sm xl:text-base transition-all duration-200 no-underline ${isActive
+            ? "text-primary-container font-extrabold"
+            : "text-slate-700 dark:text-on-surface-variant font-bold hover:text-primary-container dark:hover:text-primary-container"
           } ${className}`}
       >
-        <span className="material-symbols-outlined text-[18px] sm:text-[20px]">{icon}</span>
+        <span className="material-symbols-outlined text-[20px] sm:text-[22px]">{icon}</span>
         {children}
       </Link>
     );
@@ -352,17 +352,17 @@ export default function Navbar() {
                 transition={{ duration: 0.2 }}
                 className="lg:hidden absolute top-full left-0 right-0 border-t border-slate-200 dark:border-outline-variant/30 bg-white/95 dark:bg-[#110e0c]/95 backdrop-blur-xl shadow-2xl z-50"
               >
-                <div className="flex flex-col px-4 sm:px-6 py-4 sm:py-6 space-y-1 sm:space-y-2 max-h-[calc(100vh-80px)] overflow-y-auto">
-                  <NavLink to="/" icon="home" className="py-3 sm:py-4 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
+                <div className="flex flex-col px-4 sm:px-6 py-4 sm:py-6 space-y-1.5 sm:space-y-2 max-h-[calc(100vh-80px)] overflow-y-auto">
+                  <NavLink to="/" icon="home" className="!text-base sm:!text-lg py-3.5 sm:py-4 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
                     {t('navbar.home')}
                   </NavLink>
-                  <NavLink to="/tools" icon="construction" className="py-3 sm:py-4 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
+                  <NavLink to="/tools" icon="construction" className="!text-base sm:!text-lg py-3.5 sm:py-4 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
                     {t('navbar.tools')}
                   </NavLink>
-                  <NavLink to="/upgrade" icon="workspace_premium" className="py-3 sm:py-4 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
+                  <NavLink to="/upgrade" icon="workspace_premium" className="!text-base sm:!text-lg py-3.5 sm:py-4 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
                     {t('navbar.pricing')}
                   </NavLink>
-                  <NavLink to="/support" icon="support_agent" className="py-3 sm:py-4 px-3 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
+                  <NavLink to="/support" icon="support_agent" className="!text-base sm:!text-lg py-3.5 sm:py-4 px-4 rounded-xl hover:bg-slate-50 dark:hover:bg-surface-variant">
                     {t('navbar.support')}
                   </NavLink>
 

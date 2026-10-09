@@ -116,6 +116,7 @@ function App() {
           const oldData = JSON.parse(oldDataStr);
           if (
             newData.plan !== oldData.plan ||
+            newData.isAdmin !== oldData.isAdmin ||
             newData.tokens !== oldData.tokens ||
             newData.passwordSetupRequired !== oldData.passwordSetupRequired ||
             updated
@@ -136,11 +137,13 @@ function App() {
 
     pollUser();
     const interval = setInterval(pollUser, 15000);
-    const timeout = setTimeout(pollUser, 3000);
+    const timeout = setTimeout(pollUser, 1500);
+    window.addEventListener('authChange', pollUser);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
+      window.removeEventListener('authChange', pollUser);
     };
   }, []);
 

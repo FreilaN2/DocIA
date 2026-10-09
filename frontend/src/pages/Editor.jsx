@@ -24,7 +24,8 @@ import {
 
 export default function Editor() {
   const { plan } = useParams();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const isEn = (i18n.language || 'es').startsWith('en');
   const navigate = useNavigate();
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -56,16 +57,74 @@ export default function Editor() {
   const [totalLotes, setTotalLotes] = useState(0);
   const [tiempoRestante, setTiempoRestante] = useState(null);
   const [modeloUsado, setModeloUsado] = useState('');
+  const [statusIdx, setStatusIdx] = useState(0);
   const [errorProceso, setErrorProceso] = useState(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const esRef = useRef(null);
+
+  const statusPool = isEn
+    ? [
+        'Analyzing document structure...',
+        'Working on paragraphs and margins...',
+        'Organizing heading and subheading levels...',
+        'Reviewing in-text citations and references...',
+        'Structuring APA indentation and alignment...',
+        'Classifying manuscript sections...',
+        'Preparing interactive preview...',
+      ]
+    : [
+        'Analizando la estructura del documento...',
+        'Trabajando en los párrafos y márgenes...',
+        'Organizando niveles de títulos y subtítulos...',
+        'Revisando citas textuales y referencias...',
+        'Estructurando sangrías y alineación APA...',
+        'Clasificando secciones del manuscrito...',
+        'Preparando la vista previa interactiva...',
+      ];
+
+  useEffect(() => {
+    if (!loading) {
+      setStatusIdx(0);
+      return;
+    }
+    const timer = setInterval(() => {
+      setStatusIdx((prev) => (prev + 1) % statusPool.length);
+    }, 2400);
+    return () => clearInterval(timer);
+  }, [loading, statusPool.length]);
 
   const token = localStorage.getItem('token');
   const storedUser = localStorage.getItem('user');
   const parsedUser = storedUser ? JSON.parse(storedUser) : null;
   const isPremium = useIsPremium();
   const isPro = plan === 'pro' || isPremium;
-  const shouldShowAds = !isPro && !isPremium;
+  const [verifyingAuth, setVerifyingAuth] = useState(() => Boolean(token && !isPremium));
+  const shouldShowAds = !isPro && !isPremium && !verifyingAuth;
+
+  useEffect(() => {
+    if (!token || isPremium) {
+      setVerifyingAuth(false);
+      return;
+    }
+    let cancelled = false;
+    api.get('/user/me')
+      .then(resp => {
+        if (cancelled) return;
+        const u = resp.data;
+        localStorage.setItem('user', JSON.stringify(u));
+        window.dispatchEvent(new Event('storage'));
+        window.dispatchEvent(new Event('authChange'));
+        if (u?.plan === 'pro' || u?.isAdmin || Number(u?.tokens || u?.totalTokens || 0) > 0) {
+          navigate('/editor/pro', { replace: true });
+        } else {
+          setVerifyingAuth(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setVerifyingAuth(false);
+      });
+    return () => { cancelled = true; };
+  }, [token, isPremium, navigate]);
 
   const Spinner = ({ className = "w-5 h-5 sm:w-6 sm:h-6" }) => (
     <svg className={`animate-spin ${className}`} xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -80,7 +139,7 @@ export default function Editor() {
     if (token && storedUser) {
       try {
         const userData = JSON.parse(storedUser);
-        if (userData.plan === 'pro' || userData.isAdmin) {
+        if (userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0) {
           api.get('/tokens/balance').then(r => {
             setTokenBalance(r.data);
           }).catch(() => setTokenBalance(null));
@@ -111,7 +170,8 @@ export default function Editor() {
         return;
       }
       const userData = JSON.parse(storedUser);
-      if (userData.plan !== 'pro' && !userData.isAdmin) {
+      const hasProAccess = userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0;
+      if (!hasProAccess) {
         navigate('/upgrade', { replace: true });
         return;
       }
@@ -122,7 +182,7 @@ export default function Editor() {
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          if (userData.plan === 'pro') {
+          if (userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0) {
             sessionStorage.removeItem('docai_pending_result');
             sessionStorage.removeItem('docai_pending_format');
             sessionStorage.removeItem('docai_pending_toc');
@@ -180,38 +240,51 @@ export default function Editor() {
     }
   }, []);
 
+  const handleDismissAdBlock = () => {
+    try {
+      sessionStorage.setItem('docai_adblock_dismissed', 'true');
+    } catch (e) {}
+    setAdBlockDetected(false);
+  };
+
   useEffect(() => {
     if (shouldShowAds) {
-      const checkAdBlock = async () => {
-        let isBlocked = false;
-        
+      if (sessionStorage.getItem('docai_adblock_dismissed') === 'true') {
+        setAdBlockDetected(false);
+        return;
+      }
+
+      const checkAdBlock = () => {
         const adTest = document.createElement('div');
+        adTest.setAttribute('data-adblock-bait', 'true');
         adTest.innerHTML = '&nbsp;';
         adTest.className = 'adsbox ad-placement doubleclick ad-placeholder ad-banner';
-        adTest.style.position = 'absolute';
-        adTest.style.top = '-1000px';
+        adTest.style.position = 'fixed';
+        adTest.style.top = '-9999px';
+        adTest.style.left = '-9999px';
+        adTest.style.width = '10px';
+        adTest.style.height = '10px';
+        adTest.style.pointerEvents = 'none';
         document.body.appendChild(adTest);
-        
-        setTimeout(() => {
-          if (adTest.offsetHeight === 0 || adTest.style.display === 'none') {
-             isBlocked = true;
-          }
-          if (isBlocked) setAdBlockDetected(true);
-          adTest.remove();
-        }, 500);
 
-        try {
-          await fetch('https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js', {
-            method: 'HEAD',
-            mode: 'no-cors',
-            cache: 'no-store'
-          });
-        } catch (e) {
-          setAdBlockDetected(true);
-        }
+        setTimeout(() => {
+          try {
+            const computed = window.getComputedStyle(adTest);
+            const isHidden =
+              !document.body.contains(adTest) ||
+              adTest.offsetHeight === 0 ||
+              computed.display === 'none' ||
+              computed.visibility === 'hidden';
+            setAdBlockDetected(isHidden);
+          } catch (e) {
+            setAdBlockDetected(false);
+          } finally {
+            adTest.remove();
+          }
+        }, 450);
       };
-      
-      const timer = setTimeout(checkAdBlock, 1000);
+
+      const timer = setTimeout(checkAdBlock, 900);
       return () => clearTimeout(timer);
     } else {
       setAdBlockDetected(false);
@@ -341,7 +414,7 @@ export default function Editor() {
           if (nPortada > 0) {
             const portadaBloque = {
               id: 'portada_bloque',
-              texto: 'PORTADA ORIGINAL DEL DOCUMENTO\n\n(Se ha bloqueado la edición para conservar el formato, imágenes y alineaciones originales intactas. Se copiará exactamente igual al documento original.)',
+              texto: t('editor.cover_locked_text'),
               categoria: 'PORTADA_BLOQUE',
               readOnly: true
             };
@@ -624,9 +697,9 @@ export default function Editor() {
               ) : <div />}
 
               {analyzingFile && !result && (
-                <div className="flex items-center gap-1.5 text-[10px] sm:text-xs font-bold text-primary-container animate-pulse">
-                  <Spinner className="w-3 h-3 text-primary-container" />
-                  <span>Calculando consumo...</span>
+                <div className="flex items-center gap-1.5 text-xs font-bold text-primary-container animate-pulse">
+                  <Spinner className="w-3.5 h-3.5 text-primary-container" />
+                  <span>{t('editor.calculating_usage')}</span>
                 </div>
               )}
 
@@ -634,14 +707,14 @@ export default function Editor() {
                 <motion.div
                   initial={{ opacity: 0, y: -4 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-wrap items-center gap-2 text-[10px] sm:text-[11px] font-bold"
+                  className="flex flex-wrap items-center gap-2 text-xs font-bold"
                 >
                   <span className="text-slate-500 dark:text-on-surface-variant">
-                    <strong className="text-on-surface font-black">{formatMiles(fileMetrics.total_paragraphs)}</strong> párrafos
+                    <strong className="text-on-surface font-black">{formatMiles(fileMetrics.total_paragraphs)}</strong> {t('editor.paragraphs')}
                   </span>
                   <span className="text-slate-300 dark:text-outline-variant">•</span>
                   <span className="text-slate-500 dark:text-on-surface-variant">
-                    <strong className="text-on-surface font-black">~{formatMiles(fileMetrics.total_words)}</strong> palabras
+                    <strong className="text-on-surface font-black">~{formatMiles(fileMetrics.total_words)}</strong> {t('editor.words')}
                   </span>
                   <span className="text-slate-300 dark:text-outline-variant">•</span>
                   <span className={`px-2 py-0.5 rounded-full font-black ${
@@ -667,16 +740,16 @@ export default function Editor() {
           >
             <span className="material-symbols-outlined text-primary-container text-2xl sm:text-3xl flex-shrink-0">warning</span>
             <div className="flex-grow">
-              <p className="font-black text-on-surface text-sm sm:text-base">Sin tokens disponibles</p>
-              <p className="text-[10px] sm:text-xs text-on-surface-variant mt-0.5">
-                Tus tokens mensuales se han agotado. Renueva tu plan o compra un paquete extra.
+              <p className="font-black text-on-surface text-sm sm:text-base">{t('editor.no_tokens_title')}</p>
+              <p className="text-xs sm:text-sm text-on-surface-variant mt-0.5">
+                {t('editor.no_tokens_desc')}
               </p>
             </div>
             <Link 
               to="/upgrade" 
               className="bg-primary-container text-white font-black px-4 py-2 rounded-xl text-xs sm:text-sm hover:opacity-90 no-underline whitespace-nowrap w-full sm:w-auto text-center"
             >
-              Ver planes →
+              {t('editor.view_plans')}
             </Link>
           </motion.div>
         )}
@@ -704,26 +777,26 @@ export default function Editor() {
                 {/* Opciones de configuración */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
                   <div className="space-y-1.5 sm:space-y-2">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
                       {t('editor.style')}
                     </label>
                     <select 
                       value={edicion} 
                       onChange={(e) => setEdicion(e.target.value)}
-                      className="w-full p-3 sm:p-4 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-orange-100 dark:focus:ring-primary/20 outline-none text-xs sm:text-sm font-bold transition-all cursor-pointer"
+                      className="w-full p-3.5 sm:p-4 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-orange-100 dark:focus:ring-primary/20 outline-none text-sm sm:text-base font-bold transition-all cursor-pointer"
                     >
                       <option value="6ta">{t('editor.apa_6th')}</option>
                       <option value="7ma">{t('editor.apa_7th')}</option>
                     </select>
                   </div>
                   <div className="space-y-1.5 sm:space-y-2">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
                       {t('editor.font')}
                     </label>
                     <select 
                       value={fuente} 
                       onChange={(e) => setFuente(e.target.value)}
-                      className="w-full p-3 sm:p-4 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-orange-100 dark:focus:ring-primary/20 outline-none text-xs sm:text-sm font-bold transition-all cursor-pointer"
+                      className="w-full p-3.5 sm:p-4 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-orange-100 dark:focus:ring-primary/20 outline-none text-sm sm:text-base font-bold transition-all cursor-pointer"
                       disabled={edicion === "6ta"}
                     >
                       {fuenteOpciones.map((fontOption) => (
@@ -732,11 +805,11 @@ export default function Editor() {
                     </select>
                   </div>
                   <div className="space-y-1.5 sm:space-y-2 sm:col-span-2 md:col-span-1">
-                    <label className="text-[9px] sm:text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
                       {t('editor.format')}
                     </label>
-                    <div className="p-3 sm:p-4 bg-slate-50 dark:bg-surface-variant border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-slate-500 dark:text-on-surface-variant flex items-center gap-2">
-                      <span className="material-symbols-outlined text-sm">description</span> 
+                    <div className="p-3.5 sm:p-4 bg-slate-50 dark:bg-surface-variant border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold text-slate-500 dark:text-on-surface-variant flex items-center gap-2">
+                      <span className="material-symbols-outlined text-base sm:text-lg">description</span> 
                       {t('editor.word_docx')}
                     </div>
                   </div>
@@ -766,8 +839,8 @@ export default function Editor() {
                     </p>
                     <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 mt-2 sm:mt-4 w-full sm:w-auto">
                       <button 
-                        onClick={() => window.location.reload()} 
-                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-black text-sm bg-white text-red-600 border border-red-200 shadow-sm hover:bg-red-50 transition-colors"
+                        onClick={handleDismissAdBlock} 
+                        className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl font-black text-sm bg-white text-red-600 border border-red-200 shadow-sm hover:bg-red-50 transition-colors cursor-pointer"
                       >
                         {t('editor.adblock_btn_disabled')}
                       </button>
@@ -801,7 +874,7 @@ export default function Editor() {
                       {isDragging ? t('editor.drop_here') : (file ? file.name : t('editor.select_file'))}
                     </h3>
                     {!file && !isDragging && (
-                      <p className="text-[10px] sm:text-xs text-slate-400 font-bold uppercase tracking-tighter">
+                      <p className="text-xs sm:text-sm text-slate-400 font-bold uppercase tracking-tight">
                         {t('editor.drag_drop')}
                       </p>
                     )}
@@ -811,10 +884,10 @@ export default function Editor() {
                 {/* Barra de progreso */}
                 {loading ? (
                   <div className="mt-6 sm:mt-8 space-y-2 sm:space-y-3">
-                    <div className="flex items-center justify-between text-[10px] sm:text-xs font-bold text-slate-500 dark:text-on-surface-variant px-1">
+                    <div className="flex items-center justify-between text-xs sm:text-sm font-bold text-slate-500 dark:text-on-surface-variant px-1">
                       <span className="flex items-center gap-1.5">
                         <span className="w-2 h-2 rounded-full bg-primary-container animate-pulse inline-block" />
-                        {totalLotes > 0 ? `Lote ${loteActual} de ${totalLotes}` : 'Preparando análisis...'}
+                        {statusPool[statusIdx]}
                       </span>
                       <span className="text-primary-container font-black">{progreso}%</span>
                     </div>
@@ -826,12 +899,12 @@ export default function Editor() {
                         <div className="absolute inset-0 bg-white/30 skew-x-12 animate-shimmer" />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-[9px] sm:text-[10px] text-slate-400 font-bold px-1">
+                    <div className="flex items-center justify-between text-xs text-slate-400 font-bold px-1">
                       <span>
-                        {modeloUsado && modeloUsado !== 'reglas' ? '🚀 DeepSeek IA' : '🔧 Motor de reglas'}
+                        {totalLotes > 0 ? t('editor.batch_progress', { current: loteActual, total: totalLotes }) : t('editor.preparing_analysis')}
                       </span>
                       {tiempoRestante !== null && tiempoRestante > 0 && (
-                        <span>~{tiempoRestante}s restantes</span>
+                        <span>{t('editor.seconds_remaining', { seconds: tiempoRestante })}</span>
                       )}
                     </div>
                   </div>
@@ -841,7 +914,7 @@ export default function Editor() {
                       <motion.div 
                         initial={{ opacity: 0, y: -8 }} 
                         animate={{ opacity: 1, y: 0 }}
-                        className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl text-xs font-bold text-red-600 dark:text-red-400 flex items-center gap-2"
+                        className="mt-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 rounded-xl text-xs sm:text-sm font-bold text-red-600 dark:text-red-400 flex items-center gap-2"
                       >
                         <span className="material-symbols-outlined text-sm flex-shrink-0">error</span>
                         <span>{errorProceso}</span>
@@ -877,35 +950,35 @@ export default function Editor() {
                     <h2 className="text-xl sm:text-2xl font-black tracking-tight text-on-surface">
                       {t('editor.correction_title')}
                     </h2>
-                    <p className="text-[10px] sm:text-xs font-bold text-on-surface-variant uppercase tracking-widest">
+                    <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mt-0.5">
                       {t('editor.correction_subtitle')}
                     </p>
                   </div>
 
                   {/* Toggle de vista — solo Pro */}
                   {isPro && (
-                    <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-surface-variant rounded-2xl self-start md:self-auto shrink-0">
+                    <div className="flex items-center gap-1.5 p-1.5 bg-slate-100 dark:bg-surface-variant rounded-2xl self-start md:self-auto shrink-0">
                       <button
                         onClick={() => setViewMode('cards')}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 ${
+                        className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all duration-200 ${
                           viewMode === 'cards'
                             ? 'bg-white dark:bg-surface shadow-sm text-on-surface'
                             : 'text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
-                        <span className="material-symbols-outlined text-sm sm:text-base">dashboard</span>
-                        <span className="hidden sm:inline">Tarjetas</span>
+                        <span className="material-symbols-outlined text-base sm:text-lg">dashboard</span>
+                        <span>{t('editor.view_cards')}</span>
                       </button>
                       <button
                         onClick={() => setViewMode('document')}
-                        className={`flex items-center gap-1 sm:gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-[10px] sm:text-xs font-black transition-all duration-200 ${
+                        className={`flex items-center gap-1.5 px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition-all duration-200 ${
                           viewMode === 'document'
                             ? 'bg-white dark:bg-surface shadow-sm text-on-surface'
                             : 'text-on-surface-variant hover:text-on-surface'
                         }`}
                       >
-                        <span className="material-symbols-outlined text-sm sm:text-base">article</span>
-                        <span className="hidden sm:inline">Documento</span>
+                        <span className="material-symbols-outlined text-base sm:text-lg">article</span>
+                        <span>{t('editor.view_document')}</span>
                       </button>
                     </div>
                   )}
