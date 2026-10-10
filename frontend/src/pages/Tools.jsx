@@ -1,11 +1,24 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faClipboard, faBook, faCheck } from '@fortawesome/free-solid-svg-icons';
+import { faClipboard, faBook, faCheck, faLock } from '@fortawesome/free-solid-svg-icons';
+
+function getLoggedUser() {
+  try {
+    const token = localStorage.getItem('token');
+    const userStr = localStorage.getItem('user');
+    if (!token || !userStr) return null;
+    const parsed = JSON.parse(userStr);
+    return parsed && (parsed.email || parsed.id) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 function toInitials(firstName = '') {
   return firstName
@@ -27,6 +40,18 @@ function formatAuthorReference(author) {
 export default function Tools() {
   const { i18n } = useTranslation();
   const isEn = (i18n.language || 'es').startsWith('en');
+  const navigate = useNavigate();
+  const [currentUser, setCurrentUser] = useState(getLoggedUser);
+
+  useEffect(() => {
+    const syncAuth = () => setCurrentUser(getLoggedUser());
+    window.addEventListener('storage', syncAuth);
+    window.addEventListener('authChange', syncAuth);
+    return () => {
+      window.removeEventListener('storage', syncAuth);
+      window.removeEventListener('authChange', syncAuth);
+    };
+  }, []);
 
   // null = muestra SOLO el Grid de herramientas; 'apa' | 'writing' = oculta el Grid y muestra esa herramienta
   const [selectedTool, setSelectedTool] = useState(null);
@@ -220,9 +245,16 @@ export default function Tools() {
     quotePage: '',
   });
 
+  const userStorageKey = currentUser
+    ? `docia_saved_apa_refs_${String(currentUser.email || currentUser.id).toLowerCase()}`
+    : null;
+
   const [savedRefs, setSavedRefs] = useState(() => {
     try {
-      const raw = localStorage.getItem('docia_saved_apa_refs');
+      const u = getLoggedUser();
+      if (!u) return [];
+      const key = `docia_saved_apa_refs_${String(u.email || u.id).toLowerCase()}`;
+      const raw = localStorage.getItem(key);
       return raw ? JSON.parse(raw) : [];
     } catch {
       return [];
@@ -230,10 +262,24 @@ export default function Tools() {
   });
 
   useEffect(() => {
+    if (!userStorageKey) {
+      setSavedRefs([]);
+      return;
+    }
     try {
-      localStorage.setItem('docia_saved_apa_refs', JSON.stringify(savedRefs));
+      const raw = localStorage.getItem(userStorageKey);
+      setSavedRefs(raw ? JSON.parse(raw) : []);
+    } catch {
+      setSavedRefs([]);
+    }
+  }, [userStorageKey]);
+
+  useEffect(() => {
+    if (!userStorageKey) return;
+    try {
+      localStorage.setItem(userStorageKey, JSON.stringify(savedRefs));
     } catch {}
-  }, [savedRefs]);
+  }, [savedRefs, userStorageKey]);
 
   // Verificador 40 palabras
   const [quoteText, setQuoteText] = useState('');
@@ -377,6 +423,19 @@ export default function Tools() {
   };
 
   const handleSaveReference = () => {
+    if (!currentUser) {
+      toast.error(
+        isEn
+          ? 'Sign in to your account to save references to your bibliography.'
+          : 'Debes iniciar sesión en tu cuenta para guardar referencias.',
+        {
+          icon: <FontAwesomeIcon icon={faLock} className="text-amber-500" />,
+        }
+      );
+      setApaTab('guardadas');
+      return;
+    }
+
     const newItem = {
       id: Date.now().toString(),
       plainReference: generated.plainReference,
@@ -618,8 +677,14 @@ export default function Tools() {
                     { id: 'titulos', label: isEn ? 'APA Headings' : 'Títulos APA', icon: 'format_size' },
                     {
                       id: 'guardadas',
-                      label: isEn ? `Saved (${savedRefs.length})` : `Guardadas (${savedRefs.length})`,
-                      icon: 'bookmarks',
+                      label: currentUser
+                        ? isEn
+                          ? `Saved (${savedRefs.length})`
+                          : `Guardadas (${savedRefs.length})`
+                        : isEn
+                        ? 'Saved'
+                        : 'Guardadas',
+                      icon: currentUser ? 'bookmarks' : 'lock',
                     },
                   ].map((tab) => (
                     <button
@@ -1259,47 +1324,81 @@ export default function Tools() {
               {/* Sub-vista D: Referencias Guardadas (A-Z) */}
               {apaTab === 'guardadas' && (
                 <div className="bg-white/90 dark:bg-[#1a1512]/90 rounded-3xl border border-slate-200/80 dark:border-outline-variant/30 p-6 shadow-sm space-y-4">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div>
-                      <h2 className="text-base sm:text-lg font-black text-on-surface">
-                        {isEn ? 'My Sorted Bibliography (A-Z)' : 'Mi Bibliografía Ordenada (A-Z)'}
-                      </h2>
-                      <p className="text-xs sm:text-sm text-on-surface-variant">
-                        {isEn
-                          ? 'Every reference you save is automatically sorted alphabetically.'
-                          : 'Todas las fuentes que guardes se ordenan automáticamente alfabéticamente.'}
-                      </p>
-                    </div>
-                    {savedRefs.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={handleCopyAllBibliography}
-                        className="px-4 py-2.5 rounded-xl bg-primary-container text-white text-xs sm:text-sm font-black flex items-center gap-1.5"
-                      >
-                        <span className="material-symbols-outlined text-base">content_copy</span>
-                        {isEn ? 'Copy full bibliography' : 'Copiar toda la bibliografía'}
-                      </button>
-                    )}
-                  </div>
-
-                  {savedRefs.length === 0 ? (
-                    <div className="text-center py-10 space-y-2">
-                      <span className="material-symbols-outlined text-3xl text-on-surface-variant">
-                        bookmark_border
-                      </span>
-                      <p className="text-xs sm:text-sm text-on-surface-variant">
-                        {isEn ? (
-                          <>
-                            You haven't saved any references yet. Create one in the <strong>Cite Source</strong> tab and click <strong>Save</strong>.
-                          </>
-                        ) : (
-                          <>
-                            Aún no has guardado referencias. Crea una en la pestaña <strong>Citar Fuente</strong> y pulsa <strong>Guardar</strong>.
-                          </>
-                        )}
-                      </p>
+                  {!currentUser ? (
+                    <div className="text-center py-10 px-4 max-w-md mx-auto space-y-4">
+                      <div className="w-14 h-14 rounded-2xl bg-primary-container/15 text-primary-container flex items-center justify-center mx-auto">
+                        <span className="material-symbols-outlined text-3xl">lock</span>
+                      </div>
+                      <div className="space-y-1.5">
+                        <h2 className="text-lg sm:text-xl font-black text-on-surface">
+                          {isEn
+                            ? 'Sign in to save your citations'
+                            : 'Inicia sesión para guardar tus citas'}
+                        </h2>
+                        <p className="text-xs sm:text-sm text-on-surface-variant leading-relaxed">
+                          {isEn
+                            ? 'Saving and organizing your personal bibliography (A-Z) is only available for registered users. Sign in or create a free account to keep your references saved.'
+                            : 'Guardar y organizar tu bibliografía personal (A-Z) solo está disponible para cuentas con sesión iniciada. Inicia sesión o crea una cuenta gratuita para conservar tus referencias.'}
+                        </p>
+                      </div>
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5 pt-2">
+                        <Link
+                          to="/login"
+                          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-primary-container text-white text-xs sm:text-sm font-black no-underline hover:opacity-90 transition-opacity"
+                        >
+                          {isEn ? 'Sign In' : 'Iniciar Sesión'}
+                        </Link>
+                        <Link
+                          to="/register"
+                          className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-slate-100 dark:bg-white/10 text-on-surface border border-slate-200 dark:border-white/10 text-xs sm:text-sm font-black no-underline hover:border-primary-container transition-colors"
+                        >
+                          {isEn ? 'Create Free Account' : 'Crear Cuenta Gratis'}
+                        </Link>
+                      </div>
                     </div>
                   ) : (
+                    <>
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div>
+                          <h2 className="text-base sm:text-lg font-black text-on-surface">
+                            {isEn ? 'My Sorted Bibliography (A-Z)' : 'Mi Bibliografía Ordenada (A-Z)'}
+                          </h2>
+                          <p className="text-xs sm:text-sm text-on-surface-variant">
+                            {isEn
+                              ? 'Every reference you save is automatically sorted alphabetically.'
+                              : 'Todas las fuentes que guardes se ordenan automáticamente alfabéticamente.'}
+                          </p>
+                        </div>
+                        {savedRefs.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={handleCopyAllBibliography}
+                            className="px-4 py-2.5 rounded-xl bg-primary-container text-white text-xs sm:text-sm font-black flex items-center gap-1.5"
+                          >
+                            <span className="material-symbols-outlined text-base">content_copy</span>
+                            {isEn ? 'Copy full bibliography' : 'Copiar toda la bibliografía'}
+                          </button>
+                        )}
+                      </div>
+
+                      {savedRefs.length === 0 ? (
+                        <div className="text-center py-10 space-y-2">
+                          <span className="material-symbols-outlined text-3xl text-on-surface-variant">
+                            bookmark_border
+                          </span>
+                          <p className="text-xs sm:text-sm text-on-surface-variant">
+                            {isEn ? (
+                              <>
+                                You haven't saved any references yet. Create one in the <strong>Cite Source</strong> tab and click <strong>Save</strong>.
+                              </>
+                            ) : (
+                              <>
+                                Aún no has guardado referencias. Crea una en la pestaña <strong>Citar Fuente</strong> y pulsa <strong>Guardar</strong>.
+                              </>
+                            )}
+                          </p>
+                        </div>
+                      ) : (
                     <div className="space-y-2.5">
                       {savedRefs.map((item) => (
                         <div
@@ -1337,6 +1436,8 @@ export default function Tools() {
                         </div>
                       ))}
                     </div>
+                      )}
+                    </>
                   )}
                 </div>
               )}

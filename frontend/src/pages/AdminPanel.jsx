@@ -440,6 +440,7 @@ export default function AdminPanel() {
       setCreateCouponLoading(false);
     }
   };
+  const handleCreateCoupon = handleSaveCoupon;
 
   const handleToggleCoupon = async (couponId) => {
     setCouponActionLoading(couponId);
@@ -1822,15 +1823,17 @@ export default function AdminPanel() {
                 >
                   <div className="flex justify-between items-center mb-5 pb-3 border-b border-outline/10">
                     <h3 className="text-lg font-black text-on-surface flex items-center gap-2">
-                      <span className="material-symbols-outlined text-primary">add_card</span>
-                      Crear Nuevo Cupón
+                      <span className="material-symbols-outlined text-primary">
+                        {editingCoupon ? 'edit_note' : 'add_card'}
+                      </span>
+                      {editingCoupon ? 'Editar Cupón' : 'Crear Nuevo Cupón'}
                     </h3>
                     <button onClick={() => setCouponModalOpen(false)} className="text-slate-400 hover:text-on-surface">
                       <span className="material-symbols-outlined">close</span>
                     </button>
                   </div>
 
-                  <form onSubmit={handleCreateCoupon} className="space-y-4">
+                  <form onSubmit={handleSaveCoupon} className="space-y-4">
                     {/* Código + Generar */}
                     <div>
                       <label className="block text-xs font-bold text-on-surface mb-1">

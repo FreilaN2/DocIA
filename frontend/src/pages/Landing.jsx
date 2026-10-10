@@ -65,20 +65,10 @@ export default function Landing() {
         initial="hidden"
         animate="visible"
         variants={containerVariants}
-        className="pt-20 sm:pt-24 md:pt-32 pb-16 sm:pb-20 md:pb-24 px-4 sm:px-6 md:px-8 lg:px-gutter max-w-container-max mx-auto flex flex-col gap-12 sm:gap-16 md:gap-stack-lg"
+        className="pt-20 sm:pt-24 md:pt-28 pb-16 sm:pb-20 md:pb-24 px-4 sm:px-6 md:px-8 lg:px-gutter max-w-container-max mx-auto flex flex-col gap-12 sm:gap-16 md:gap-stack-lg"
       >
         {/* Hero Section */}
-        <section className="text-center flex flex-col items-center gap-4 sm:gap-6 md:gap-stack-md pt-8 sm:pt-10 md:pt-12">
-          <motion.div 
-            variants={itemVariants} 
-            className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-surface-container border border-outline-variant/30 backdrop-blur-sm mb-2 sm:mb-4"
-          >
-            <span className="material-symbols-outlined text-primary text-xs sm:text-sm" style={{ fontVariationSettings: "'FILL' 1" }}>auto_awesome</span>
-            <span className="font-label-caps text-[10px] sm:text-[12px] font-bold text-primary tracking-widest">
-              {t('landing.powered_by_ai')}
-            </span>
-          </motion.div>
-          
+        <section className="text-center flex flex-col items-center gap-4 sm:gap-5 pt-2 sm:pt-4">
           <motion.h1 
             variants={itemVariants} 
             className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl xl:text-7xl font-black tracking-tighter text-on-surface max-w-4xl mx-auto leading-tight px-4 sm:px-0"

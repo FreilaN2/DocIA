@@ -426,13 +426,14 @@ export default function Upgrade() {
             </div>
 
             {/* Badges */}
-            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-2 sm:gap-4">
+            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-2 sm:gap-4 text-center">
               <div className="inline-flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-bold">
-                <span className="material-symbols-outlined text-xs sm:text-sm">lock</span>
+                <span className="material-symbols-outlined text-xs sm:text-sm">verified_user</span>
                 {t('upgrade.secure_paypal')}
               </div>
+              <span className="hidden sm:inline text-slate-300 dark:text-slate-600">·</span>
               <div className="inline-flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-bold">
-                <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" className="w-3 h-3 sm:w-3.5 sm:h-3.5 grayscale opacity-70" alt="BNB" />
+                <span className="material-symbols-outlined text-xs sm:text-sm">payments</span>
                 {t('upgrade.secure_binance')}
               </div>
             </div>
