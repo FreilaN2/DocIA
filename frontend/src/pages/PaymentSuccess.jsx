@@ -6,6 +6,8 @@ import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCircleCheck, faHourglassHalf, faCircleExclamation, faAward } from '@fortawesome/free-solid-svg-icons';
 
 export default function PaymentSuccess() {
   const { t } = useTranslation();
@@ -63,7 +65,9 @@ export default function PaymentSuccess() {
         const resp = await api.post(endpoint, payload);
         setStatus('success');
         setMessage(resp.data.message || '¡Pago confirmado!');
-        toast.success('¡Pago procesado con éxito! 🎉');
+        toast.success('¡Pago procesado con éxito!', {
+          icon: <FontAwesomeIcon icon={faAward} className="text-amber-500" />,
+        });
         localStorage.removeItem('pending_purchase');
 
         // Actualizar plan localmente en el navegador
@@ -85,7 +89,9 @@ export default function PaymentSuccess() {
         if (err.response?.data?.detail?.includes('ORDER_ALREADY_CAPTURED')) {
           setStatus('success');
           setMessage('¡Pago confirmado!');
-          toast.success('¡Pago procesado con éxito! 🎉');
+          toast.success('¡Pago procesado con éxito!', {
+            icon: <FontAwesomeIcon icon={faAward} className="text-amber-500" />,
+          });
           localStorage.removeItem('pending_purchase');
 
           // Actualizar plan localmente en el navegador
@@ -150,9 +156,7 @@ export default function PaymentSuccess() {
                 transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                 className="w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 bg-green-100 dark:bg-green-900/20 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6"
               >
-                <span className="material-symbols-outlined text-green-600 dark:text-green-500 text-3xl sm:text-4xl">
-                  check_circle
-                </span>
+                <FontAwesomeIcon icon={faCircleCheck} className="text-green-600 dark:text-green-500 text-3xl sm:text-4xl" />
               </motion.div>
               <h2 className="text-2xl sm:text-3xl font-black text-on-surface mb-2 sm:mb-3">
                 {t('payment.success_title')}
@@ -178,9 +182,7 @@ export default function PaymentSuccess() {
                 transition={{ type: 'spring', stiffness: 300, damping: 15 }}
                 className="w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 bg-blue-100 dark:bg-blue-900/20 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6"
               >
-                <span className="material-symbols-outlined text-blue-600 dark:text-blue-500 text-3xl sm:text-4xl">
-                  hourglass_empty
-                </span>
+                <FontAwesomeIcon icon={faHourglassHalf} className="text-blue-600 dark:text-blue-500 text-3xl sm:text-4xl" />
               </motion.div>
               <h2 className="text-2xl sm:text-3xl font-black text-on-surface mb-2 sm:mb-3">
                 {t('payment.pm_review_title')}
@@ -209,9 +211,7 @@ export default function PaymentSuccess() {
           {status === 'error' && (
             <div className="py-2 sm:py-4">
               <div className="w-16 h-16 sm:w-18 sm:h-18 md:w-20 md:h-20 bg-red-100 dark:bg-red-900/20 rounded-full flex items-center justify-center mx-auto mb-4 sm:mb-6">
-                <span className="material-symbols-outlined text-red-500 text-3xl sm:text-4xl">
-                  error
-                </span>
+                <FontAwesomeIcon icon={faCircleExclamation} className="text-red-500 text-3xl sm:text-4xl" />
               </div>
               <h2 className="text-2xl sm:text-3xl font-black text-on-surface mb-2 sm:mb-3">
                 {t('payment.error_title')}

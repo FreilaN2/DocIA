@@ -5,6 +5,7 @@ Endpoints de autenticación y gestión de cuenta de usuario.
 """
 
 import os
+import re
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -109,15 +110,30 @@ def _get_user_dict(u: User, db: Session) -> dict:
 def register(request: Request, user_data: UserCreate, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == user_data.email).first():
         raise HTTPException(status_code=400, detail="El correo electrónico ya está registrado.")
-    if user_data.phone and db.query(User).filter(User.phone == user_data.phone).first():
+    
+    phone = (user_data.phone or "").strip()
+    if not phone:
+        raise HTTPException(status_code=400, detail="El número de teléfono es obligatorio.")
+    phone_clean_digits = re.sub(r"\D", "", phone)
+    if not re.match(r"^\+?[0-9\s()-]{7,20}$", phone) or len(phone_clean_digits) < 7 or len(phone_clean_digits) > 15:
+        raise HTTPException(
+            status_code=400,
+            detail="El formato del número de teléfono no es válido (debe contener entre 7 y 15 dígitos numéricos sin letras).",
+        )
+
+    country = (user_data.country or "").strip().upper()
+    if not country:
+        raise HTTPException(status_code=400, detail="Por favor, selecciona tu país de residencia.")
+
+    if db.query(User).filter(User.phone == phone).first():
         raise HTTPException(status_code=400, detail="Este número de teléfono ya está asociado a otra cuenta.")
 
     new_user = User(
         first_name=user_data.firstName,
         last_name=user_data.lastName,
         email=user_data.email,
-        phone=user_data.phone,
-        country=user_data.country,
+        phone=phone,
+        country=country,
         password_hash=get_password_hash(user_data.password),
         referral_code=generate_referral_code(db),
         plan_id=1,

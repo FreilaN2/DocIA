@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faClipboard, faBook, faCheck } from '@fortawesome/free-solid-svg-icons';
 
 function toInitials(firstName = '') {
   return firstName
@@ -368,7 +370,10 @@ export default function Tools() {
 
   const copyText = (text, label = isEn ? 'Copied to clipboard' : 'Copiado al portapapeles') => {
     navigator.clipboard.writeText(text);
-    toast.success(label, { duration: 2200, icon: '📋' });
+    toast.success(label, {
+      duration: 2200,
+      icon: <FontAwesomeIcon icon={faClipboard} className="text-indigo-400" />,
+    });
   };
 
   const handleSaveReference = () => {
@@ -381,7 +386,9 @@ export default function Tools() {
     setSavedRefs((prev) =>
       [...prev, newItem].sort((a, b) => a.sortKey.localeCompare(b.sortKey, isEn ? 'en' : 'es'))
     );
-    toast.success(isEn ? 'Saved to My Bibliography' : 'Guardada en Mi Bibliografía', { icon: '📚' });
+    toast.success(isEn ? 'Saved to My Bibliography' : 'Guardada en Mi Bibliografía', {
+      icon: <FontAwesomeIcon icon={faBook} className="text-indigo-400" />,
+    });
   };
 
   const handleRemoveRef = (id) => {
@@ -674,13 +681,16 @@ export default function Tools() {
                               : 'bg-slate-100 dark:bg-white/5 text-on-surface-variant border-slate-200 dark:border-white/10'
                           }`}
                         >
-                          {isCorporateAuthor
-                            ? isEn
-                              ? '✓ Institutional Author'
-                              : '✓ Autor Institucional'
-                            : isEn
-                            ? 'Is it an organization?'
-                            : '¿Es institución u organización?'}
+                          {isCorporateAuthor ? (
+                            <span className="inline-flex items-center gap-1">
+                              <FontAwesomeIcon icon={faCheck} />
+                              {isEn ? 'Institutional Author' : 'Autor Institucional'}
+                            </span>
+                          ) : isEn ? (
+                            'Is it an organization?'
+                          ) : (
+                            '¿Es institución u organización?'
+                          )}
                         </button>
                       </div>
 
@@ -1204,9 +1214,10 @@ export default function Tools() {
                       {activeHeadingObj.rules.map((r, i) => (
                         <span
                           key={i}
-                          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-xs sm:text-sm font-bold text-on-surface"
+                          className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-white/5 text-xs sm:text-sm font-bold text-on-surface inline-flex items-center gap-1.5"
                         >
-                          ✓ {r}
+                          <FontAwesomeIcon icon={faCheck} className="text-emerald-500 text-xs" />
+                          <span>{r}</span>
                         </span>
                       ))}
                     </div>

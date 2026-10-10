@@ -97,6 +97,7 @@ def _run_safe_migrations(conn):
     _add_column_if_not_exists(conn, "users", "failed_login_attempts", "INT DEFAULT 0")
     _add_column_if_not_exists(conn, "users", "account_locked_until", "DATETIME")
     _add_column_if_not_exists(conn, "users", "is_admin", "BOOLEAN DEFAULT FALSE")
+    _add_column_if_not_exists(conn, "users", "has_left_feedback", "BOOLEAN DEFAULT FALSE")
 
     # Métricas y auditoría de consumo DeepSeek en token_transactions
     _add_column_if_not_exists(conn, "token_transactions", "deepseek_prompt_tokens", "INT DEFAULT 0")
@@ -110,6 +111,9 @@ def _run_safe_migrations(conn):
     # Sistema de Referidos en users
     _add_column_if_not_exists(conn, "users", "referral_code", "VARCHAR(30) DEFAULT NULL")
     _add_column_if_not_exists(conn, "users", "referred_by_id", "INT DEFAULT NULL")
+
+    # Documentos procesados
+    _add_column_if_not_exists(conn, "processed_documents", "tokens_consumed", "INT DEFAULT 0")
 
     try:
         conn.execute(text("CREATE UNIQUE INDEX idx_unique_referral_code ON users(referral_code)"))

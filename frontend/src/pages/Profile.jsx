@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { motion, AnimatePresence } from 'framer-motion';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCircleXmark, faCircleCheck, faLock, faClipboard, faLink, faGift, faBolt } from '@fortawesome/free-solid-svg-icons';
 import api from '../api';
 import Navbar from '../components/Navbar';
 import PlanBadge from '../components/PlanBadge';
@@ -200,22 +202,30 @@ export default function Profile() {
 
     const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñÜü\s'-]{2,50}$/;
     if (!nameRegex.test(cleanFirst) || !nameRegex.test(cleanLast)) {
-      toast.error(t('auth.error_name_invalid') || 'El nombre y apellido solo deben contener letras.', { icon: '❌' });
+      toast.error(t('auth.error_name_invalid') || 'El nombre y apellido solo deben contener letras.', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
       return;
     }
 
     if (cleanPhone && !/^\+?[0-9\s()-]{7,20}$/.test(cleanPhone)) {
-      toast.error('Ingresa un número de teléfono válido (7 a 20 dígitos).', { icon: '❌' });
+      toast.error('Ingresa un número de teléfono válido (7 a 20 dígitos).', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
       return;
     }
 
     if (!cleanCountry) {
-      toast.error(t('auth.error_country_required') || 'Por favor, selecciona tu país.', { icon: '❌' });
+      toast.error(t('auth.error_country_required') || 'Por favor, selecciona tu país.', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
       return;
     }
 
     if (!user?.passwordSetupRequired && !confirmEditPassword) {
-      toast.error('Por seguridad, ingresa tu contraseña actual para confirmar el cambio.', { icon: '🔐' });
+      toast.error('Por seguridad, ingresa tu contraseña actual para confirmar el cambio.', {
+        icon: <FontAwesomeIcon icon={faLock} className="text-amber-500" />,
+      });
       return;
     }
 
@@ -235,10 +245,14 @@ export default function Profile() {
         setUser(res.data.user);
         setEditingField(null);
         setConfirmEditPassword('');
-        toast.success(t('profile.updated') || 'Dato actualizado correctamente', { icon: '✅' });
+        toast.success(t('profile.updated') || 'Dato actualizado correctamente', {
+          icon: <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500" />,
+        });
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || t('profile.error_updating_profile'), { icon: '❌' });
+      toast.error(err.response?.data?.detail || t('profile.error_updating_profile'), {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
     } finally {
       setLoading(false);
     }
@@ -250,7 +264,9 @@ export default function Profile() {
 
     const pwd = passwordForm.new_password;
     if (user.passwordSetupRequired && pwd !== passwordForm.confirm_password) {
-      toast.error(t('auth.error_passwords_mismatch'), { icon: '❌' });
+      toast.error(t('auth.error_passwords_mismatch'), {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
       setLoading(false);
       return;
     }
@@ -262,7 +278,9 @@ export default function Profile() {
     };
 
     if (!pwdReqs.length || !pwdReqs.upper || !pwdReqs.number || !pwdReqs.special) {
-      toast.error(t('auth.error_password_weak') || 'La contraseña no cumple los requisitos mínimos de seguridad.', { icon: '❌' });
+      toast.error(t('auth.error_password_weak') || 'La contraseña no cumple los requisitos mínimos de seguridad.', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
       setLoading(false);
       return;
     }
@@ -279,14 +297,18 @@ export default function Profile() {
         window.dispatchEvent(new Event('authChange'));
         setIsChangingPassword(false);
         setPasswordForm({ current_password: '', new_password: '', confirm_password: '' });
-        toast.success(t('profile.password_updated') || 'Contraseña actualizada', { icon: '🔐' });
+        toast.success(t('profile.password_updated') || 'Contraseña actualizada', {
+          icon: <FontAwesomeIcon icon={faLock} className="text-emerald-500" />,
+        });
       }
     } catch (err) {
       const errorMsg = err.response?.data?.detail;
       const translatedError = errorMsg === "La contraseña actual es incorrecta."
         ? t('profile.error_wrong_current_password')
         : errorMsg;
-      toast.error(translatedError || t('profile.error_changing_password'), { icon: '❌' });
+      toast.error(translatedError || t('profile.error_changing_password'), {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
     } finally {
       setLoading(false);
     }
@@ -296,7 +318,7 @@ export default function Profile() {
     if (navigator.clipboard) {
       navigator.clipboard.writeText(user.email);
       toast.success(t('profile.email_copied') || 'Email copiado al portapapeles', {
-        icon: '📋',
+        icon: <FontAwesomeIcon icon={faClipboard} className="text-indigo-400" />,
         duration: 2000,
       });
     }
@@ -311,7 +333,9 @@ export default function Profile() {
     const link = `${window.location.origin}/register?ref=${code}`;
     if (navigator.clipboard) {
       navigator.clipboard.writeText(link);
-      toast.success('¡Enlace de referido copiado!', { icon: '🔗' });
+      toast.success('¡Enlace de referido copiado!', {
+        icon: <FontAwesomeIcon icon={faLink} className="text-indigo-400" />,
+      });
     }
   };
 
@@ -323,7 +347,9 @@ export default function Profile() {
     }
     if (navigator.clipboard) {
       navigator.clipboard.writeText(code);
-      toast.success(`¡Código ${code} copiado!`, { icon: '📋' });
+      toast.success(`¡Código ${code} copiado!`, {
+        icon: <FontAwesomeIcon icon={faClipboard} className="text-indigo-400" />,
+      });
     }
   };
 
@@ -338,7 +364,10 @@ export default function Profile() {
     try {
       const res = await api.post('/user/apply-referral', { code: clean });
       if (res.data.status === 'success') {
-        toast.success(res.data.message || '¡Código de referido vinculado con éxito!', { icon: '🎉', duration: 4000 });
+        toast.success(res.data.message || '¡Código de referido vinculado con éxito!', {
+          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
+          duration: 4000,
+        });
         setInputReferralCode('');
         if (res.data.user) {
           setUser(res.data.user);
@@ -353,7 +382,9 @@ export default function Profile() {
           .catch(() => {});
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'No se pudo vincular el código de referido', { icon: '❌' });
+      toast.error(err.response?.data?.detail || 'No se pudo vincular el código de referido', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
     } finally {
       setApplyingReferral(false);
     }
@@ -369,7 +400,10 @@ export default function Profile() {
     try {
       const res = await api.post('/coupons/redeem-tokens', { code: couponInput.trim() });
       if (res.data.status === 'success') {
-        toast.success(res.data.message || '¡Tokens canjeados exitosamente!', { icon: '🎉', duration: 4000 });
+        toast.success(res.data.message || '¡Tokens canjeados exitosamente!', {
+          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
+          duration: 4000,
+        });
         setCouponInput('');
         const meRes = await api.get('/user/me');
         setUser(meRes.data);
@@ -378,7 +412,9 @@ export default function Profile() {
         window.dispatchEvent(new Event('authChange'));
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'No se pudo canjear el cupón', { icon: '❌' });
+      toast.error(err.response?.data?.detail || 'No se pudo canjear el cupón', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
     } finally {
       setCouponRedeeming(false);
     }
@@ -822,8 +858,15 @@ export default function Profile() {
                         <p className="text-[10px] text-on-surface-variant uppercase font-black tracking-wider">
                           {t('profile.plan')} Actual
                         </p>
-                        <p className="font-black text-on-surface text-sm sm:text-base mt-0.5 flex items-center gap-1">
-                          {user.plan === 'pro' ? '⚡ Researcher Pro' : 'Starter Free'}
+                        <p className="font-black text-on-surface text-sm sm:text-base mt-0.5 flex items-center gap-1.5">
+                          {user.plan === 'pro' ? (
+                            <>
+                              <FontAwesomeIcon icon={faBolt} className="text-amber-500" />
+                              <span>Researcher Pro</span>
+                            </>
+                          ) : (
+                            'Starter Free'
+                          )}
                         </p>
                         <p className="text-[11px] text-on-surface-variant mt-0.5">
                           {user.plan === 'pro' ? `Vence el: ${formattedPlanExpiration}` : 'Sin fecha de vencimiento'}
@@ -1387,7 +1430,13 @@ export default function Profile() {
                       maxLength={20}
                       placeholder="Ej: +58 412 1234567"
                       value={profileForm.phone}
-                      onChange={e => setProfileForm({ ...profileForm, phone: e.target.value })}
+                      onChange={e => {
+                        let sanitized = e.target.value.replace(/[^\d+\s()-]/g, '');
+                        if (sanitized.includes('+')) {
+                          sanitized = (sanitized.startsWith('+') ? '+' : '') + sanitized.replace(/\+/g, '');
+                        }
+                        setProfileForm({ ...profileForm, phone: sanitized });
+                      }}
                       className="w-full p-3 bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl outline-none focus:border-primary-container text-on-surface text-sm"
                     />
                   </div>
@@ -1550,7 +1599,14 @@ export default function Profile() {
                       transition: 'all 0.2s',
                     }}>
                       <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: allOk ? '#16a34a' : '#6b7280', marginBottom: '6px' }}>
-                        {allOk ? `✅ ${t('auth.pwd_secure')}` : t('auth.pwd_requirements')}
+                        {allOk ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                            <FontAwesomeIcon icon={faCircleCheck} style={{ color: '#16a34a' }} />
+                            {t('auth.pwd_secure')}
+                          </span>
+                        ) : (
+                          t('auth.pwd_requirements')
+                        )}
                       </p>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                         {reqs.map((r, i) => (

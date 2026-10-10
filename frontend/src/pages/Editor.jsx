@@ -4,6 +4,8 @@ import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTriangleExclamation, faLockOpen, faLock } from '@fortawesome/free-solid-svg-icons';
 import Navbar from '../components/Navbar';
 import PlanBadge from '../components/PlanBadge';
 import ParagraphCard from '../components/ParagraphCard';
@@ -188,7 +190,10 @@ export default function Editor() {
             sessionStorage.removeItem('docai_pending_toc');
             sessionStorage.removeItem('docai_auto_download');
             setTimeout(() => {
-              toast.error(t('editor.pro_progress_discarded'), { duration: 6000, icon: '⚠️' });
+              toast.error(t('editor.pro_progress_discarded'), {
+                duration: 6000,
+                icon: <FontAwesomeIcon icon={faTriangleExclamation} className="text-amber-500" />,
+              });
             }, 500);
             return;
           }
@@ -209,7 +214,10 @@ export default function Editor() {
         sessionStorage.removeItem('docai_auto_download');
         if (token && storedUser) {
           setTimeout(() => {
-            toast.success(t('editor.login_success_download'), { icon: '🔓', duration: 5000 });
+            toast.success(t('editor.login_success_download'), {
+              icon: <FontAwesomeIcon icon={faLockOpen} className="text-emerald-500" />,
+              duration: 5000,
+            });
           }, 1000);
         }
       }
@@ -516,7 +524,10 @@ export default function Editor() {
       sessionStorage.setItem('docai_pending_format', downloadFormat);
       sessionStorage.setItem('docai_pending_toc', includeTOC.toString());
       sessionStorage.setItem('docai_auto_download', 'true');
-      toast(t('editor.login_to_download'), { icon: '🔒', duration: 5000 });
+      toast(t('editor.login_to_download'), {
+        icon: <FontAwesomeIcon icon={faLock} className="text-amber-500" />,
+        duration: 5000,
+      });
       navigate('/register');
       return;
     }

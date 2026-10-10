@@ -1,4 +1,4 @@
-﻿-- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Win64 (AMD64)
+-- MariaDB dump 10.19  Distrib 10.4.32-MariaDB, for Win64 (AMD64)
 --
 -- Host: localhost    Database: docai_db
 -- ------------------------------------------------------
@@ -501,6 +501,7 @@ CREATE TABLE `users` (
   `password_setup_required` tinyint(1) DEFAULT 0,
   `referral_code` varchar(30) DEFAULT NULL,
   `referred_by_id` int(11) DEFAULT NULL,
+  `has_left_feedback` tinyint(1) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
   UNIQUE KEY `ix_users_email` (`email`),
   UNIQUE KEY `idx_unique_users_phone` (`phone`),

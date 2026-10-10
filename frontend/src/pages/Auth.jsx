@@ -4,20 +4,111 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import api from '../api';
 import toast from 'react-hot-toast';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faRocket, faShieldHalved, faCircleCheck } from '@fortawesome/free-solid-svg-icons';
 import { GoogleLogin } from '@react-oauth/google';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 
 const countryList = [
-  { code: 'AR', name: 'Argentina' }, { code: 'BO', name: 'Bolivia' }, { code: 'CL', name: 'Chile' },
-  { code: 'CO', name: 'Colombia' }, { code: 'CR', name: 'Costa Rica' }, { code: 'CU', name: 'Cuba' },
-  { code: 'EC', name: 'Ecuador' }, { code: 'SV', name: 'El Salvador' }, { code: 'ES', name: 'España' },
-  { code: 'US', name: 'Estados Unidos' }, { code: 'GT', name: 'Guatemala' }, { code: 'HN', name: 'Honduras' },
-  { code: 'MX', name: 'México' }, { code: 'NI', name: 'Nicaragua' }, { code: 'PA', name: 'Panamá' },
-  { code: 'PY', name: 'Paraguay' }, { code: 'PE', name: 'Perú' }, { code: 'PR', name: 'Puerto Rico' },
-  { code: 'DO', name: 'República Dominicana' }, { code: 'UY', name: 'Uruguay' }, { code: 'VE', name: 'Venezuela' },
-  { code: 'OT', name: 'Otro' }
+  { code: 'VE', name: 'Venezuela', dial: '+58' },
+  { code: 'AR', name: 'Argentina', dial: '+54' },
+  { code: 'BO', name: 'Bolivia', dial: '+591' },
+  { code: 'CL', name: 'Chile', dial: '+56' },
+  { code: 'CO', name: 'Colombia', dial: '+57' },
+  { code: 'CR', name: 'Costa Rica', dial: '+506' },
+  { code: 'CU', name: 'Cuba', dial: '+53' },
+  { code: 'DO', name: 'República Dominicana', dial: '+1809' },
+  { code: 'EC', name: 'Ecuador', dial: '+593' },
+  { code: 'ES', name: 'España', dial: '+34' },
+  { code: 'US', name: 'Estados Unidos', dial: '+1' },
+  { code: 'GT', name: 'Guatemala', dial: '+502' },
+  { code: 'HN', name: 'Honduras', dial: '+504' },
+  { code: 'MX', name: 'México', dial: '+52' },
+  { code: 'NI', name: 'Nicaragua', dial: '+505' },
+  { code: 'PA', name: 'Panamá', dial: '+507' },
+  { code: 'PY', name: 'Paraguay', dial: '+595' },
+  { code: 'PE', name: 'Perú', dial: '+51' },
+  { code: 'PR', name: 'Puerto Rico', dial: '+1787' },
+  { code: 'SV', name: 'El Salvador', dial: '+503' },
+  { code: 'UY', name: 'Uruguay', dial: '+598' },
+  { code: 'OT', name: 'Otro', dial: '' }
 ];
+
+const dialCodeToCountry = [
+  // 4 dígitos (códigos NANP específicos)
+  { prefix: '1787', code: 'PR' },
+  { prefix: '1939', code: 'PR' },
+  { prefix: '1809', code: 'DO' },
+  { prefix: '1829', code: 'DO' },
+  { prefix: '1849', code: 'DO' },
+  // 3 dígitos
+  { prefix: '591', code: 'BO' },
+  { prefix: '593', code: 'EC' },
+  { prefix: '595', code: 'PY' },
+  { prefix: '598', code: 'UY' },
+  { prefix: '502', code: 'GT' },
+  { prefix: '503', code: 'SV' },
+  { prefix: '504', code: 'HN' },
+  { prefix: '505', code: 'NI' },
+  { prefix: '506', code: 'CR' },
+  { prefix: '507', code: 'PA' },
+  // 2 dígitos
+  { prefix: '58', code: 'VE' },
+  { prefix: '57', code: 'CO' },
+  { prefix: '56', code: 'CL' },
+  { prefix: '54', code: 'AR' },
+  { prefix: '53', code: 'CU' },
+  { prefix: '52', code: 'MX' },
+  { prefix: '51', code: 'PE' },
+  { prefix: '34', code: 'ES' },
+  // 1 dígito
+  { prefix: '1', code: 'US' },
+];
+
+const detectCountryFromPhone = (phoneStr) => {
+  if (!phoneStr) return null;
+  const trimmed = phoneStr.trim();
+
+  // Si comienza con +, quitar el + y buscar prefijo
+  if (trimmed.startsWith('+')) {
+    const digits = trimmed.slice(1).replace(/\D/g, '');
+    if (!digits) return null;
+    const match = dialCodeToCountry.find(item => digits.startsWith(item.prefix));
+    return match ? match.code : null;
+  }
+
+  // Si comienza con formato internacional 00
+  if (trimmed.startsWith('00')) {
+    const digits = trimmed.slice(2).replace(/\D/g, '');
+    if (!digits) return null;
+    const match = dialCodeToCountry.find(item => digits.startsWith(item.prefix));
+    return match ? match.code : null;
+  }
+
+  const digits = trimmed.replace(/\D/g, '');
+  // Detección de operadoras móviles nacionales de Venezuela (0412, 0414, 0424, 0416, 0426)
+  if (
+    digits.startsWith('0412') ||
+    digits.startsWith('0414') ||
+    digits.startsWith('0424') ||
+    digits.startsWith('0416') ||
+    digits.startsWith('0426')
+  ) {
+    return 'VE';
+  }
+
+  // Detección de prefijos directos sin signo + (mínimo 2 dígitos para evitar falsos positivos con '1')
+  if (digits.length >= 2) {
+    const match = dialCodeToCountry.find(item => {
+      if (item.prefix.length === 1) return false;
+      return digits.startsWith(item.prefix);
+    });
+    return match ? match.code : null;
+  }
+
+  return null;
+};
 
 const inputBaseClasses = "w-full py-3 sm:py-4 pr-4 pl-10 sm:pl-12 h-[48px] sm:h-[52px] md:h-[56px] bg-black/5 dark:bg-black/20 border border-outline/30 rounded-xl focus:border-primary-container focus:bg-primary-container/10 outline-none text-sm transition-colors duration-200 text-on-surface placeholder:text-on-surface-variant/50";
 const labelBaseClasses = "text-[10px] sm:text-[11px] font-bold text-on-surface-variant uppercase tracking-widest ml-1 mb-1 block";
@@ -281,8 +372,74 @@ export default function Auth() {
     setError("");
   };
 
+  const handlePhoneKeyDown = (e) => {
+    // Permitir teclas de navegación y control del cursor
+    if (
+      ['Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 'ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key) ||
+      e.ctrlKey || e.metaKey || e.altKey
+    ) {
+      return;
+    }
+    // Solo permitir dígitos, '+', espacios, guiones y paréntesis
+    if (!/[\d+\s()-]/.test(e.key)) {
+      e.preventDefault();
+      return;
+    }
+    // Solo permitir '+' al inicio absoluto y si no hay otro '+'
+    if (e.key === '+') {
+      if (e.target.selectionStart !== 0 || e.target.value.includes('+')) {
+        e.preventDefault();
+      }
+    }
+  };
+
+  const handlePhoneChange = (e) => {
+    let raw = e.target.value;
+    // Filtrar estrictamente cualquier letra o símbolo no admitido
+    let sanitized = raw.replace(/[^\d+\s()-]/g, '');
+
+    // El '+' solo puede estar en la posición inicial
+    if (sanitized.includes('+')) {
+      const hasLeadingPlus = sanitized.startsWith('+');
+      sanitized = (hasLeadingPlus ? '+' : '') + sanitized.replace(/\+/g, '');
+    }
+
+    if (sanitized.length > 20) {
+      sanitized = sanitized.slice(0, 20);
+    }
+
+    const detected = detectCountryFromPhone(sanitized);
+
+    setFormData(prev => ({
+      ...prev,
+      phone: sanitized,
+      ...(detected ? { country: detected } : {})
+    }));
+    setError("");
+  };
+
   const handleCountrySelect = (code) => {
-    setFormData({ ...formData, country: code });
+    const selected = countryList.find(c => c.code === code);
+    let updatedPhone = formData.phone || '';
+
+    if (selected && selected.dial) {
+      if (!updatedPhone.trim() || updatedPhone.trim() === '+') {
+        updatedPhone = `${selected.dial} `;
+      } else {
+        const digits = updatedPhone.replace(/\D/g, '');
+        const currentMatch = dialCodeToCountry.find(item => digits.startsWith(item.prefix));
+        if (currentMatch && updatedPhone.startsWith('+')) {
+          const oldPrefix = `+${currentMatch.prefix}`;
+          if (updatedPhone.startsWith(oldPrefix)) {
+            updatedPhone = `${selected.dial}${updatedPhone.slice(oldPrefix.length)}`;
+          }
+        } else if (!updatedPhone.startsWith('+')) {
+          updatedPhone = `${selected.dial} ${updatedPhone}`;
+        }
+      }
+    }
+
+    setFormData(prev => ({ ...prev, country: code, phone: updatedPhone }));
     setIsCountryDropdownOpen(false);
     setError("");
   };
@@ -296,6 +453,19 @@ export default function Auth() {
       const nameRegex = /^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$/;
       if (!nameRegex.test(formData.firstName) || !nameRegex.test(formData.lastName)) {
         setError(t('auth.error_name_invalid'));
+        setLoading(false);
+        return;
+      }
+      const rawPhone = (formData.phone || '').trim();
+      if (!rawPhone) {
+        setError(t('auth.error_phone_required') || (isEn ? 'Please enter your phone number.' : 'Por favor, ingresa tu número de teléfono.'));
+        setLoading(false);
+        return;
+      }
+      const digitsOnly = rawPhone.replace(/\D/g, '');
+      const phoneRegex = /^\+?[0-9\s()-]{7,20}$/;
+      if (!phoneRegex.test(rawPhone) || digitsOnly.length < 7 || digitsOnly.length > 15) {
+        setError(t('auth.error_phone_invalid') || (isEn ? 'Please enter a valid phone number (between 7 and 15 digits).' : 'Ingresa un número de teléfono válido (solo números, entre 7 y 15 dígitos).'));
         setLoading(false);
         return;
       }
@@ -329,12 +499,12 @@ export default function Auth() {
     const endpoint = isLogin ? 'login' : 'register';
     const refCodeToSend = formData.referralCode?.trim() || sessionStorage.getItem('docai_ref') || undefined;
     const payload = isLogin
-      ? { email: formData.email, password: formData.password }
+      ? { email: formData.email.trim(), password: formData.password }
       : {
         firstName: formData.firstName.trim(),
         lastName: formData.lastName.trim(),
-        email: formData.email,
-        phone: formData.phone,
+        email: formData.email.trim(),
+        phone: formData.phone.trim(),
         country: formData.country,
         password: formData.password,
         referral_code: refCodeToSend,
@@ -400,7 +570,10 @@ export default function Auth() {
           });
           navigate('/profile', { replace: true });
         } else {
-          toast.success(t('auth.welcome'), { style: { background: '#1a1512', color: '#fff', borderRadius: '15px' }, icon: '🚀' });
+          toast.success(t('auth.welcome'), {
+            style: { background: '#1a1512', color: '#fff', borderRadius: '15px' },
+            icon: <FontAwesomeIcon icon={faRocket} className="text-amber-400" />,
+          });
           const u = response.data.user;
           const userPlan = (u.plan === 'pro' || u.isAdmin || Number(u.tokens || u.totalTokens || 0) > 0) ? 'pro' : 'free';
           navigate(`/editor/${userPlan}`, { replace: true });
@@ -417,9 +590,16 @@ export default function Auth() {
     await submitGoogleToken(credentialResponse.credential, false);
   };
 
-  const selectedCountryName = formData.country
-    ? countryList.find(c => c.code === formData.country)?.name
-    : "Seleccionar...";
+  const selectedCountryObj = formData.country
+    ? countryList.find(c => c.code === formData.country)
+    : null;
+  const selectedCountryName = selectedCountryObj
+    ? (selectedCountryObj.dial ? `${selectedCountryObj.name} (${selectedCountryObj.dial})` : selectedCountryObj.name)
+    : (isEn ? "Select..." : "Seleccionar...");
+
+  const phonePlaceholder = selectedCountryObj?.dial
+    ? `${selectedCountryObj.dial} 412 1234567`
+    : "+58 412 1234567";
 
   const hasPassword = formData.password.length > 0;
 
@@ -452,7 +632,9 @@ export default function Auth() {
         setForgotMethod(res.data.method || 'email_code');
         setForgotPhoneHint(res.data.phone_hint || '');
         setForgotStep(2);
-        toast.success(res.data.message || 'Verifica tu identidad para continuar', { icon: '🔐' });
+        toast.success(res.data.message || 'Verifica tu identidad para continuar', {
+          icon: <FontAwesomeIcon icon={faShieldHalved} className="text-indigo-400" />,
+        });
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'No se pudo iniciar la recuperación');
@@ -475,7 +657,10 @@ export default function Auth() {
         new_password: forgotNewPassword,
       });
       if (res.data.status === 'success') {
-        toast.success(res.data.message || '¡Contraseña restablecida con éxito!', { icon: '✅', duration: 4000 });
+        toast.success(res.data.message || '¡Contraseña restablecida con éxito!', {
+          icon: <FontAwesomeIcon icon={faCircleCheck} className="text-emerald-500" />,
+          duration: 4000,
+        });
         setFormData((prev) => ({ ...prev, email: forgotEmail.trim(), password: '' }));
         setForgotModalOpen(false);
       }
@@ -685,7 +870,19 @@ export default function Auth() {
                         <label className={labelBaseClasses}>{t('auth.phone')}</label>
                         <div className="relative">
                           <span className="material-symbols-outlined absolute left-3 sm:left-4 top-1/2 -translate-y-1/2 text-slate-500 text-lg sm:text-xl">call</span>
-                          <input type="tel" name="phone" required placeholder="+1 234 567 890" className={inputBaseClasses} onChange={handleChange} value={formData.phone} onFocus={() => setIsTyping(true)} onBlur={() => setIsTyping(false)} />
+                          <input
+                            type="tel"
+                            name="phone"
+                            required
+                            inputMode="tel"
+                            placeholder={phonePlaceholder}
+                            className={inputBaseClasses}
+                            onChange={handlePhoneChange}
+                            onKeyDown={handlePhoneKeyDown}
+                            value={formData.phone}
+                            onFocus={() => setIsTyping(true)}
+                            onBlur={() => setIsTyping(false)}
+                          />
                         </div>
                       </div>
 
@@ -707,7 +904,14 @@ export default function Auth() {
                                   {countryList.map((country) => (
                                     <li key={country.code} onClick={() => handleCountrySelect(country.code)}
                                       className={`px-3 sm:px-4 py-2 text-xs sm:text-sm cursor-pointer transition-colors duration-150 flex items-center justify-between ${formData.country === country.code ? 'bg-primary-container text-white font-bold' : 'text-on-surface hover:bg-primary-container/10'}`}>
-                                      <span>{country.name}</span>
+                                      <div className="flex items-center gap-2">
+                                        <span>{country.name}</span>
+                                        {country.dial && (
+                                          <span className={`text-[11px] font-mono px-1.5 py-0.5 rounded ${formData.country === country.code ? 'bg-white/20 text-white' : 'bg-black/5 dark:bg-white/10 text-on-surface-variant'}`}>
+                                            {country.dial}
+                                          </span>
+                                        )}
+                                      </div>
                                       {formData.country === country.code && <span className="material-symbols-outlined text-base sm:text-lg">check</span>}
                                     </li>
                                   ))}
@@ -772,7 +976,14 @@ export default function Auth() {
                     transition: 'all 0.2s',
                   }}>
                     <p style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: allOk ? '#16a34a' : '#6b7280', marginBottom: '6px' }}>
-                      {allOk ? `✅ ${t('auth.pwd_secure')}` : t('auth.pwd_requirements')}
+                      {allOk ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: '5px' }}>
+                          <FontAwesomeIcon icon={faCircleCheck} style={{ color: '#16a34a' }} />
+                          {t('auth.pwd_secure')}
+                        </span>
+                      ) : (
+                        t('auth.pwd_requirements')
+                      )}
                     </p>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
                       {reqs.map((r, i) => (

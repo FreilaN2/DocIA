@@ -8,7 +8,7 @@ export default function Navbar() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // ✅ SOLUCIÓN: Inicializar user directamente desde localStorage
+  // Inicializar user directamente desde localStorage
   const [user, setUser] = useState(() => {
     try {
       const storedUser = localStorage.getItem('user');
@@ -240,7 +240,7 @@ export default function Navbar() {
               <span className="material-symbols-outlined text-[14px] sm:text-sm">swap_horiz</span>
             </button>
 
-            {/* ✅ MENÚ DE USUARIO - Ahora sin parpadeo */}
+            {/* MENÚ DE USUARIO - Ahora sin parpadeo */}
             {user ? (
               <div className="flex items-center gap-1.5 sm:gap-2 md:gap-3 bg-slate-50 dark:bg-surface-variant p-1 sm:p-1.5 pr-2 sm:pr-3 md:pr-4 rounded-full border border-slate-200 dark:border-outline/50">
                 {/* Avatar */}

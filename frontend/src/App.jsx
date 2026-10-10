@@ -4,6 +4,8 @@ import { Toaster } from 'react-hot-toast';
 import { toast } from 'react-hot-toast';
 import api from './api';
 import i18n from './i18n';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLock, faGift } from '@fortawesome/free-solid-svg-icons';
 import Landing from './pages/Landing';
 import Editor from './pages/Editor';
 import Auth from './pages/Auth';
@@ -97,7 +99,7 @@ function AppRoutes() {
     if (shouldRedirectToProfile) {
       toast(i18n.t('profile.setup_password_required_toast'), {
         id: 'force-password-setup',
-        icon: '🔒',
+        icon: <FontAwesomeIcon icon={faLock} className="text-amber-500" />,
         duration: 4000,
       });
     }
@@ -143,7 +145,10 @@ function App() {
           
           if (!isNotified) {
             if (newData.lastPaymentStatus === 'approved') {
-              toast.success(i18n.t('app.payment_approved'), { duration: 6000, icon: '🎉' });
+              toast.success(i18n.t('app.payment_approved'), {
+                duration: 6000,
+                icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
+              });
               localStorage.setItem(notifiedKey, 'true');
               updated = true;
             } else if (newData.lastPaymentStatus === 'rejected') {

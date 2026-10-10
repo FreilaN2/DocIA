@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faFire } from '@fortawesome/free-solid-svg-icons';
 
 export default function Landing() {
   const { t } = useTranslation();
@@ -280,8 +282,9 @@ export default function Landing() {
               variants={itemVariants}
               className="bg-white/90 dark:bg-[#1a1512]/90 backdrop-blur-[24px] rounded-card border-2 border-primary-container p-6 sm:p-8 flex flex-col shadow-xl relative z-20 transform md:-translate-y-4 hover:-translate-y-5 transition-transform duration-200"
             >
-              <div className="absolute -top-3 sm:-top-4 right-4 sm:right-8 bg-primary-container text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-md">
-                {t('landing.most_popular')}
+              <div className="absolute -top-3 sm:-top-4 right-4 sm:right-8 bg-primary-container text-white text-[10px] font-black px-3 py-1.5 rounded-full shadow-md flex items-center gap-1.5">
+                <FontAwesomeIcon icon={faFire} className="text-amber-300" />
+                <span>{t('landing.most_popular')}</span>
               </div>
               <div className="mb-4 sm:mb-6">
                 <h3 className="text-lg sm:text-xl font-bold text-primary-container">{t('landing.plan_pro')}</h3>

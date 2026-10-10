@@ -6,6 +6,8 @@ import api from '../api';
 import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTag, faCircleXmark, faGift, faCheck, faBolt, faFire } from '@fortawesome/free-solid-svg-icons';
 
 const SUBSCRIPTION_PLANS = [
   { months: 1, price: 5, label: '1 Mes', pricePerMonth: '5.00', saving: null },
@@ -85,10 +87,14 @@ export default function Upgrade() {
       });
       if (resp.data.valid) {
         setAppliedCoupon(resp.data);
-        toast.success(resp.data.message || '¡Cupón aplicado!', { icon: '🏷️' });
+        toast.success(resp.data.message || '¡Cupón aplicado!', {
+          icon: <FontAwesomeIcon icon={faTag} className="text-emerald-500" />,
+        });
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Cupón inválido o no aplicable', { icon: '❌' });
+      toast.error(err.response?.data?.detail || 'Cupón inválido o no aplicable', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+      });
     } finally {
       setCouponLoading(false);
     }
@@ -121,7 +127,10 @@ export default function Upgrade() {
       });
 
       if (resp.data.free_activated) {
-        toast.success(resp.data.message || '¡Suscripción Pro activada con tu cupón!', { icon: '🎉', duration: 4000 });
+        toast.success(resp.data.message || '¡Suscripción Pro activada con tu cupón!', {
+          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
+          duration: 4000,
+        });
         const meRes = await api.get('/user/me');
         localStorage.setItem('user', JSON.stringify(meRes.data));
         window.dispatchEvent(new Event('storage'));
@@ -155,7 +164,10 @@ export default function Upgrade() {
       });
 
       if (resp.data.free_activated) {
-        toast.success(resp.data.message || '¡Pack de tokens activado con tu cupón!', { icon: '🎉', duration: 4000 });
+        toast.success(resp.data.message || '¡Pack de tokens activado con tu cupón!', {
+          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
+          duration: 4000,
+        });
         const meRes = await api.get('/user/me');
         localStorage.setItem('user', JSON.stringify(meRes.data));
         window.dispatchEvent(new Event('storage'));
@@ -337,8 +349,9 @@ export default function Upgrade() {
                     ${plan.popular ? 'border-primary-container shadow-xl shadow-orange-100 dark:shadow-orange-900/20 scale-[1.02] sm:scale-100' : 'border-slate-200 dark:border-outline-variant/30'}`}
                 >
                   {plan.popular && (
-                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap">
-                      {t('upgrade.best_value')}
+                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1">
+                      <FontAwesomeIcon icon={faBolt} className="text-amber-300" />
+                      <span>{t('upgrade.best_value')}</span>
                     </div>
                   )}
                   {plan.saving && (
@@ -447,8 +460,9 @@ export default function Upgrade() {
                     ${pack.popular ? 'border-primary-container shadow-xl shadow-orange-100 dark:shadow-orange-900/20' : 'border-slate-200 dark:border-outline-variant/30'}`}
                 >
                   {pack.popular && (
-                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap">
-                      {t('upgrade.most_popular')}
+                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1">
+                      <FontAwesomeIcon icon={faFire} className="text-amber-300" />
+                      <span>{t('upgrade.most_popular')}</span>
                     </div>
                   )}
                   <div className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br ${pack.color} flex items-center justify-center mb-3 sm:mb-4 shadow-lg`}>
@@ -530,8 +544,9 @@ export default function Upgrade() {
                                   -${Number(appliedCoupon.discount_amount).toFixed(2)} DESC
                                 </span>
                               </div>
-                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1">
-                                ✓ Cupón "{appliedCoupon.coupon.code}" aplicado
+                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1 flex items-center gap-1">
+                                <FontAwesomeIcon icon={faCheck} className="text-green-600 dark:text-green-400" />
+                                <span>Cupón "{appliedCoupon.coupon.code}" aplicado</span>
                               </p>
                             </div>
                             <div className="text-right pl-2">
