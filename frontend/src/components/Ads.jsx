@@ -9,10 +9,9 @@ export function isPremiumUser() {
     const userStr = localStorage.getItem('user');
     if (!userStr) return false;
     const user = JSON.parse(userStr);
-    return (
+    return Boolean(
       user?.plan === 'pro' ||
-      user?.isAdmin === true ||
-      Number(user?.tokens || user?.totalTokens || 0) > 0
+      user?.isAdmin === true
     );
   } catch {
     return false;

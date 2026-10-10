@@ -52,7 +52,8 @@ def validate_coupon_for_user(
         raise HTTPException(status_code=400, detail="Este cupón ha expirado.")
 
     # Validar usos globales
-    if coupon.max_uses > 0 and coupon.current_uses >= coupon.max_uses:
+    max_global_uses = coupon.max_uses or 0
+    if max_global_uses > 0 and (coupon.current_uses or 0) >= max_global_uses:
         raise HTTPException(status_code=400, detail="Este cupón ha alcanzado su límite máximo de usos.")
 
     # Validar usos por usuario
@@ -61,18 +62,38 @@ def validate_coupon_for_user(
         .filter(CouponRedemption.coupon_id == coupon.id, CouponRedemption.user_id == user_id)
         .count()
     )
-    if coupon.max_uses_per_user > 0 and user_redemptions >= coupon.max_uses_per_user:
+    limit_per_user = coupon.max_uses_per_user if coupon.max_uses_per_user is not None else 1
+    if limit_per_user > 0 and user_redemptions >= limit_per_user:
         raise HTTPException(
             status_code=400,
-            detail=f"Ya has utilizado este cupón el máximo número de veces permitido ({coupon.max_uses_per_user})."
+            detail=f"Ya has utilizado este cupón el máximo número de veces permitido ({limit_per_user})."
         )
+
+    # Validar que el usuario exista
+    user = db.query(User).filter(User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    is_pro_user = bool(
+        user.is_admin
+        or user.plan_id == 2
+        or (user.plan and user.plan.name.lower() == "pro")
+    )
+
+    # REGLA: Los cupones de tokens son EXCLUSIVOS para usuarios con Plan Pro
+    if coupon.coupon_type == 'tokens':
+        if not is_pro_user:
+            raise HTTPException(
+                status_code=403,
+                detail="Los cupones de recarga de tokens son exclusivos para usuarios con Plan Pro activo. Los usuarios con plan Free no pueden canjear cupones de tokens."
+            )
 
     # Si se esperaba tipo tokens o tipo descuento
     if expected_type == 'tokens' and coupon.coupon_type != 'tokens':
         raise HTTPException(status_code=400, detail="Este código es un cupón de descuento para compras, no de recarga directa de tokens.")
 
     if expected_type == 'discount' and coupon.coupon_type == 'tokens':
-        raise HTTPException(status_code=400, detail="Este código es un cupón de tokens gratis, canjéalo desde tu Perfil.")
+        raise HTTPException(status_code=400, detail="Este código es un cupón de tokens de regalo, canjéalo desde tu Perfil (exclusivo para miembros Plan Pro).")
 
     # Calcular descuento si aplica
     discount_amount = 0.0

@@ -56,7 +56,7 @@ def _get_user_dict(u: User, db: Session) -> dict:
     extra_tokens = int(tokens_data.get("extra_tokens", 0))
     monthly_tokens = int(tokens_data.get("monthly_tokens", 0))
 
-    if getattr(u, "is_admin", False) or total_tokens > 0:
+    if getattr(u, "is_admin", False):
         plan_name = "pro"
 
     latest_pago = (

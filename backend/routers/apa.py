@@ -167,6 +167,8 @@ async def procesar_apa_stream(
     current_user = None
     if token and token != "null":
         current_user = _decode_user_from_token(token, db)
+        if current_user and getattr(current_user, "is_active", True) is False:
+            raise HTTPException(status_code=403, detail="Tu cuenta ha sido suspendida. Contacta a soporte.")
 
     entry = upload_storage.get(upload_id)
     if entry is None:

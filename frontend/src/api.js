@@ -1,4 +1,5 @@
 import axios from 'axios';
+import toast from 'react-hot-toast';
 
 // Vite detecta automáticamente si hiciste 'npm run build' (PROD = true)
 const IS_PRODUCTION = import.meta.env.PROD;
@@ -28,7 +29,7 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// Interceptor de respuesta para limpiar sesiones fantasma cuando el token es inválido o expiró (401)
+// Interceptor de respuesta para manejar cuentas suspendidas (403) y sesiones inválidas (401)
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -38,7 +39,16 @@ api.interceptors.response.use(
       requestUrl.includes('/register') ||
       requestUrl.includes('/auth/google');
 
-    if (error.response?.status === 401 && !isAuthAttempt) {
+    const status = error.response?.status;
+    const detail = String(error.response?.data?.detail || '');
+    const isSuspendedError =
+      status === 403 &&
+      (detail.toLowerCase().includes('suspendid') ||
+       detail.toLowerCase().includes('cuenta suspendida'));
+
+    const isUnauthorized = status === 401;
+
+    if (!isAuthAttempt && (isSuspendedError || isUnauthorized)) {
       const hadSession = Boolean(localStorage.getItem('token') || localStorage.getItem('user'));
       localStorage.removeItem('token');
       localStorage.removeItem('user');
@@ -47,9 +57,27 @@ api.interceptors.response.use(
         window.dispatchEvent(new Event('storage'));
         window.dispatchEvent(new Event('authChange'));
 
-        const protectedPaths = ['/profile', '/editor/pro', '/pago/exitoso'];
-        if (protectedPaths.some((p) => window.location.pathname.startsWith(p))) {
-          window.location.replace('/login');
+        if (isSuspendedError) {
+          const suspensionMsg = detail || 'Tu cuenta ha sido suspendida. Contacta a soporte.';
+          sessionStorage.setItem('docai_suspended_notice', suspensionMsg);
+
+          try {
+            toast.error(suspensionMsg, {
+              id: 'account-suspended-toast',
+              duration: 8000,
+            });
+          } catch (e) {
+            // Entorno sin renderizado directo de toast
+          }
+
+          if (!window.location.pathname.startsWith('/login')) {
+            window.location.replace('/login?suspended=1');
+          }
+        } else if (isUnauthorized) {
+          const protectedPaths = ['/profile', '/editor/pro', '/pago/exitoso'];
+          if (protectedPaths.some((p) => window.location.pathname.startsWith(p))) {
+            window.location.replace('/login');
+          }
         }
       }
     }

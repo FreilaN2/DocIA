@@ -396,6 +396,13 @@ export default function Profile() {
       toast.error('Ingresa un código de cupón');
       return;
     }
+    if (!isUserPro) {
+      toast.error('Los cupones de recarga de tokens son exclusivos para usuarios con Plan Pro activo. Puedes usar cupones de descuento al mejorar tu plan.', {
+        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
+        duration: 5000,
+      });
+      return;
+    }
     setCouponRedeeming(true);
     try {
       const res = await api.post('/coupons/redeem-tokens', { code: couponInput.trim() });
@@ -498,7 +505,7 @@ export default function Profile() {
     user.tokens?.next_reset_at ||
     null;
 
-  const isUserPro = Boolean(user.plan === 'pro' || user.isAdmin || getDisplayTokens(user) > 0);
+  const isUserPro = Boolean(user.plan === 'pro' || user.isAdmin);
 
   const formattedPlanExpiration = rawExpiresAt
     ? new Date(rawExpiresAt).toLocaleDateString()
@@ -1092,11 +1099,20 @@ export default function Profile() {
                     <span className="material-symbols-outlined text-2xl">confirmation_number</span>
                   </div>
                   <div>
-                    <h2 className="text-base font-black text-on-surface">
-                      Cupón Promocional de Tokens
-                    </h2>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-base font-black text-on-surface">
+                        Cupón Promocional de Tokens
+                      </h2>
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                        Solo Pro
+                      </span>
+                    </div>
                     <p className="text-xs text-on-surface-variant mt-1">
-                      Si tienes un código promocional o de regalo, ingrésalo aquí para sumar los tokens a tu saldo al instante.
+                      {isUserPro ? (
+                        'Si tienes un código de regalo de tokens, ingrésalo aquí para sumar los tokens a tu saldo Pro.'
+                      ) : (
+                        'Los cupones de recarga de tokens son exclusivos para miembros con Plan Pro activo. Puedes usar cupones de descuento al suscribirte.'
+                      )}
                     </p>
                   </div>
                 </div>

@@ -1733,10 +1733,15 @@ export default function AdminPanel() {
                                 </span>
                               )}
                               {c.coupon_type === 'tokens' && (
-                                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-orange-100 text-primary dark:bg-orange-950/40 dark:text-orange-400">
-                                  <span className="material-symbols-outlined text-xs">generating_tokens</span>
-                                  +{c.tokens_value?.toLocaleString()} Tokens
-                                </span>
+                                <div className="flex flex-col gap-1 items-start">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-orange-100 text-primary dark:bg-orange-950/40 dark:text-orange-400">
+                                    <span className="material-symbols-outlined text-xs">generating_tokens</span>
+                                    +{c.tokens_value?.toLocaleString()} Tokens
+                                  </span>
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-400">
+                                    Solo Plan Pro
+                                  </span>
+                                </div>
                               )}
                             </td>
 
@@ -1883,11 +1888,28 @@ export default function AdminPanel() {
                         onChange={(e) => setCouponForm({ ...couponForm, coupon_type: e.target.value })}
                         className="w-full px-3.5 py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 rounded-xl text-sm text-on-surface outline-none focus:border-primary"
                       >
-                        <option value="discount_percent">Porcentaje de Descuento (%) en Compras</option>
-                        <option value="discount_fixed">Monto Fijo de Descuento ($ USD) en Compras</option>
-                        <option value="tokens">Tokens DocIA Gratis (Canje Directo por el Usuario)</option>
+                        <option value="discount_percent">Porcentaje de Descuento (%) en Compras - Todos los usuarios</option>
+                        <option value="discount_fixed">Monto Fijo de Descuento ($ USD) en Compras - Todos los usuarios</option>
+                        <option value="tokens">Tokens DocIA de Regalo - Exclusivo para miembros Plan Pro</option>
                       </select>
                     </div>
+
+                    {/* Aviso de exclusividad y alcance del cupón */}
+                    {couponForm.coupon_type === 'tokens' ? (
+                      <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-xs text-amber-700 dark:text-amber-300 flex items-start gap-2">
+                        <span className="material-symbols-outlined text-base flex-shrink-0 text-amber-500">info</span>
+                        <span>
+                          <strong>Exclusivo para Plan Pro:</strong> Los cupones de recarga de tokens solo pueden ser canjeados por usuarios con suscripción Pro activa. Los usuarios con plan Free no podrán canjearlos.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-xl text-xs text-blue-700 dark:text-blue-300 flex items-start gap-2">
+                        <span className="material-symbols-outlined text-base flex-shrink-0 text-blue-500">check_circle</span>
+                        <span>
+                          <strong>Disponible para todos:</strong> Este cupón de descuento puede ser aplicado por cualquier usuario (Free o Pro) en compras de suscripciones o paquetes en la pantalla de Planes.
+                        </span>
+                      </div>
+                    )}
 
                     {/* Valores según Tipo */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -224,13 +224,11 @@ export default function Upgrade() {
     setPmLoading(true);
     try {
       const itemId = paymentModal.type === 'subscription' ? paymentModal.item.months : paymentModal.item.id;
-      const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
       const resp = await api.post('/pago/reportar-pagomovil', {
         reference_number: pmReference.trim(),
         phone_number: pmPhone.trim(),
         type: paymentModal.type,
         item_id: itemId,
-        coupon_code: activeCode,
       });
 
       const userStr = localStorage.getItem('user');
@@ -521,23 +519,29 @@ export default function Upgrade() {
                       <div className="space-y-3 sm:space-y-4">
                         {/* Resumen de Precio y Descuento */}
                         {appliedCoupon ? (
-                          <div className="bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-500/30 rounded-2xl p-3.5 flex items-center justify-between text-xs">
-                            <div>
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="font-bold text-on-surface">Precio Original:</span>
-                                <span className="line-through text-on-surface-variant font-medium">${originalPrice.toFixed(2)}</span>
-                                <span className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 font-black px-2 py-0.5 rounded-full text-[10px]">
-                                  -${Number(appliedCoupon.discount_amount).toFixed(2)} DESC
-                                </span>
+                          <div className="bg-orange-50/70 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-500/30 rounded-2xl p-3.5 text-xs">
+                            <div className="flex items-center justify-between">
+                              <div>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-on-surface">Precio Original:</span>
+                                  <span className="line-through text-on-surface-variant font-medium">${originalPrice.toFixed(2)}</span>
+                                  <span className="bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300 font-black px-2 py-0.5 rounded-full text-[10px]">
+                                    -${Number(appliedCoupon.discount_amount).toFixed(2)} DESC
+                                  </span>
+                                </div>
+                                <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1">
+                                  ✓ Cupón "{appliedCoupon.coupon.code}" aplicado en USD / USDT
+                                </p>
                               </div>
-                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1">
-                                ✓ Cupón "{appliedCoupon.coupon.code}" aplicado
-                              </p>
+                              <div className="text-right pl-2">
+                                <span className="text-[10px] uppercase font-bold text-on-surface-variant block">Total USD</span>
+                                <span className="text-xl font-black text-primary-container">${finalPrice.toFixed(2)}</span>
+                              </div>
                             </div>
-                            <div className="text-right pl-2">
-                              <span className="text-[10px] uppercase font-bold text-on-surface-variant block">Total</span>
-                              <span className="text-xl font-black text-primary-container">${finalPrice.toFixed(2)}</span>
-                            </div>
+                            <p className="text-[10.5px] text-amber-700 dark:text-amber-400 font-medium mt-2 pt-2 border-t border-orange-200/60 dark:border-orange-500/20 flex items-center gap-1">
+                              <span className="material-symbols-outlined text-xs flex-shrink-0">info</span>
+                              Descuento válido para PayPal y Binance Pay. Pago Móvil aplica monto completo a tasa BCV.
+                            </p>
                           </div>
                         ) : (
                           <p className="text-on-surface-variant text-xs sm:text-sm mb-2">
@@ -651,7 +655,12 @@ export default function Upgrade() {
                               className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#008b8b] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#007070] transition-colors active:scale-[0.98]"
                             >
                               <span className="material-symbols-outlined text-lg sm:text-xl">smartphone</span>
-                              {t('upgrade.pagomovil')}
+                              <span>{t('upgrade.pagomovil')}</span>
+                              {bcvRate && (
+                                <span className="text-xs opacity-90 font-medium">
+                                  (Bs. {(originalPrice * bcvRate).toFixed(2)})
+                                </span>
+                              )}
                             </button>
                           </>
                         )}
@@ -703,9 +712,21 @@ export default function Upgrade() {
 
                     {binanceFlow === 'pagomovil' && (
                       <div className="flex flex-col items-center">
+                        {appliedCoupon && (
+                          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 rounded-xl p-3 mb-3 text-xs text-amber-800 dark:text-amber-300 w-full flex items-start gap-2">
+                            <span className="material-symbols-outlined text-amber-600 dark:text-amber-400 text-sm flex-shrink-0 mt-0.5">info</span>
+                            <div>
+                              <p className="font-bold">Pago en Bolívares (Monto Completo sin Cupón)</p>
+                              <p className="text-[11px] mt-0.5 opacity-90 leading-tight">
+                                Los cupones de descuento aplican exclusivamente a pagos en divisas internacionales (PayPal y Binance Pay USDT). Para pagos en Bolívares vía Pago Móvil / Transferencia VES, el monto a abonar es el total a tasa oficial BCV.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
                         <div className="bg-[#008b8b]/10 text-[#006060] dark:text-[#00aaaa] text-xs sm:text-[13px] font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
                           {bcvRate ? (
-                            <>{t('upgrade.total_to_pay')} <strong>Bs. {(finalPrice * bcvRate).toFixed(2)}</strong> ({t('upgrade.bcv_rate')} {bcvRate})</>
+                            <>{t('upgrade.total_to_pay')} <strong>Bs. {(originalPrice * bcvRate).toFixed(2)}</strong> ({t('upgrade.bcv_rate')} {bcvRate})</>
                           ) : (
                             <>{t('upgrade.loading_bcv')}</>
                           )}

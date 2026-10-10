@@ -229,6 +229,20 @@ export default function Auth() {
     sessionStorage.setItem('docai_ref', queryParams.get('ref'));
   }
 
+  useEffect(() => {
+    const isSuspended = queryParams.get('suspended') === '1';
+    const suspendedNotice = sessionStorage.getItem('docai_suspended_notice');
+    if (isSuspended || suspendedNotice) {
+      const msg = suspendedNotice || (isEn ? 'Your account has been suspended. Please contact support.' : 'Tu cuenta ha sido suspendida. Contacta a soporte.');
+      setError(msg);
+      toast.error(msg, {
+        id: 'account-suspended-toast',
+        duration: 8000,
+      });
+      sessionStorage.removeItem('docai_suspended_notice');
+    }
+  }, [location.search, isEn]);
+
   const [formData, setFormData] = useState({
     firstName: '', lastName: '', email: '', phone: '', country: '', password: '', confirmPassword: '',
     referralCode: initialRef
@@ -528,7 +542,7 @@ export default function Auth() {
           navigate('/profile', { replace: true });
         } else {
           const u = response.data.user;
-          const userPlan = (u.plan === 'pro' || u.isAdmin || Number(u.tokens || u.totalTokens || 0) > 0) ? 'pro' : 'free';
+          const userPlan = (u.plan === 'pro' || u.isAdmin) ? 'pro' : 'free';
           navigate(`/editor/${userPlan}`, { replace: true });
         }
       }
@@ -575,7 +589,7 @@ export default function Auth() {
             icon: <FontAwesomeIcon icon={faRocket} className="text-amber-400" />,
           });
           const u = response.data.user;
-          const userPlan = (u.plan === 'pro' || u.isAdmin || Number(u.tokens || u.totalTokens || 0) > 0) ? 'pro' : 'free';
+          const userPlan = (u.plan === 'pro' || u.isAdmin) ? 'pro' : 'free';
           navigate(`/editor/${userPlan}`, { replace: true });
         }
       }

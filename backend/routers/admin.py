@@ -18,6 +18,8 @@ from core.models import User, Plan, Subscription, TokenPack, TokenBalance, Token
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
 from core.token_service import assign_monthly_tokens, add_extra_tokens, get_or_create_balance as get_or_create_token_balance, create_or_extend_subscription
+import re
+from core.coupon_service import record_purchase_coupon_redemption
 from core.referral_service import grant_referral_reward_if_eligible
 from core.constants import SUBSCRIPTION_PRICES, TOKENS_PER_MONTH_PRO
 from core.schemas import (
@@ -90,6 +92,24 @@ async def aprobar_pago(
 
     pago.status = 'approved'
     db.commit()
+
+    # Si la referencia contenía un cupón (ej. [CUPON:DOC-XXX]), registrar la redención
+    match = re.search(r"\[CUPON:([A-Za-z0-9_-]+)\]", pago.reference_number or "")
+    if match:
+        coupon_code = match.group(1).upper()
+        coupon = db.query(Coupon).filter(Coupon.code == coupon_code).first()
+        if coupon:
+            try:
+                record_purchase_coupon_redemption(
+                    coupon=coupon,
+                    user_id=user.id,
+                    discount_applied=float(pago.amount_usd),
+                    order_type=pago.item_type or "subscription",
+                    order_reference=f"pagomovil_{pago.id}",
+                    db=db,
+                )
+            except Exception as e:
+                logger.warning(f"Aviso registrando cupón en aprobar_pago: {e}")
 
     # Si el usuario fue invitado por un referido y es su primera compra, otorgar 1000 tokens
     try:

@@ -37,13 +37,18 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> User:
-    """Requiere usuario autenticado. Lanza 401 si el token es inválido."""
+    """Requiere usuario autenticado. Lanza 401 si el token es inválido o 403 si la cuenta está suspendida."""
     user = _decode_user_from_token(token, db)
     if user is None:
         raise HTTPException(
             status_code=401,
             detail="No se pudieron validar las credenciales",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    if getattr(user, "is_active", True) is False:
+        raise HTTPException(
+            status_code=403,
+            detail="Tu cuenta ha sido suspendida. Contacta a soporte.",
         )
     return user
 
@@ -52,10 +57,16 @@ def get_optional_current_user(
     token: str = Depends(oauth2_scheme_optional),
     db: Session = Depends(get_db),
 ) -> Optional[User]:
-    """Usuario opcional: retorna None si no hay token, sin lanzar error."""
+    """Usuario opcional: retorna None si no hay token. Lanza 403 si la cuenta está suspendida."""
     if not token:
         return None
-    return _decode_user_from_token(token, db)
+    user = _decode_user_from_token(token, db)
+    if user and getattr(user, "is_active", True) is False:
+        raise HTTPException(
+            status_code=403,
+            detail="Tu cuenta ha sido suspendida. Contacta a soporte.",
+        )
+    return user
 
 
 def get_admin_user(current_user: User = Depends(get_current_user)) -> User:

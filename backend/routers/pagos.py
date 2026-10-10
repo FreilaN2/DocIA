@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, BinanceTransaction, TokenPack, PagoMovilTransaction
+from core.models import User, Plan, Subscription, BinanceTransaction, TokenPack, PagoMovilTransaction, Coupon
 from core.dependencies import get_current_user
 from core.token_service import assign_monthly_tokens, add_extra_tokens, create_or_extend_subscription
 from core.paypal import create_order, capture_order
@@ -129,25 +129,26 @@ async def confirmar_suscripcion(
 
     # Registrar redención del cupón si se envió
     if data.coupon_code:
-        try:
-            original_amt = float(SUBSCRIPTION_PRICES.get(data.months, 12.0))
-            coupon, discount_amt, _ = validate_coupon_for_user(
-                code=data.coupon_code,
-                user_id=current_user.id,
-                db=db,
-                original_amount=original_amt,
-                expected_type='discount',
-            )
-            record_purchase_coupon_redemption(
-                coupon=coupon,
-                user_id=current_user.id,
-                discount_applied=discount_amt,
-                order_type="subscription",
-                order_reference=data.order_id,
-                db=db,
-            )
-        except Exception as e:
-            logger.warning(f"Aviso registrando cupón en confirmar_suscripcion: {e}")
+        clean_code = data.coupon_code.strip().upper()
+        coupon = db.query(Coupon).filter(Coupon.code == clean_code).first()
+        if coupon:
+            try:
+                original_amt = float(SUBSCRIPTION_PRICES.get(data.months, 12.0))
+                discount_amt = 0.0
+                if coupon.coupon_type == 'discount_percent':
+                    discount_amt = round(original_amt * (float(coupon.discount_value) / 100.0), 2)
+                elif coupon.coupon_type == 'discount_fixed':
+                    discount_amt = round(min(original_amt, float(coupon.discount_value)), 2)
+                record_purchase_coupon_redemption(
+                    coupon=coupon,
+                    user_id=current_user.id,
+                    discount_applied=discount_amt,
+                    order_type="subscription",
+                    order_reference=data.order_id,
+                    db=db,
+                )
+            except Exception as e:
+                logger.error(f"Error registrando cupón en confirmar_suscripcion: {e}")
 
     # Recompensa al usuario que lo refirió si es su primera compra
     try:
@@ -283,22 +284,8 @@ async def reportar_pago_movil(
     else:
         raise HTTPException(status_code=400, detail="Tipo de pago no válido.")
 
-    # Aplicar descuento de cupón si fue provisto
-    if data.coupon_code:
-        try:
-            _, _, final_amount = validate_coupon_for_user(
-                code=data.coupon_code,
-                user_id=current_user.id,
-                db=db,
-                original_amount=amount_usd,
-                expected_type='discount',
-            )
-            amount_usd = final_amount
-        except HTTPException:
-            raise
-        except Exception as e:
-            logger.warning(f"Aviso validando cupón Pago Móvil: {e}")
-
+    # NOTA: Los cupones de descuento aplican EXCLUSIVAMENTE para pagos en divisas (USD / USDT con PayPal y Binance Pay).
+    # En Bolívares (Pago Móvil / Transferencia VES) se abona el monto total a tasa BCV oficial sin descuento.
     amount_ves = round(amount_usd * rate, 2)
 
     existing = (
@@ -309,13 +296,9 @@ async def reportar_pago_movil(
     if existing:
         raise HTTPException(status_code=400, detail="Esta referencia ya ha sido reportada.")
 
-    ref_note = data.reference_number
-    if data.coupon_code:
-        ref_note += f" [CUPON:{data.coupon_code.upper()}]"
-
     nuevo_pago = PagoMovilTransaction(
         user_id=current_user.id,
-        reference_number=ref_note,
+        reference_number=data.reference_number,
         phone_number=data.phone_number,
         amount_ves=amount_ves,
         amount_usd=amount_usd,
@@ -426,24 +409,26 @@ async def confirmar_pack(
     add_extra_tokens(current_user.id, pack.tokens, db)
 
     if data.coupon_code:
-        try:
-            coupon, discount_amt, _ = validate_coupon_for_user(
-                code=data.coupon_code,
-                user_id=current_user.id,
-                db=db,
-                original_amount=float(pack.price),
-                expected_type='discount',
-            )
-            record_purchase_coupon_redemption(
-                coupon=coupon,
-                user_id=current_user.id,
-                discount_applied=discount_amt,
-                order_type="pack",
-                order_reference=data.order_id,
-                db=db,
-            )
-        except Exception as e:
-            logger.warning(f"Aviso registrando cupón en confirmar_pack: {e}")
+        clean_code = data.coupon_code.strip().upper()
+        coupon = db.query(Coupon).filter(Coupon.code == clean_code).first()
+        if coupon:
+            try:
+                original_amt = float(pack.price)
+                discount_amt = 0.0
+                if coupon.coupon_type == 'discount_percent':
+                    discount_amt = round(original_amt * (float(coupon.discount_value) / 100.0), 2)
+                elif coupon.coupon_type == 'discount_fixed':
+                    discount_amt = round(min(original_amt, float(coupon.discount_value)), 2)
+                record_purchase_coupon_redemption(
+                    coupon=coupon,
+                    user_id=current_user.id,
+                    discount_applied=discount_amt,
+                    order_type="pack",
+                    order_reference=data.order_id,
+                    db=db,
+                )
+            except Exception as e:
+                logger.error(f"Error registrando cupón en confirmar_pack: {e}")
 
     # Recompensa al usuario que lo refirió si es su primera compra
     try:

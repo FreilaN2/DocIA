@@ -183,14 +183,24 @@ function App() {
     };
 
     pollUser();
-    const interval = setInterval(pollUser, 15000);
+    const interval = setInterval(pollUser, 10000);
     const timeout = setTimeout(pollUser, 1500);
     window.addEventListener('authChange', pollUser);
+    window.addEventListener('focus', pollUser);
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        pollUser();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
       clearInterval(interval);
       clearTimeout(timeout);
       window.removeEventListener('authChange', pollUser);
+      window.removeEventListener('focus', pollUser);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 

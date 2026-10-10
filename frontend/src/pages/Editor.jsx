@@ -116,7 +116,7 @@ export default function Editor() {
         localStorage.setItem('user', JSON.stringify(u));
         window.dispatchEvent(new Event('storage'));
         window.dispatchEvent(new Event('authChange'));
-        if (u?.plan === 'pro' || u?.isAdmin || Number(u?.tokens || u?.totalTokens || 0) > 0) {
+        if (u?.plan === 'pro' || u?.isAdmin) {
           navigate('/editor/pro', { replace: true });
         } else {
           setVerifyingAuth(false);
@@ -141,7 +141,7 @@ export default function Editor() {
     if (token && storedUser) {
       try {
         const userData = JSON.parse(storedUser);
-        if (userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0) {
+        if (userData.plan === 'pro' || userData.isAdmin) {
           api.get('/tokens/balance').then(r => {
             setTokenBalance(r.data);
           }).catch(() => setTokenBalance(null));
@@ -172,7 +172,7 @@ export default function Editor() {
         return;
       }
       const userData = JSON.parse(storedUser);
-      const hasProAccess = userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0;
+      const hasProAccess = userData.plan === 'pro' || userData.isAdmin;
       if (!hasProAccess) {
         navigate('/upgrade', { replace: true });
         return;
@@ -184,7 +184,7 @@ export default function Editor() {
       if (storedUser) {
         try {
           const userData = JSON.parse(storedUser);
-          if (userData.plan === 'pro' || userData.isAdmin || Number(userData.tokens || userData.totalTokens || 0) > 0) {
+          if (userData.plan === 'pro' || userData.isAdmin) {
             sessionStorage.removeItem('docai_pending_result');
             sessionStorage.removeItem('docai_pending_format');
             sessionStorage.removeItem('docai_pending_toc');

@@ -25,7 +25,7 @@ export default function Landing() {
           navigate('/profile', { replace: true });
           return;
         }
-        const plan = (user.plan === 'pro' || user.isAdmin || Number(user.tokens || user.totalTokens || 0) > 0) ? 'pro' : 'free';
+        const plan = (user.plan === 'pro' || user.isAdmin) ? 'pro' : 'free';
         navigate(`/editor/${plan}`, { replace: true });
       } catch (e) {
         // Ignorar si el JSON es inválido

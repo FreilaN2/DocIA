@@ -23,7 +23,7 @@ export default function Navbar() {
       const storedUser = localStorage.getItem('user');
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
-        return parsed.plan === 'pro' || parsed.isAdmin === true || Number(parsed.tokens || parsed.totalTokens || 0) > 0;
+        return parsed.plan === 'pro' || parsed.isAdmin === true;
       }
       return false;
     } catch (e) {
@@ -60,7 +60,7 @@ export default function Navbar() {
       if (storedUser) {
         const parsed = JSON.parse(storedUser);
         setUser(parsed);
-        setIsPro(parsed.plan === 'pro' || parsed.isAdmin === true || Number(parsed.tokens || parsed.totalTokens || 0) > 0);
+        setIsPro(parsed.plan === 'pro' || parsed.isAdmin === true);
       } else {
         setUser(null);
         setIsPro(false);
