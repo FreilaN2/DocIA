@@ -1,1 +1,104 @@
-if(!self.define){let e,i={};const n=(n,c)=>(n=new URL(n+".js",c).href,i[n]||new Promise(i=>{if("document"in self){const e=document.createElement("script");e.src=n,e.onload=i,document.head.appendChild(e)}else e=n,importScripts(n),i()}).then(()=>{let e=i[n];if(!e)throw new Error(`Module ${n} didn’t register its module`);return e}));self.define=(c,r)=>{const o=e||("document"in self?document.currentScript.src:"")||location.href;if(i[o])return;let s={};const d=e=>n(e,o),f={module:{uri:o},exports:s,require:d};i[o]=Promise.all(c.map(e=>f[e]||d(e))).then(e=>(r(...e),s))}}define(["./workbox-9c191d2f"],function(e){"use strict";self.skipWaiting(),e.clientsClaim(),e.precacheAndRoute([{url:"registerSW.js",revision:"1872c500de691dce40960bb85481de07"},{url:"LOGO2.png",revision:"c5a34005a1bc61249b6c644ac14a78be"},{url:"LOGO.png",revision:"fbfce2eae63892c03528d6332d3534b5"},{url:"index.html",revision:"6cf370bdf4d282ebaa7756ad5cc099c7"},{url:"icon-512.png",revision:"d6ef4d5171f63961493019f41f5c54ff"},{url:"icon-192.png",revision:"3f339620a5c076263d3d4070a34287bc"},{url:"google5249794e4c976956.html",revision:"ecb1d249897047d48c653e3a7ed087b8"},{url:"favicon.png",revision:"787b4d7d39063064416034d757c584d8"},{url:"favicon.ico",revision:"f01b76a39b5d52839a583fc7670b96fb"},{url:"binance.png",revision:"296141f0fce94cd57580c80665ec2a66"},{url:"assets/notifications-QUuJuy98.js",revision:null},{url:"assets/index-MdS5M9au.css",revision:null},{url:"assets/index-BGFQSlj5.js",revision:null},{url:"favicon.ico",revision:"f01b76a39b5d52839a583fc7670b96fb"},{url:"favicon.png",revision:"787b4d7d39063064416034d757c584d8"},{url:"icon-192.png",revision:"3f339620a5c076263d3d4070a34287bc"},{url:"icon-512.png",revision:"d6ef4d5171f63961493019f41f5c54ff"},{url:"LOGO.png",revision:"fbfce2eae63892c03528d6332d3534b5"},{url:"LOGO2.png",revision:"c5a34005a1bc61249b6c644ac14a78be"},{url:"robots.txt",revision:"de267482134c24578f76a29c136152cd"},{url:"manifest.webmanifest",revision:"f536a87cbc0ca13800f1503ac80d7bec"}],{}),e.cleanupOutdatedCaches(),e.registerRoute(new e.NavigationRoute(e.createHandlerBoundToURL("index.html")))});
+// Service Worker personalizado para DocAI
+const CACHE_NAME = 'docai-v1';
+
+// Instalación del Service Worker
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.addAll([
+        '/',
+        '/index.html'
+      ]);
+    })
+  );
+  self.skipWaiting();
+});
+
+// Estrategia de caché: Network First, luego caché
+self.addEventListener('fetch', (event) => {
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+  
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const responseClone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, responseClone);
+        });
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
+  );
+});
+
+// Manejar notificaciones push
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  try {
+    const data = event.data.json();
+    
+    const options = {
+      body: data.body,
+      icon: data.icon || '/LOGO.png',
+      badge: data.badge || '/favicon.png',
+      data: data.data || {},
+      vibrate: [200, 100, 200],
+      tag: 'docai-notification',
+      requireInteraction: false,
+      actions: [
+        {
+          action: 'open',
+          title: 'Abrir'
+        }
+      ]
+    };
+
+    event.waitUntil(
+      self.registration.showNotification(data.title, options)
+    );
+  } catch (e) {
+    console.error('Error en notificación push:', e);
+  }
+});
+
+// Manejar clic en notificación
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const urlToOpen = event.notification.data?.url || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((windowClients) => {
+        // Si ya hay una ventana abierta, enfocarla
+        for (const client of windowClients) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            return client.focus();
+          }
+        }
+        // Si no, abrir nueva ventana
+        if (clients.openWindow) {
+          return clients.openWindow(urlToOpen);
+        }
+      })
+  );
+});
+
+// Limpiar cachés antiguos
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((cacheNames) => {
+      return Promise.all(
+        cacheNames
+          .filter((cacheName) => cacheName !== CACHE_NAME)
+          .map((cacheName) => caches.delete(cacheName))
+      );
+    })
+  );
+  self.clients.claim();
+});

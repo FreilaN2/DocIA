@@ -114,9 +114,19 @@ export const AD_CONFIG = {
 };
 
 // ═══════════════════════════════════════════════════════════════
+// SWITCH MAESTRO DE PUBLICIDAD
+// Cambiar a true cuando se desee reactivar la publicidad globalmente.
+// Al estar en false, ningún banner ni script publicitario se inyectará.
+// ═══════════════════════════════════════════════════════════════
+export const ADS_ENABLED = false; // <-- Cambiar a true para reactivar publicidad
+
+// ═══════════════════════════════════════════════════════════════
 // COMPONENTE: AdBanner (Iframe aislado para banners estándar)
 // ═══════════════════════════════════════════════════════════════
 export function AdBanner({ optionsKey, width, height, className = '' }) {
+  // PUBLICIDAD DESACTIVADA TEMPORALMENTE (Cambiar ADS_ENABLED a true para reactivar)
+  if (!ADS_ENABLED) return null;
+
   const isPremium = useIsPremium();
   const iframeRef = useRef(null);
 
@@ -226,6 +236,9 @@ export function AdBanner320x50(props) {
 // COMPONENTE: AdNative (Banner Nativo / Cuadrícula de recomendaciones)
 // ═══════════════════════════════════════════════════════════════
 export function AdNative({ className = '' }) {
+  // PUBLICIDAD DESACTIVADA TEMPORALMENTE (Cambiar ADS_ENABLED a true para reactivar)
+  if (!ADS_ENABLED) return null;
+
   const isPremium = useIsPremium();
   const iframeRef = useRef(null);
 
@@ -299,6 +312,9 @@ export function AdNative({ className = '' }) {
 // COMPONENTE: AdGlobal (Social Bar + Popunder)
 // ═══════════════════════════════════════════════════════════════
 export function AdGlobal() {
+  // PUBLICIDAD DESACTIVADA TEMPORALMENTE (Cambiar ADS_ENABLED a true para reactivar)
+  if (!ADS_ENABLED) return null;
+
   const isPremium = useIsPremium();
 
   useEffect(() => {

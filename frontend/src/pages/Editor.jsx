@@ -255,6 +255,11 @@ export default function Editor() {
     setAdBlockDetected(false);
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // DETECCIÓN DE ADBLOCK (Desactivada temporalmente junto con la publicidad)
+  // Para reactivar, descomentar el useEffect a continuación:
+  // ═══════════════════════════════════════════════════════════════
+  /*
   useEffect(() => {
     if (shouldShowAds) {
       if (sessionStorage.getItem('docai_adblock_dismissed') === 'true') {
@@ -298,6 +303,7 @@ export default function Editor() {
       setAdBlockDetected(false);
     }
   }, [shouldShowAds]);
+  */
 
   const handleFileSelect = async (selectedFile) => {
     if (!selectedFile || !selectedFile.name.toLowerCase().endsWith('.docx')) {
@@ -603,28 +609,32 @@ export default function Editor() {
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden">
       <Navbar />
-      {shouldShowAds && <AdGlobal />}
+      {/* ═══════════════════════════════════════════════════════════════
+          PUBLICIDAD GLOBAL Y FLOTANTE (Desactivada temporalmente)
+          Descomentar los bloques correspondientes para reactivar
+         ═══════════════════════════════════════════════════════════════ */}
+      {/* {shouldShowAds && <AdGlobal />} */}
 
       {/* Skyscraper Izquierdo - Desktop grande (160x600) */}
-      {shouldShowAds && (
+      {/* {shouldShowAds && (
         <div className="hidden 2xl:block fixed left-4 top-[60%] -translate-y-1/2 z-0 opacity-80 hover:opacity-100 transition-opacity">
           <AdBanner160x600 />
         </div>
-      )}
+      )} */}
       
       {/* Skyscraper Derecho - Desktop grande (160x300) */}
-      {shouldShowAds && (
+      {/* {shouldShowAds && (
         <div className="hidden 2xl:block fixed right-4 top-[60%] -translate-y-1/2 z-0 opacity-80 hover:opacity-100 transition-opacity">
           <AdBanner160x300 />
         </div>
-      )}
+      )} */}
 
       {/* Sticky Mobile Banner (320x50) */}
-      {shouldShowAds && (
+      {/* {shouldShowAds && (
         <div className="block lg:hidden fixed bottom-0 left-0 w-full z-40 bg-background/90 backdrop-blur border-t border-outline-variant/30 pt-2 pb-[env(safe-area-inset-bottom)]">
           <AdBanner320x50 />
         </div>
-      )}
+      )} */}
 
       {/* Ambient Background */}
       <div className="fixed inset-0 z-[-1] pointer-events-none">
@@ -633,12 +643,12 @@ export default function Editor() {
       </div>
 
       <main className="pt-20 sm:pt-24 md:pt-32 pb-24 sm:pb-28 md:pb-32 px-4 sm:px-6 md:px-8 lg:px-gutter max-w-4xl mx-auto flex flex-col gap-6 sm:gap-8 relative z-10">
-        {/* Banner superior - Desktop (728x90) */}
-        {shouldShowAds && (
+        {/* Banner superior - Desktop (728x90) (Desactivado temporalmente) */}
+        {/* {shouldShowAds && (
           <div className="hidden lg:flex w-full justify-center mb-2">
             <AdBanner728x90 />
           </div>
-        )}
+        )} */}
         
         {/* Header con PlanBadge */}
         <motion.div 
@@ -826,8 +836,8 @@ export default function Editor() {
                   </div>
                 </div>
 
-                {/* Banner publicitario en upload (468x60 en desktop/tablet, 320x50 en móviles) */}
-                {shouldShowAds && (
+                {/* Banner publicitario en upload (Desactivado temporalmente) */}
+                {/* {shouldShowAds && (
                   <>
                     <div className="hidden sm:flex justify-center w-full mb-6 sm:mb-8">
                       <AdBanner468x60 />
@@ -836,10 +846,10 @@ export default function Editor() {
                       <AdBanner320x50 />
                     </div>
                   </>
-                )}
+                )} */}
 
-                {/* Dropzone o Advertencia de AdBlock */}
-                {adBlockDetected && !isPro ? (
+                {/* Advertencia de AdBlock (Desactivada temporalmente junto con los anuncios) */}
+                {/* {adBlockDetected && !isPro && (
                   <div className="relative border-2 border-red-400 dark:border-red-500/50 rounded-xl p-6 sm:p-8 md:p-12 flex flex-col items-center justify-center gap-3 sm:gap-4 bg-red-50/50 dark:bg-red-900/10 text-center transition-all duration-300 shadow-inner">
                     <span className="material-symbols-outlined text-4xl sm:text-5xl md:text-6xl text-red-500 drop-shadow-sm">gpp_maybe</span>
                     <h3 className="text-xl sm:text-2xl font-black text-red-700 dark:text-red-400">
@@ -864,7 +874,9 @@ export default function Editor() {
                       </Link>
                     </div>
                   </div>
-                ) : (
+                )} */}
+
+                {/* Dropzone de subida de archivos */}
                   <label
                     onDragOver={handleDragOver}
                     onDragLeave={handleDragLeave}
@@ -890,7 +902,6 @@ export default function Editor() {
                       </p>
                     )}
                   </label>
-                )}
 
                 {/* Barra de progreso */}
                 {loading ? (
@@ -933,9 +944,9 @@ export default function Editor() {
                     )}
                     <button
                       onClick={handleUpload}
-                      disabled={!file || noTokensForPro || adBlockDetected}
+                      disabled={!file || noTokensForPro /* || adBlockDetected */}
                       className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-2xl font-black text-sm sm:text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 sm:gap-3 active:scale-95
-                        ${!file || noTokensForPro || adBlockDetected
+                        ${!file || noTokensForPro /* || adBlockDetected */
                           ? 'bg-slate-200 dark:bg-surface-variant text-slate-400 dark:text-on-surface-variant/50 cursor-not-allowed shadow-none'
                           : 'bg-primary-container shadow-primary-container/20 hover:opacity-90'}`}
                     >
@@ -1036,8 +1047,8 @@ export default function Editor() {
                   )}
                 </AnimatePresence>
 
-                {/* Banner publicitario en resultados (468x60 en desktop/tablet, 320x50 en móviles) */}
-                {shouldShowAds && (
+                {/* Banner publicitario en resultados (Desactivado temporalmente) */}
+                {/* {shouldShowAds && (
                   <>
                     <div className="hidden sm:flex justify-center w-full mb-6 sm:mb-8">
                       <AdBanner468x60 />
@@ -1046,7 +1057,7 @@ export default function Editor() {
                       <AdBanner320x50 />
                     </div>
                   </>
-                )}
+                )} */}
 
                 {/* Opciones de descarga */}
                 <div className={`flex flex-col gap-3 sm:gap-4 mb-6 sm:mb-8 p-4 sm:p-5 rounded-2xl border transition-all ${
@@ -1168,11 +1179,12 @@ export default function Editor() {
         }
       `}</style>
       
-      {shouldShowAds && (
+      {/* Banner nativo en footer (Desactivado temporalmente) */}
+      {/* {shouldShowAds && (
         <div className="max-w-4xl mx-auto px-4 sm:px-6 md:px-8 lg:px-gutter mb-8 sm:mb-12">
           <AdNative />
         </div>
-      )}
+      )} */}
 
       <Footer />
 
