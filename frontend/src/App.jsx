@@ -41,7 +41,7 @@ function AppRoutes() {
 
     const seoByPath = {
       '/': {
-        title: 'DocIA - Corrección de Formato APA 7 con Inteligencia Artificial',
+        title: 'DocIA APA',
         desc: 'Automatiza el formateo de tus tesis y documentos de Word en Normas APA 7ma y 6ta Edición en segundos con Inteligencia Artificial.',
       },
       '/editor/free': {

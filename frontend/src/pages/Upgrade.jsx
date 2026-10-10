@@ -15,9 +15,9 @@ const SUBSCRIPTION_PLANS = [
 ];
 
 const TOKEN_PACKS = [
-  { id: 1, name: 'Starter Pack', price: 2, tokens: 100, icon: 'token', color: 'from-slate-400 to-slate-500' },
-  { id: 2, name: 'Standard Pack', price: 5, tokens: 300, icon: 'diamond', color: 'from-blue-500 to-indigo-600' },
-  { id: 3, name: 'Power Pack', price: 7, tokens: 500, icon: 'bolt', color: 'from-orange-500 to-red-600', popular: true },
+  { id: 1, name: 'Starter Pack', price: 2, tokens: 2000, icon: 'token', color: 'from-slate-400 to-slate-500' },
+  { id: 2, name: 'Standard Pack', price: 5, tokens: 6000, icon: 'diamond', color: 'from-blue-500 to-indigo-600' },
+  { id: 3, name: 'Power Pack', price: 7, tokens: 10000, icon: 'bolt', color: 'from-orange-500 to-red-600', popular: true },
 ];
 
 export default function Upgrade() {
@@ -53,7 +53,7 @@ export default function Upgrade() {
     setAppliedCoupon(null);
     fetchBcvRate();
   };
-  
+
   const fetchBcvRate = async () => {
     try {
       const resp = await api.get('/pago/tasa-bcv');
@@ -104,7 +104,7 @@ export default function Upgrade() {
     if (stored) {
       try {
         setUserInfo(JSON.parse(stored));
-      } catch (e) {}
+      } catch (e) { }
     }
   }, []);
 
@@ -115,7 +115,7 @@ export default function Upgrade() {
     setLoading(`sub-${months}`);
     try {
       const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
-      const resp = await api.post('/pago/suscripcion', { 
+      const resp = await api.post('/pago/suscripcion', {
         months,
         coupon_code: activeCode,
       });
@@ -131,8 +131,8 @@ export default function Upgrade() {
         return;
       }
 
-      localStorage.setItem('pending_purchase', JSON.stringify({ 
-        type: 'subscription', 
+      localStorage.setItem('pending_purchase', JSON.stringify({
+        type: 'subscription',
         months,
         coupon_code: activeCode,
       }));
@@ -149,7 +149,7 @@ export default function Upgrade() {
     setLoading(`pack-${packId}`);
     try {
       const activeCode = appliedCoupon ? appliedCoupon.coupon.code : undefined;
-      const resp = await api.post('/pago/pack-tokens', { 
+      const resp = await api.post('/pago/pack-tokens', {
         pack_id: packId,
         coupon_code: activeCode,
       });
@@ -165,8 +165,8 @@ export default function Upgrade() {
         return;
       }
 
-      localStorage.setItem('pending_purchase', JSON.stringify({ 
-        type: 'pack', 
+      localStorage.setItem('pending_purchase', JSON.stringify({
+        type: 'pack',
         pack_id: packId,
         coupon_code: activeCode,
       }));
@@ -202,7 +202,7 @@ export default function Upgrade() {
             userObj.plan = 'pro';
             localStorage.setItem('user', JSON.stringify(userObj));
             window.dispatchEvent(new Event('storage'));
-          } catch (e) {}
+          } catch (e) { }
         }
       }
       toast.success(resp.data.message || 'Pago verificado exitosamente');
@@ -232,7 +232,7 @@ export default function Upgrade() {
         item_id: itemId,
         coupon_code: activeCode,
       });
-      
+
       const userStr = localStorage.getItem('user');
       if (userStr) {
         try {
@@ -241,7 +241,7 @@ export default function Upgrade() {
           userObj.lastPaymentStatus = 'pending';
           localStorage.setItem('user', JSON.stringify(userObj));
           window.dispatchEvent(new Event('storage'));
-        } catch (e) {}
+        } catch (e) { }
       }
 
       toast.success(t('upgrade.payment_reported'));
@@ -274,8 +274,8 @@ export default function Upgrade() {
 
       <main className="pt-20 sm:pt-24 md:pt-32 pb-12 sm:pb-16 md:pb-24 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
         {/* Header */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }} 
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
           className="text-center mb-8 sm:mb-10 md:mb-12 px-2"
@@ -294,8 +294,8 @@ export default function Upgrade() {
 
         {/* Tab Switcher */}
         {(!userInfo || userInfo.plan === 'pro') && (
-          <motion.div 
-            initial={{ opacity: 0 }} 
+          <motion.div
+            initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ duration: 0.4, delay: 0.1 }}
             className="flex justify-center mb-8 sm:mb-10"
@@ -303,21 +303,19 @@ export default function Upgrade() {
             <div className="inline-flex bg-slate-100 dark:bg-surface-variant p-1 rounded-2xl border border-slate-200 dark:border-outline-variant/30">
               <button
                 onClick={() => setSelectedTab('subscription')}
-                className={`px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
-                  selectedTab === 'subscription' 
-                    ? 'bg-white dark:bg-surface text-on-surface shadow-sm' 
-                    : 'text-slate-500 dark:text-on-surface-variant'
-                }`}
+                className={`px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${selectedTab === 'subscription'
+                  ? 'bg-white dark:bg-surface text-on-surface shadow-sm'
+                  : 'text-slate-500 dark:text-on-surface-variant'
+                  }`}
               >
                 {t('upgrade.tab_subs')}
               </button>
               <button
                 onClick={() => setSelectedTab('packs')}
-                className={`px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${
-                  selectedTab === 'packs' 
-                    ? 'bg-white dark:bg-surface text-on-surface shadow-sm' 
-                    : 'text-slate-500 dark:text-on-surface-variant'
-                }`}
+                className={`px-3 sm:px-4 md:px-6 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm transition-all whitespace-nowrap ${selectedTab === 'packs'
+                  ? 'bg-white dark:bg-surface text-on-surface shadow-sm'
+                  : 'text-slate-500 dark:text-on-surface-variant'
+                  }`}
               >
                 {t('upgrade.tab_packs')}
               </button>
@@ -330,7 +328,7 @@ export default function Upgrade() {
           <div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 mb-6 sm:mb-8">
               {SUBSCRIPTION_PLANS.map((plan, index) => (
-                <motion.div 
+                <motion.div
                   key={plan.months}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -349,7 +347,7 @@ export default function Upgrade() {
                     </span>
                   )}
                   {!plan.saving && <div className="mb-2 sm:mb-3"></div>}
-                  
+
                   <div className="text-xs sm:text-sm font-bold text-slate-500 dark:text-on-surface-variant mb-1">
                     {plan.months} {plan.months === 1 ? t('upgrade.month') : t('upgrade.months')}
                   </div>
@@ -361,15 +359,35 @@ export default function Upgrade() {
                   <ul className="space-y-1.5 sm:space-y-2 mb-4 sm:mb-6 flex-grow">
                     <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
-                      {t('upgrade.feat_tokens')}
+                      {t('landing.feat_refactor')}
                     </li>
                     <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
-                      {t('upgrade.feat_ai')}
+                      {t('landing.feat_pro_precision')}
                     </li>
                     <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
-                      {t('upgrade.feat_watermark')}
+                      {t('landing.feat_pro_ai')}
+                    </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_preview')}
+                    </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_ads')}
+                    </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_watermark')}
+                    </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_pdf')}
+                    </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_tokens')}
                     </li>
                   </ul>
 
@@ -385,7 +403,7 @@ export default function Upgrade() {
                       <Spinner />
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-xs sm:text-sm">credit_card</span> 
+                        <span className="material-symbols-outlined text-xs sm:text-sm">credit_card</span>
                         <span className="whitespace-nowrap">{t('upgrade.btn_subscribe')}</span>
                       </>
                     )}
@@ -420,7 +438,7 @@ export default function Upgrade() {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
               {TOKEN_PACKS.map((pack, index) => (
-                <motion.div 
+                <motion.div
                   key={pack.id}
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
@@ -438,7 +456,7 @@ export default function Upgrade() {
                   </div>
                   <h3 className="text-lg sm:text-xl font-black text-on-surface mb-1">{pack.name}</h3>
                   <div className="text-3xl sm:text-4xl font-black text-on-surface my-2 sm:my-3">${pack.price}</div>
-                  <div className="text-xs sm:text-sm font-bold text-primary-container mb-4 sm:mb-6">+{pack.tokens} tokens DocIA</div>
+                  <div className="text-xs sm:text-sm font-bold text-primary-container mb-4 sm:mb-6">+{pack.tokens.toLocaleString('de-DE')} tokens DocIA</div>
 
                   <button
                     onClick={() => openPaymentModal('pack', pack)}
@@ -452,7 +470,7 @@ export default function Upgrade() {
                       <Spinner />
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-xs sm:text-sm">shopping_cart</span> 
+                        <span className="material-symbols-outlined text-xs sm:text-sm">shopping_cart</span>
                         <span className="whitespace-nowrap">{t('upgrade.btn_buy')}</span>
                       </>
                     )}
@@ -466,12 +484,12 @@ export default function Upgrade() {
 
       {/* PAYMENT MODAL - Responsive */}
       {paymentModal.isOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm" 
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-black/50 backdrop-blur-sm"
           onClick={closePaymentModal}
         >
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} 
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.2 }}
             onClick={(e) => e.stopPropagation()}
@@ -482,14 +500,14 @@ export default function Upgrade() {
               <h3 className="text-base sm:text-lg md:text-xl font-bold text-on-surface pr-4">
                 {paymentModal.type === 'subscription' ? t('upgrade.pay_sub') : t('upgrade.pay_pack')}
               </h3>
-              <button 
-                onClick={closePaymentModal} 
+              <button
+                onClick={closePaymentModal}
                 className="text-on-surface-variant hover:text-on-surface flex-shrink-0"
               >
                 <span className="material-symbols-outlined text-xl sm:text-2xl">close</span>
               </button>
             </div>
-            
+
             {/* Modal Content - Scrollable */}
             <div className="p-4 sm:p-6 overflow-y-auto flex-1">
               {(() => {
@@ -593,17 +611,17 @@ export default function Upgrade() {
                         ) : (
                           <>
                             {/* Métodos de Pago */}
-                            <button 
+                            <button
                               onClick={() => {
                                 if (paymentModal.type === 'subscription') handleSubscribe(paymentModal.item.months);
                                 else handleBuyPack(paymentModal.item.id);
-                              }} 
+                              }}
                               className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#003087] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#002266] transition-colors active:scale-[0.98]"
                             >
                               <span className="material-symbols-outlined text-lg sm:text-xl">payments</span>
                               {t('upgrade.pay_paypal')} {appliedCoupon && `($${finalPrice.toFixed(2)})`}
                             </button>
-                            
+
                             <div className="relative py-1.5 sm:py-2 flex items-center">
                               <div className="flex-grow border-t border-outline/20"></div>
                               <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
@@ -612,14 +630,14 @@ export default function Upgrade() {
                               <div className="flex-grow border-t border-outline/20"></div>
                             </div>
 
-                            <button 
-                              onClick={() => setBinanceFlow('qr')} 
+                            <button
+                              onClick={() => setBinanceFlow('qr')}
                               className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#FCD535] text-[#1E2329] flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#F3BA2F] transition-colors active:scale-[0.98]"
                             >
                               <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" className="w-4 h-4 sm:w-5 sm:h-5" alt="BNB" />
                               {t('upgrade.pay_binance')} ({finalPrice.toFixed(2)} USDT)
                             </button>
-                            
+
                             <div className="relative py-1.5 sm:py-2 flex items-center">
                               <div className="flex-grow border-t border-outline/20"></div>
                               <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
@@ -628,8 +646,8 @@ export default function Upgrade() {
                               <div className="flex-grow border-t border-outline/20"></div>
                             </div>
 
-                            <button 
-                              onClick={() => setBinanceFlow('pagomovil')} 
+                            <button
+                              onClick={() => setBinanceFlow('pagomovil')}
                               className="w-full py-3 sm:py-4 rounded-xl font-bold text-sm sm:text-base bg-[#008b8b] text-white flex items-center justify-center gap-2 sm:gap-3 hover:bg-[#007070] transition-colors active:scale-[0.98]"
                             >
                               <span className="material-symbols-outlined text-lg sm:text-xl">smartphone</span>
@@ -645,26 +663,26 @@ export default function Upgrade() {
                         <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-500 text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
                           {t('upgrade.binance_instr_1')} <strong>{finalPrice.toFixed(2)} USDT</strong>.
                         </div>
-                        
-                        <img 
-                          src="/binance.png" 
-                          alt="Binance QR" 
-                          className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-xl shadow-md border-4 border-white mb-4 sm:mb-6" 
+
+                        <img
+                          src="/binance.png"
+                          alt="Binance QR"
+                          className="w-36 h-36 sm:w-44 sm:h-44 md:w-48 md:h-48 rounded-xl shadow-md border-4 border-white mb-4 sm:mb-6"
                         />
-                        
+
                         <div className="w-full">
                           <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
                             {t('upgrade.order_id_label')}
                           </label>
-                          <input 
-                            type="text" 
+                          <input
+                            type="text"
                             value={binanceOrderId}
                             onChange={e => setBinanceOrderId(e.target.value)}
                             placeholder="Ej. 1234567890"
                             className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary mb-3 sm:mb-4 text-sm"
                           />
-                          
-                          <button 
+
+                          <button
                             onClick={handleVerifyBinance}
                             disabled={binanceLoading}
                             className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-primary hover:bg-primary-container hover:text-on-primary-container transition-all active:scale-[0.98] flex justify-center items-center gap-2"
@@ -673,8 +691,8 @@ export default function Upgrade() {
                               <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
                             ) : t('upgrade.verify_payment')}
                           </button>
-                          <button 
-                            onClick={() => setBinanceFlow('select')} 
+                          <button
+                            onClick={() => setBinanceFlow('select')}
                             className="w-full py-2.5 sm:py-3 mt-2 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
                           >
                             {t('upgrade.go_back')}
@@ -692,7 +710,7 @@ export default function Upgrade() {
                             <>{t('upgrade.loading_bcv')}</>
                           )}
                         </div>
-                        
+
                         <div className="w-full bg-surface-variant/30 p-3 sm:p-4 rounded-xl mb-4 border border-outline/20">
                           <p className="text-xs sm:text-sm font-bold mb-1.5 sm:mb-2">{t('upgrade.receiver_data')}</p>
                           <ul className="text-[10px] sm:text-xs md:text-sm space-y-1">
@@ -701,14 +719,14 @@ export default function Upgrade() {
                             <li><span className="font-semibold text-on-surface-variant">{t('upgrade.id_card')}</span> V-30.838.517</li>
                           </ul>
                         </div>
-                        
+
                         <div className="w-full space-y-3 sm:space-y-4">
                           <div>
                             <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
                               {t('upgrade.reference_number')}
                             </label>
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               value={pmReference}
                               onChange={e => setPmReference(e.target.value.replace(/\D/g, '').slice(0, 6))}
                               placeholder="Ej. 123456"
@@ -721,8 +739,8 @@ export default function Upgrade() {
                             <label className="block text-xs sm:text-sm font-bold text-on-surface mb-1.5 sm:mb-2">
                               {t('upgrade.your_phone')}
                             </label>
-                            <input 
-                              type="text" 
+                            <input
+                              type="text"
                               value={pmPhone}
                               onChange={e => setPmPhone(e.target.value.replace(/\D/g, '').slice(0, 11))}
                               placeholder="Ej. 04120000000"
@@ -730,8 +748,8 @@ export default function Upgrade() {
                               className="w-full px-3 sm:px-4 py-2.5 sm:py-3 rounded-xl border border-outline/30 bg-surface focus:outline-none focus:ring-2 focus:ring-primary text-sm"
                             />
                           </div>
-                          
-                          <button 
+
+                          <button
                             onClick={handleReportPagoMovil}
                             disabled={pmLoading || !bcvRate}
                             className="w-full py-2.5 sm:py-3 rounded-xl font-bold text-sm sm:text-base text-white bg-[#008b8b] hover:bg-[#007070] transition-all active:scale-[0.98] flex justify-center items-center gap-2"
@@ -740,8 +758,8 @@ export default function Upgrade() {
                               <Spinner className="w-4 h-4 sm:w-5 sm:h-5" />
                             ) : t('upgrade.report_payment')}
                           </button>
-                          <button 
-                            onClick={() => setBinanceFlow('select')} 
+                          <button
+                            onClick={() => setBinanceFlow('select')}
                             className="w-full py-2.5 sm:py-3 text-xs sm:text-sm font-bold text-on-surface-variant hover:text-on-surface"
                           >
                             {t('upgrade.go_back')}

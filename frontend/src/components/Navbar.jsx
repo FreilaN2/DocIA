@@ -174,6 +174,9 @@ export default function Navbar() {
               height="auto"
               loading="eager"
             />
+            <span className="bg-primary/10 dark:bg-primary/20 text-primary dark:text-primary-container text-[9px] sm:text-[10px] md:text-xs font-black px-1.5 sm:px-2 py-0.5 rounded-md uppercase tracking-widest border border-primary/20 transform -translate-y-1 sm:-translate-y-1.5 ml-0.5">
+              Beta
+            </span>
           </Link>
 
           {/* Desktop Navigation */}

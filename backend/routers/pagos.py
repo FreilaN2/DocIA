@@ -15,7 +15,7 @@ from sqlalchemy.orm import Session
 from core.database import get_db
 from core.models import User, Plan, Subscription, BinanceTransaction, TokenPack, PagoMovilTransaction
 from core.dependencies import get_current_user
-from core.token_service import assign_monthly_tokens, add_extra_tokens
+from core.token_service import assign_monthly_tokens, add_extra_tokens, create_or_extend_subscription
 from core.paypal import create_order, capture_order
 from core.binance_pay import verify_binance_payment
 from core.bcv_scraper import get_bcv_rate
@@ -60,18 +60,13 @@ async def crear_orden_suscripcion(
 
     # Si el cupón cubrió el 100% del precio (monto 0)
     if amount <= 0.0 and applied_coupon:
-        pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
-        current_user.plan_id = pro_plan.id
-        now = datetime.now(timezone.utc)
-        db.add(Subscription(
+        create_or_extend_subscription(
             user_id=current_user.id,
-            paypal_order_id=f"coupon_{applied_coupon.code}_{current_user.id}",
-            months_paid=data.months,
+            months=data.months,
+            order_id=f"coupon_{applied_coupon.code}_{current_user.id}",
             tokens_per_month=TOKENS_PER_MONTH_PRO,
-            started_at=now,
-            ends_at=now + relativedelta(months=data.months),
-            status="active",
-        ))
+            db=db
+        )
         record_purchase_coupon_redemption(
             coupon=applied_coupon,
             user_id=current_user.id,
@@ -80,7 +75,6 @@ async def crear_orden_suscripcion(
             order_reference=f"100pct_{data.months}m",
             db=db,
         )
-        assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
         grant_referral_reward_if_eligible(current_user.id, db)
         return {
             "status": "success",
@@ -125,21 +119,13 @@ async def confirmar_suscripcion(
     if result.get("status") != "COMPLETED":
         raise HTTPException(status_code=402, detail="El pago no fue completado por PayPal.")
 
-    pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
-    current_user.plan_id = pro_plan.id
-
-    now = datetime.now(timezone.utc)
-    db.add(Subscription(
+    create_or_extend_subscription(
         user_id=current_user.id,
-        paypal_order_id=data.order_id,
-        months_paid=data.months,
+        months=data.months,
+        order_id=data.order_id,
         tokens_per_month=TOKENS_PER_MONTH_PRO,
-        started_at=now,
-        ends_at=now + relativedelta(months=data.months),
-        status="active",
-    ))
-    db.commit()
-    assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
+        db=db
+    )
 
     # Registrar redención del cupón si se envió
     if data.coupon_code:
@@ -228,20 +214,14 @@ async def verify_binance(
     ))
 
     if data.type == 'subscription':
-        pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
-        current_user.plan_id = pro_plan.id
-        now = datetime.now(timezone.utc)
-        db.add(Subscription(
+        create_or_extend_subscription(
             user_id=current_user.id,
-            paypal_order_id=f"binance_{data.order_id}",
-            months_paid=data.item_id,
+            months=data.item_id,
+            order_id=f"binance_{data.order_id}",
             tokens_per_month=TOKENS_PER_MONTH_PRO,
-            started_at=now,
-            ends_at=now + relativedelta(months=data.item_id),
-            status="active",
-        ))
-        assign_monthly_tokens(current_user.id, TOKENS_PER_MONTH_PRO, db)
-        message = f"Pago verificado. ¡Pro activado por {data.item_id} mes(es)!"
+            db=db
+        )
+        message = f"Pago verificado. ¡Pro activado/extendido por {data.item_id} mes(es)!"
     else:
         pack = db.query(TokenPack).filter(TokenPack.id == data.item_id).first()
         add_extra_tokens(current_user.id, pack.tokens, db)

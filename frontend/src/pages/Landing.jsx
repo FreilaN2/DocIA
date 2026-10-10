@@ -240,15 +240,31 @@ export default function Landing() {
               <ul className="flex flex-col gap-3 sm:gap-4 mb-6 sm:mb-8 flex-grow">
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_free_1')}</span>
+                  <span>{t('landing.feat_refactor')}</span>
                 </li>
-                <li className="flex items-center gap-2 sm:gap-3 text-on-surface text-sm sm:text-base">
-                  <span className="material-symbols-outlined text-primary text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_free_2')}</span>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_precision')}</span>
                 </li>
-                <li className="flex items-center gap-2 sm:gap-3 text-on-surface text-sm sm:text-base">
-                  <span className="material-symbols-outlined text-primary text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_free_3')}</span>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_ai')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_preview')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_ads')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_watermark')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
+                  <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
+                  <span>{t('landing.feat_free_pdf')}</span>
                 </li>
               </ul>
               <Link 
@@ -278,19 +294,35 @@ export default function Landing() {
               <ul className="flex flex-col gap-3 sm:gap-4 mb-6 sm:mb-8 flex-grow">
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_advanced')}</span>
+                  <span>{t('landing.feat_refactor')}</span>
                 </li>
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_pro_1')}</span>
+                  <span>{t('landing.feat_pro_precision')}</span>
                 </li>
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_pro_2')}</span>
+                  <span>{t('landing.feat_pro_ai')}</span>
                 </li>
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
-                  <span>{t('landing.feature_pro_3')}</span>
+                  <span>{t('landing.feat_pro_preview')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
+                  <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_pro_ads')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
+                  <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_pro_watermark')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
+                  <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_pro_pdf')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
+                  <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_pro_tokens')}</span>
                 </li>
               </ul>
               <Link 

@@ -17,7 +17,7 @@ from core.database import get_db
 from core.models import User, Plan, Subscription, TokenPack, TokenBalance, TokenTransaction, ProcessedDocument, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
-from core.token_service import assign_monthly_tokens, add_extra_tokens, get_or_create_balance as get_or_create_token_balance
+from core.token_service import assign_monthly_tokens, add_extra_tokens, get_or_create_balance as get_or_create_token_balance, create_or_extend_subscription
 from core.referral_service import grant_referral_reward_if_eligible
 from core.constants import SUBSCRIPTION_PRICES, TOKENS_PER_MONTH_PRO
 from core.schemas import (
@@ -76,19 +76,13 @@ async def aprobar_pago(
     user = pago.user
 
     if pago.item_type == 'subscription':
-        pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
-        user.plan_id = pro_plan.id
-        now = datetime.now(timezone.utc)
-        db.add(Subscription(
+        create_or_extend_subscription(
             user_id=user.id,
-            paypal_order_id=f"pagomovil_{pago.id}",
-            months_paid=pago.item_id,
+            months=pago.item_id,
+            order_id=f"pagomovil_{pago.id}",
             tokens_per_month=TOKENS_PER_MONTH_PRO,
-            started_at=now,
-            ends_at=now + relativedelta(months=pago.item_id),
-            status="active",
-        ))
-        assign_monthly_tokens(user.id, TOKENS_PER_MONTH_PRO, db)
+            db=db
+        )
     elif pago.item_type == 'pack':
         pack = db.query(TokenPack).filter(TokenPack.id == pago.item_id).first()
         if pack:
@@ -744,16 +738,13 @@ async def cambiar_plan_usuario_admin(
 
     if target_plan_name == "pro":
         months = max(1, min(12, data.months or 1))
-        db.add(Subscription(
+        create_or_extend_subscription(
             user_id=user.id,
-            paypal_order_id=f"admin_grant_{int(now.timestamp())}",
-            months_paid=months,
+            months=months,
+            order_id=f"admin_grant_{int(now.timestamp())}",
             tokens_per_month=TOKENS_PER_MONTH_PRO,
-            started_at=now,
-            ends_at=now + relativedelta(months=months),
-            status="active",
-        ))
-        assign_monthly_tokens(user.id, TOKENS_PER_MONTH_PRO, db)
+            db=db
+        )
         msg = f"{user.email} actualizado a Plan PRO ({months} mes(es)) con {TOKENS_PER_MONTH_PRO} tokens mensuales."
     else:
         # Cancelar suscripciones activas y poner tokens mensuales en 0 (conservando extra_tokens)

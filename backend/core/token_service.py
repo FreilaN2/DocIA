@@ -209,6 +209,58 @@ def assign_monthly_tokens(user_id: int, tokens_per_month: int, db: Session):
     logger.info(f"✅ Tokens asignados al usuario {user_id}: {tokens_per_month} tokens/mes")
 
 
+def create_or_extend_subscription(user_id: int, months: int, order_id: str, tokens_per_month: int, db: Session):
+    """
+    Crea una nueva suscripción o extiende una existente.
+    Si el usuario ya tiene una suscripción activa futura, se añade el tiempo al final.
+    En ese caso, los tokens NO se asignan inmediatamente.
+    """
+    from .models import Subscription, Plan, User
+    from dateutil.relativedelta import relativedelta
+    from datetime import timezone, datetime
+
+    now = datetime.now(timezone.utc)
+    
+    active_sub = db.query(Subscription).filter(
+        Subscription.user_id == user_id,
+        Subscription.status == "active",
+        Subscription.ends_at > now
+    ).order_by(Subscription.ends_at.desc()).first()
+
+    if active_sub:
+        started_at = active_sub.ends_at
+        assign_tokens_now = False
+    else:
+        started_at = now
+        assign_tokens_now = True
+
+    ends_at = started_at + relativedelta(months=months)
+
+    new_sub = Subscription(
+        user_id=user_id,
+        paypal_order_id=order_id,
+        months_paid=months,
+        tokens_per_month=tokens_per_month,
+        started_at=started_at,
+        ends_at=ends_at,
+        status="active",
+    )
+    db.add(new_sub)
+    
+    pro_plan = db.query(Plan).filter(Plan.name == "pro").first()
+    if pro_plan:
+        user = db.query(User).filter(User.id == user_id).first()
+        if user:
+            user.plan_id = pro_plan.id
+
+    db.commit()
+
+    if assign_tokens_now:
+        assign_monthly_tokens(user_id, tokens_per_month, db)
+        
+    return new_sub
+
+
 def add_extra_tokens(user_id: int, tokens: int, db: Session):
     """Añade tokens extra (pack top-up) al saldo del usuario."""
     balance = get_or_create_balance(user_id, db)
