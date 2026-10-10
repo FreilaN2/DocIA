@@ -187,7 +187,20 @@ async def listar_packs(db: Session = Depends(get_db)):
     packs = db.query(TokenPack).filter(TokenPack.is_active == True).all()
     return [{"id": p.id, "name": p.name, "price": float(p.price), "tokens": p.tokens} for p in packs]
 
-# ─── Archivos PWA ─────────────────────────────────────────
+# ─── Archivos PWA y Favicon ───────────────────────────────
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    frontend = get_frontend_dir()
+    candidate_paths = [
+        os.path.join(frontend, "favicon.ico"),
+        os.path.join(os.path.dirname(BASE_DIR), "frontend", "public", "favicon.ico"),
+        os.path.join(BASE_DIR, "dist", "favicon.ico"),
+    ]
+    for path in candidate_paths:
+        if os.path.isfile(path):
+            return FileResponse(path, media_type="image/x-icon")
+    raise HTTPException(status_code=404, detail="favicon.ico no encontrado")
 
 @app.get("/manifest.webmanifest")
 async def manifest():

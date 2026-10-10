@@ -8,7 +8,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.png', 'LOGO.png', 'LOGO2.png', 'robots.txt', 'icon-192.png', 'icon-512.png'],
+      includeAssets: ['favicon.ico', 'favicon.png', 'LOGO.png', 'LOGO2.png', 'robots.txt', 'icon-192.png', 'icon-512.png'],
       manifest: {
         name: 'DocAI',
         short_name: 'DocAI',
