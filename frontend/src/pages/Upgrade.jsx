@@ -6,8 +6,6 @@ import api from '../api';
 import toast from 'react-hot-toast';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
-import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTag, faCircleXmark, faGift, faCheck, faBolt, faFire } from '@fortawesome/free-solid-svg-icons';
 
 const SUBSCRIPTION_PLANS = [
   { months: 1, price: 5, label: '1 Mes', pricePerMonth: '5.00', saving: null },
@@ -87,14 +85,10 @@ export default function Upgrade() {
       });
       if (resp.data.valid) {
         setAppliedCoupon(resp.data);
-        toast.success(resp.data.message || '¡Cupón aplicado!', {
-          icon: <FontAwesomeIcon icon={faTag} className="text-emerald-500" />,
-        });
+        toast.success(resp.data.message || '¡Cupón aplicado!', { icon: '🏷️' });
       }
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Cupón inválido o no aplicable', {
-        icon: <FontAwesomeIcon icon={faCircleXmark} className="text-rose-500" />,
-      });
+      toast.error(err.response?.data?.detail || 'Cupón inválido o no aplicable', { icon: '❌' });
     } finally {
       setCouponLoading(false);
     }
@@ -127,10 +121,7 @@ export default function Upgrade() {
       });
 
       if (resp.data.free_activated) {
-        toast.success(resp.data.message || '¡Suscripción Pro activada con tu cupón!', {
-          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
-          duration: 4000,
-        });
+        toast.success(resp.data.message || '¡Suscripción Pro activada con tu cupón!', { icon: '🎉', duration: 4000 });
         const meRes = await api.get('/user/me');
         localStorage.setItem('user', JSON.stringify(meRes.data));
         window.dispatchEvent(new Event('storage'));
@@ -164,10 +155,7 @@ export default function Upgrade() {
       });
 
       if (resp.data.free_activated) {
-        toast.success(resp.data.message || '¡Pack de tokens activado con tu cupón!', {
-          icon: <FontAwesomeIcon icon={faGift} className="text-amber-500" />,
-          duration: 4000,
-        });
+        toast.success(resp.data.message || '¡Pack de tokens activado con tu cupón!', { icon: '🎉', duration: 4000 });
         const meRes = await api.get('/user/me');
         localStorage.setItem('user', JSON.stringify(meRes.data));
         window.dispatchEvent(new Event('storage'));
@@ -284,7 +272,7 @@ export default function Upgrade() {
         <div className="absolute bottom-[-10%] left-[-10%] w-[45%] h-[45%] bg-amber-50 rounded-full blur-[120px] opacity-60" />
       </div>
 
-      <main className="pt-20 sm:pt-24 md:pt-32 pb-12 sm:pb-16 md:pb-24 px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto">
+      <main className="pt-20 sm:pt-24 md:pt-32 pb-12 sm:pb-16 md:pb-24 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto">
         {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
@@ -349,9 +337,8 @@ export default function Upgrade() {
                     ${plan.popular ? 'border-primary-container shadow-xl shadow-orange-100 dark:shadow-orange-900/20 scale-[1.02] sm:scale-100' : 'border-slate-200 dark:border-outline-variant/30'}`}
                 >
                   {plan.popular && (
-                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1">
-                      <FontAwesomeIcon icon={faBolt} className="text-amber-300" />
-                      <span>{t('upgrade.best_value')}</span>
+                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap">
+                      {t('upgrade.best_value')}
                     </div>
                   )}
                   {plan.saving && (
@@ -365,40 +352,40 @@ export default function Upgrade() {
                     {plan.months} {plan.months === 1 ? t('upgrade.month') : t('upgrade.months')}
                   </div>
                   <div className="text-3xl sm:text-4xl font-black text-on-surface mb-1">${plan.price}</div>
-                  <div className="text-[10px] sm:text-xs text-slate-400 dark:text-on-surface-variant/70 font-bold mb-3 sm:mb-4">
+                  <div className="text-xs sm:text-[13px] text-slate-400 dark:text-on-surface-variant/70 font-bold mb-3 sm:mb-4">
                     ${plan.pricePerMonth}{t('upgrade.per_month')}
                   </div>
 
                   <ul className="space-y-1.5 sm:space-y-2 mb-4 sm:mb-6 flex-grow">
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_refactor')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_precision')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_ai')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_preview')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_ads')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_watermark')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_pdf')}
                     </li>
-                    <li className="flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-on-surface">
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_tokens')}
                     </li>
@@ -426,14 +413,13 @@ export default function Upgrade() {
             </div>
 
             {/* Badges */}
-            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-2 sm:gap-4 text-center">
-              <div className="inline-flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-bold">
-                <span className="material-symbols-outlined text-xs sm:text-sm">verified_user</span>
+            <div className="flex flex-col sm:flex-row items-center justify-center mt-4 gap-2 sm:gap-4">
+              <div className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-slate-400 font-bold">
+                <span className="material-symbols-outlined text-xs sm:text-sm">lock</span>
                 {t('upgrade.secure_paypal')}
               </div>
-              <span className="hidden sm:inline text-slate-300 dark:text-slate-600">·</span>
-              <div className="inline-flex items-center gap-1.5 sm:gap-2 text-[10px] sm:text-xs text-slate-400 font-bold">
-                <span className="material-symbols-outlined text-xs sm:text-sm">payments</span>
+              <div className="inline-flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-slate-400 font-bold">
+                <img src="https://cryptologos.cc/logos/bnb-bnb-logo.png" className="w-3 h-3 sm:w-3.5 sm:h-3.5 grayscale opacity-70" alt="BNB" />
                 {t('upgrade.secure_binance')}
               </div>
             </div>
@@ -461,9 +447,8 @@ export default function Upgrade() {
                     ${pack.popular ? 'border-primary-container shadow-xl shadow-orange-100 dark:shadow-orange-900/20' : 'border-slate-200 dark:border-outline-variant/30'}`}
                 >
                   {pack.popular && (
-                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap flex items-center gap-1">
-                      <FontAwesomeIcon icon={faFire} className="text-amber-300" />
-                      <span>{t('upgrade.most_popular')}</span>
+                    <div className="absolute -top-3 sm:-top-3.5 left-1/2 -translate-x-1/2 bg-primary-container text-white text-[9px] sm:text-[10px] font-black px-2.5 sm:px-3 py-1 rounded-full whitespace-nowrap">
+                      {t('upgrade.most_popular')}
                     </div>
                   )}
                   <div className={`w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16 rounded-xl sm:rounded-2xl bg-gradient-to-br ${pack.color} flex items-center justify-center mb-3 sm:mb-4 shadow-lg`}>
@@ -545,9 +530,8 @@ export default function Upgrade() {
                                   -${Number(appliedCoupon.discount_amount).toFixed(2)} DESC
                                 </span>
                               </div>
-                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1 flex items-center gap-1">
-                                <FontAwesomeIcon icon={faCheck} className="text-green-600 dark:text-green-400" />
-                                <span>Cupón "{appliedCoupon.coupon.code}" aplicado</span>
+                              <p className="text-[11px] text-green-600 dark:text-green-400 font-bold mt-1">
+                                ✓ Cupón "{appliedCoupon.coupon.code}" aplicado
                               </p>
                             </div>
                             <div className="text-right pl-2">
@@ -640,7 +624,7 @@ export default function Upgrade() {
 
                             <div className="relative py-1.5 sm:py-2 flex items-center">
                               <div className="flex-grow border-t border-outline/20"></div>
-                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
+                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-xs sm:text-[13px] uppercase tracking-widest font-bold">
                                 {t('upgrade.or_crypto')}
                               </span>
                               <div className="flex-grow border-t border-outline/20"></div>
@@ -656,7 +640,7 @@ export default function Upgrade() {
 
                             <div className="relative py-1.5 sm:py-2 flex items-center">
                               <div className="flex-grow border-t border-outline/20"></div>
-                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-[10px] sm:text-xs uppercase tracking-widest font-bold">
+                              <span className="flex-shrink-0 mx-3 sm:mx-4 text-on-surface-variant text-xs sm:text-[13px] uppercase tracking-widest font-bold">
                                 {t('upgrade.transfer_ves')}
                               </span>
                               <div className="flex-grow border-t border-outline/20"></div>
@@ -676,7 +660,7 @@ export default function Upgrade() {
 
                     {binanceFlow === 'qr' && (
                       <div className="flex flex-col items-center">
-                        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-500 text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
+                        <div className="bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-500 text-xs sm:text-[13px] font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
                           {t('upgrade.binance_instr_1')} <strong>{finalPrice.toFixed(2)} USDT</strong>.
                         </div>
 
@@ -719,7 +703,7 @@ export default function Upgrade() {
 
                     {binanceFlow === 'pagomovil' && (
                       <div className="flex flex-col items-center">
-                        <div className="bg-[#008b8b]/10 text-[#006060] dark:text-[#00aaaa] text-[10px] sm:text-xs font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
+                        <div className="bg-[#008b8b]/10 text-[#006060] dark:text-[#00aaaa] text-xs sm:text-[13px] font-bold px-3 py-2 rounded-lg mb-4 text-center w-full">
                           {bcvRate ? (
                             <>{t('upgrade.total_to_pay')} <strong>Bs. {(finalPrice * bcvRate).toFixed(2)}</strong> ({t('upgrade.bcv_rate')} {bcvRate})</>
                           ) : (
@@ -729,7 +713,7 @@ export default function Upgrade() {
 
                         <div className="w-full bg-surface-variant/30 p-3 sm:p-4 rounded-xl mb-4 border border-outline/20">
                           <p className="text-xs sm:text-sm font-bold mb-1.5 sm:mb-2">{t('upgrade.receiver_data')}</p>
-                          <ul className="text-[10px] sm:text-xs md:text-sm space-y-1">
+                          <ul className="text-xs sm:text-[13px] md:text-sm space-y-1">
                             <li><span className="font-semibold text-on-surface-variant">{t('upgrade.bank')}</span> Banco de Venezuela (0102)</li>
                             <li><span className="font-semibold text-on-surface-variant">{t('upgrade.phone')}</span> 04122464468</li>
                             <li><span className="font-semibold text-on-surface-variant">{t('upgrade.id_card')}</span> V-30.838.517</li>
