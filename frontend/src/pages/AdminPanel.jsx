@@ -74,6 +74,45 @@ export default function AdminPanel() {
   const [userTokenForm, setUserTokenForm] = useState({ action: 'add_extra', amount: 1000 });
   const [userPlanModal, setUserPlanModal] = useState({ isOpen: false, user: null, plan: 'pro', months: 1 });
 
+  // Earnings & Financial History State
+  const [earningsData, setEarningsData] = useState({
+    kpis: {
+      total_usd: 0,
+      total_ves: 0,
+      today_usd: 0,
+      month_usd: 0,
+      pending_usd: 0,
+      failed_or_cancelled_usd: 0,
+      ai_cost_usd: 0,
+      net_profit_usd: 0,
+      total_transactions: 0,
+      completed_count: 0,
+      pending_count: 0,
+      failed_count: 0,
+      cancelled_count: 0,
+      failed_or_cancelled_count: 0,
+    },
+    pie_by_method: [],
+    pie_by_status: [],
+    daily_summary: [],
+    transactions: [],
+  });
+  const [earningsLoading, setEarningsLoading] = useState(false);
+  const [earningsSearch, setEarningsSearch] = useState('');
+  const [earningsMethodFilter, setEarningsMethodFilter] = useState('all');
+  const [earningsStatusFilter, setEarningsStatusFilter] = useState('all');
+  const [earningsDateFilter, setEarningsDateFilter] = useState('');
+  const [historyViewMode, setHistoryViewMode] = useState('system'); // 'system' | 'binance_live'
+  const [binanceLiveData, setBinanceLiveData] = useState({
+    status: 'idle',
+    configured: false,
+    message: '',
+    transactions: [],
+  });
+  const [binanceLiveLoading, setBinanceLiveLoading] = useState(false);
+  const [binanceLiveSearch, setBinanceLiveSearch] = useState('');
+  const [binanceLiveFilter, setBinanceLiveFilter] = useState('candidates'); // 'claimed' | 'candidates' | 'all'
+
   // Admin Login State
   const [isAdmin, setIsAdmin] = useState(false);
   const [email, setEmail] = useState('');
@@ -211,6 +250,17 @@ export default function AdminPanel() {
             .then(resp => setFeedbacks(resp.data))
             .catch(err => console.error('Error auto-refrescando feedbacks', err));
         }
+
+        // Refrescar ganancias / historial unificado si estamos en la pestaña
+        if (activeTab === 'earnings' || activeTab === 'history') {
+          adminApi.get('/admin/earnings')
+            .then(resp => {
+              if (resp.data && resp.data.status === 'success') {
+                setEarningsData(resp.data);
+              }
+            })
+            .catch(err => console.error('Error auto-refrescando ganancias', err));
+        }
       }, 5000); // 5 segundos para que se sienta muy fluido en tiempo real
     }
     return () => clearInterval(interval);
@@ -254,6 +304,36 @@ export default function AdminPanel() {
   };
 
   const formatMiles = (num) => Math.round(Number(num ?? 0)).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+  const fetchEarnings = async () => {
+    setEarningsLoading(true);
+    try {
+      const resp = await adminApi.get('/admin/earnings');
+      if (resp.data && resp.data.status === 'success') {
+        setEarningsData(resp.data);
+      }
+    } catch (err) {
+      console.error('Error cargando historial de ganancias', err);
+      toast.error('Error al cargar el historial de ganancias');
+    } finally {
+      setEarningsLoading(false);
+    }
+  };
+
+  const fetchBinanceLive = async () => {
+    setBinanceLiveLoading(true);
+    try {
+      const resp = await adminApi.get('/admin/binance-live');
+      if (resp.data) {
+        setBinanceLiveData(resp.data);
+      }
+    } catch (err) {
+      console.error('Error consultando API de Binance en vivo', err);
+      toast.error('Error al consultar la API de Binance Pay');
+    } finally {
+      setBinanceLiveLoading(false);
+    }
+  };
 
   const fetchUsers = async (searchQuery = userSearch, planFilter = userPlanFilter) => {
     setUsersLoading(true);
@@ -331,8 +411,8 @@ export default function AdminPanel() {
 
   useEffect(() => {
     if (isAdmin) {
-      if (activeTab === 'history') {
-        fetchHistorial(historyFilter);
+      if (activeTab === 'history' || activeTab === 'earnings') {
+        fetchEarnings();
       } else if (activeTab === 'users') {
         fetchUsers(userSearch, userPlanFilter);
       } else if (activeTab === 'ai-status') {
@@ -749,6 +829,85 @@ export default function AdminPanel() {
     ? feedbacks.filter(f => !f.is_read).length
     : 0;
 
+  const renderDonutChart = (segments, centerTopLabel, centerMainValue, centerSubLabel) => {
+    const radius = 58;
+    const circumference = 2 * Math.PI * radius;
+    const activeSegments = (segments || []).filter(s => Number(s.percentage) > 0);
+    let cumulativePercent = 0;
+
+    return (
+      <div className="relative w-44 h-44 flex items-center justify-center flex-shrink-0 mx-auto">
+        <svg viewBox="0 0 160 160" className="w-44 h-44 -rotate-90">
+          {/* Anillo de fondo */}
+          <circle
+            cx="80"
+            cy="80"
+            r={radius}
+            fill="transparent"
+            stroke="currentColor"
+            strokeWidth="22"
+            className="text-slate-100 dark:text-white/10"
+          />
+          {activeSegments.map((seg, idx) => {
+            const pct = Math.max(0, Math.min(100, Number(seg.percentage) || 0));
+            const dashArray = `${(pct / 100) * circumference} ${circumference}`;
+            const dashOffset = -((cumulativePercent / 100) * circumference);
+            cumulativePercent += pct;
+            return (
+              <circle
+                key={seg.method || seg.status || idx}
+                cx="80"
+                cy="80"
+                r={radius}
+                fill="transparent"
+                stroke={seg.color || '#f97316'}
+                strokeWidth="22"
+                strokeDasharray={dashArray}
+                strokeDashoffset={dashOffset}
+                className="transition-all duration-500 ease-out"
+              />
+            );
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4 pointer-events-none">
+          <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant">
+            {centerTopLabel}
+          </span>
+          <span className="text-base sm:text-lg font-black text-on-surface leading-tight mt-0.5">
+            {centerMainValue}
+          </span>
+          {centerSubLabel && (
+            <span className="text-[10px] font-bold text-on-surface-variant/80 mt-0.5">
+              {centerSubLabel}
+            </span>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const filteredEarningsTransactions = (Array.isArray(earningsData.transactions) ? earningsData.transactions : []).filter((tx) => {
+    if (earningsMethodFilter !== 'all' && tx.method !== earningsMethodFilter) return false;
+    if (earningsStatusFilter !== 'all') {
+      if (earningsStatusFilter === 'failed_or_cancelled') {
+        if (tx.status !== 'failed' && tx.status !== 'cancelled') return false;
+      } else if (tx.status !== earningsStatusFilter) {
+        return false;
+      }
+    }
+    if (earningsDateFilter && tx.date !== earningsDateFilter) return false;
+    if (earningsSearch.trim()) {
+      const q = earningsSearch.toLowerCase().trim();
+      const matchEmail = (tx.user_email || '').toLowerCase().includes(q);
+      const matchName = (tx.user_name || '').toLowerCase().includes(q);
+      const matchRef = (tx.reference || '').toLowerCase().includes(q);
+      const matchConcept = (tx.concept || '').toLowerCase().includes(q);
+      const matchMethod = (tx.method_label || '').toLowerCase().includes(q);
+      if (!matchEmail && !matchName && !matchRef && !matchConcept && !matchMethod) return false;
+    }
+    return true;
+  });
+
   const navGroups = [
     {
       title: 'Pagos y Finanzas',
@@ -764,7 +923,13 @@ export default function AdminPanel() {
           id: 'history',
           label: 'Historial de Pagos',
           icon: 'receipt_long',
-          desc: 'Registro histórico de transacciones aprobadas y rechazadas',
+          desc: 'Registro detallado de todas las transacciones (Pago Móvil, Binance Pay y PayPal)',
+        },
+        {
+          id: 'earnings',
+          label: 'Ganancias',
+          icon: 'pie_chart',
+          desc: 'Gráficas de pastel y tabla de ganancias obtenidas por día y método',
         },
       ],
     },
@@ -2465,121 +2630,431 @@ export default function AdminPanel() {
             )}
           </div>
         ) : activeTab === 'history' ? (
-          /* Tab: Historial */
-          <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 shadow-sm">
-            <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center mb-4 sm:mb-6 gap-3 sm:gap-4">
-              <h2 className="text-lg sm:text-xl font-bold flex items-center gap-2 text-on-surface">
-                <span className="material-symbols-outlined text-primary">history</span>
-                Historial de Solicitudes
-              </h2>
-              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 w-full lg:w-auto">
-                <div className="relative w-full sm:w-56 md:w-64">
-                  <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">search</span>
-                  <input
-                    type="text"
-                    placeholder="Buscar ref o correo..."
-                    value={historySearch}
-                    onChange={(e) => setHistorySearch(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 sm:py-2.5 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-slate-800 dark:text-white placeholder-slate-400 dark:placeholder-gray-500 transition-all"
-                  />
+          /* Tab: Historial Unificado de Pagos + Visor en Vivo Binance API */
+          <div className="bg-white dark:bg-surface rounded-2xl sm:rounded-card border-2 border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 shadow-sm space-y-4">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg sm:text-xl font-black text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">receipt_long</span>
+                  Historial de Transacciones
+                </h2>
+                <p className="text-xs text-on-surface-variant">
+                  {historyViewMode === 'system'
+                    ? 'Registro cronológico unificado de Pago Móvil, Binance Pay y PayPal en DocIA.'
+                    : 'Consulta directa a tu cuenta de Binance Pay (API Key de solo lectura) para verificar si un pago realmente entró.'}
+                </p>
+              </div>
+
+              {/* Selector de Modo: Registros en DocIA vs Visor Directo Binance API */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="inline-flex p-1 rounded-xl bg-slate-100 dark:bg-[#221c18] border border-outline/20 dark:border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setHistoryViewMode('system')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                      historyViewMode === 'system'
+                        ? 'bg-white dark:bg-primary-container text-on-surface dark:text-white shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">database</span>
+                    Registros DocIA
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setHistoryViewMode('binance_live');
+                      if (binanceLiveData.status === 'idle') {
+                        fetchBinanceLive();
+                      }
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 ${
+                      historyViewMode === 'binance_live'
+                        ? 'bg-amber-500 text-white shadow-xs'
+                        : 'text-on-surface-variant hover:text-on-surface'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">currency_bitcoin</span>
+                    Visor Binance API (Solo Lectura)
+                  </button>
                 </div>
-                <div className="flex gap-1.5 sm:gap-2 flex-wrap">
-                  <button
-                    onClick={() => setHistoryFilter('all')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'all'
-                      ? 'bg-primary/10 text-primary dark:bg-primary/20'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                      }`}
-                  >
-                    Todas
-                  </button>
-                  <button
-                    onClick={() => setHistoryFilter('approved')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'approved'
-                      ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                      }`}
-                  >
-                    Aprobados
-                  </button>
-                  <button
-                    onClick={() => setHistoryFilter('rejected')}
-                    className={`px-3 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-colors whitespace-nowrap ${historyFilter === 'rejected'
-                      ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200 dark:bg-surface-variant dark:text-on-surface-variant'
-                      }`}
-                  >
-                    Rechazados
-                  </button>
-                </div>
+
+                <button
+                  onClick={historyViewMode === 'system' ? fetchEarnings : fetchBinanceLive}
+                  disabled={historyViewMode === 'system' ? earningsLoading : binanceLiveLoading}
+                  className="p-2 rounded-xl bg-slate-100 dark:bg-[#2a2a2a] hover:bg-slate-200 dark:hover:bg-white/10 text-on-surface transition-colors"
+                  title="Refrescar datos"
+                >
+                  <span className={`material-symbols-outlined text-lg ${(historyViewMode === 'system' ? earningsLoading : binanceLiveLoading) ? 'animate-spin' : ''}`}>
+                    refresh
+                  </span>
+                </button>
               </div>
             </div>
 
-            {historyLoading ? (
-              <div className="flex justify-center py-10">
-                <Spinner className="h-8 w-8 border-primary" />
-              </div>
-            ) : filteredHistory.length === 0 ? (
-              <div className="text-center py-8 sm:py-10 text-on-surface-variant bg-surface-variant/20 rounded-xl border border-dashed border-outline/30">
-                <span className="material-symbols-outlined text-3xl sm:text-4xl mb-2 opacity-50">history</span>
-                <p className="font-bold text-sm sm:text-base">
-                  {historialPagos.length === 0 ? 'No hay pagos en este historial' : 'No se encontraron resultados'}
-                </p>
+            {historyViewMode === 'binance_live' ? (
+              /* ── Sub-vista: Visor en Vivo Binance Pay API (Solo Lectura) ── */
+              <div className="space-y-4 pt-1">
+                {/* Banner de Estado de la API Key */}
+                <div
+                  className={`p-3.5 rounded-xl border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                    binanceLiveData.status === 'success'
+                      ? 'bg-emerald-50/70 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-800/40'
+                      : binanceLiveData.status === 'unconfigured'
+                      ? 'bg-amber-50/70 dark:bg-amber-950/25 border-amber-200 dark:border-amber-800/40'
+                      : binanceLiveData.status === 'error'
+                      ? 'bg-red-50/70 dark:bg-red-950/25 border-red-200 dark:border-red-800/40'
+                      : 'bg-slate-50 dark:bg-white/5 border-outline/20'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span
+                      className={`material-symbols-outlined text-xl ${
+                        binanceLiveData.status === 'success'
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : binanceLiveData.status === 'unconfigured'
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-red-500'
+                      }`}
+                    >
+                      {binanceLiveData.status === 'success' ? 'verified_user' : 'key'}
+                    </span>
+                    <div className="text-xs">
+                      <p className="font-black text-on-surface">
+                        {binanceLiveData.status === 'success'
+                          ? 'API de Binance Conectada (Solo Lectura)'
+                          : binanceLiveData.status === 'unconfigured'
+                          ? 'API Key pendiente de configurar en .env'
+                          : binanceLiveData.status === 'error'
+                          ? 'No se pudo consultar Binance API'
+                          : 'Consultando cuenta de Binance...'}
+                      </p>
+                      <p className="text-on-surface-variant">
+                        {binanceLiveFilter === 'claimed'
+                          ? 'Mostrando únicamente las órdenes sincronizadas y canjeadas dentro de DocIA.'
+                          : binanceLiveFilter === 'candidates'
+                          ? 'Mostrando pagos del sistema y posibles ingresos válidos (se excluyen envíos salientes y centavos sueltos).'
+                          : 'Mostrando todos los ingresos positivos recibidos en tu cuenta de Binance Pay.'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
+                    <select
+                      value={binanceLiveFilter}
+                      onChange={(e) => setBinanceLiveFilter(e.target.value)}
+                      className="px-3 py-2 bg-white dark:bg-[#1e1e1e] border border-outline/30 dark:border-white/10 rounded-xl text-xs font-bold text-on-surface focus:outline-none focus:border-amber-500 cursor-pointer"
+                    >
+                      <option value="candidates">Posibles pagos DocIA (Sin ruido)</option>
+                      <option value="claimed">Solo canjeados en el sistema</option>
+                      <option value="all">Todos los ingresos recibidos</option>
+                    </select>
+
+                    <div className="relative w-full sm:w-64">
+                      <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                        search
+                      </span>
+                      <input
+                        type="text"
+                        value={binanceLiveSearch}
+                        onChange={(e) => setBinanceLiveSearch(e.target.value)}
+                        placeholder="Verificar Order ID o remitente..."
+                        className="w-full pl-9 pr-3 py-2 bg-white dark:bg-[#1e1e1e] border border-outline/30 dark:border-white/10 rounded-xl text-xs font-bold text-on-surface focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {binanceLiveLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12">
+                    <Spinner className="h-8 w-8 border-amber-500 mb-2" />
+                    <p className="text-xs font-bold text-on-surface-variant">Consultando historial real en Binance Pay...</p>
+                  </div>
+                ) : (binanceLiveData.transactions || []).length === 0 ? (
+                  <div className="text-center py-10 text-on-surface-variant bg-surface-variant/20 rounded-xl border border-dashed border-outline/30">
+                    <span className="material-symbols-outlined text-4xl mb-2 opacity-50">currency_bitcoin</span>
+                    <p className="font-bold text-sm">
+                      {binanceLiveData.status === 'success'
+                        ? 'No se encontraron ingresos recientes en tu cuenta de Binance Pay'
+                        : 'Configura BINANCE_API_KEY y BINANCE_API_SECRET en el archivo .env para ver tus pagos reales aquí'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                    <table className="w-full text-left border-collapse min-w-[760px]">
+                      <thead>
+                        <tr className="border-b border-outline/20 text-[11px] uppercase tracking-wider text-on-surface-variant">
+                          <th className="pb-3 px-3 font-black">Fecha en Binance</th>
+                          <th className="pb-3 px-3 font-black">Order ID / Transaction ID</th>
+                          <th className="pb-3 px-3 font-black">Remitente (Binance)</th>
+                          <th className="pb-3 px-3 font-black">Estado en Binance</th>
+                          <th className="pb-3 px-3 font-black">Estado en DocIA</th>
+                          <th className="pb-3 px-3 font-black text-right">Monto Real</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline/10 text-xs sm:text-sm">
+                        {(binanceLiveData.transactions || [])
+                          .filter((btx) => {
+                            // Seguridad extra en frontend: jamás mostrar envíos salientes (negativos)
+                            if (btx.raw_amount !== undefined && btx.raw_amount <= 0) return false;
+
+                            const q = binanceLiveSearch.toLowerCase().trim();
+                            // Si el admin está buscando un Order ID específico en el buscador, buscar en todos los ingresos
+                            if (q) {
+                              return (
+                                (btx.order_id || '').toLowerCase().includes(q) ||
+                                (btx.transaction_id || '').toLowerCase().includes(q) ||
+                                (btx.payer_name || '').toLowerCase().includes(q) ||
+                                (btx.claimed_by_email || '').toLowerCase().includes(q)
+                              );
+                            }
+
+                            if (binanceLiveFilter === 'claimed') {
+                              return Boolean(btx.claimed_in_docia);
+                            }
+                            if (binanceLiveFilter === 'candidates') {
+                              return btx.is_docia_candidate !== false;
+                            }
+                            return true;
+                          })
+                          .map((btx, idx) => {
+                            const dt = btx.created_at ? new Date(btx.created_at) : null;
+                            return (
+                              <tr key={`${btx.order_id}-${idx}`} className="hover:bg-surface-variant/20 transition-colors">
+                                <td className="py-3.5 px-3 whitespace-nowrap">
+                                  <div className="font-bold text-on-surface">
+                                    {dt ? dt.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' }) : 'N/A'}
+                                  </div>
+                                  <div className="text-[10px] text-on-surface-variant">
+                                    {dt ? dt.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : ''}
+                                  </div>
+                                </td>
+                                <td className="py-3.5 px-3">
+                                  <code className="px-2 py-0.5 rounded bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 font-mono text-xs font-bold">
+                                    {btx.order_id}
+                                  </code>
+                                  {btx.transaction_id && btx.transaction_id !== btx.order_id && (
+                                    <div className="text-[10px] text-on-surface-variant mt-0.5 font-mono">
+                                      Tx: {btx.transaction_id}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-3 font-bold text-on-surface">
+                                  {btx.payer_name}
+                                </td>
+                                <td className="py-3.5 px-3 whitespace-nowrap">
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-black">
+                                    <span className="material-symbols-outlined text-[13px]">check_circle</span>
+                                    {btx.binance_status}
+                                  </span>
+                                </td>
+                                <td className="py-3.5 px-3">
+                                  {btx.claimed_in_docia ? (
+                                    <div>
+                                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-[11px] font-black">
+                                        <span className="material-symbols-outlined text-[13px]">verified</span>
+                                        Canjeado en DocIA
+                                      </span>
+                                      {btx.claimed_by_email && (
+                                        <div className="text-[10px] text-on-surface-variant mt-0.5 truncate max-w-[190px]">
+                                          {btx.claimed_by_email}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-[11px] font-black">
+                                      <span className="material-symbols-outlined text-[13px]">info</span>
+                                      Sin reclamar aún en DocIA
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="py-3.5 px-3 text-right whitespace-nowrap font-black text-sm text-emerald-600 dark:text-emerald-400">
+                                  +{Number(btx.amount || 0).toFixed(2)} {btx.currency}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
-                <table className="w-full text-left border-collapse min-w-[600px]">
-                  <thead>
-                    <tr className="border-b border-outline/20 text-xs sm:text-sm text-on-surface-variant">
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Fecha</th>
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Usuario</th>
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Referencia / Tlf</th>
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Monto (VES)</th>
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Item</th>
-                      <th className="pb-2 sm:pb-3 px-2 sm:px-4 font-bold">Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-xs sm:text-sm">
-                    {filteredHistory.map(p => (
-                      <tr key={p.id} className="border-b border-outline/10 hover:bg-surface-variant/20 transition-colors">
-                        <td className="py-3 sm:py-4 px-2 sm:px-4 text-xs font-medium text-on-surface">
-                          {new Date(p.created_at).toLocaleDateString()} <br />
-                          <span className="text-on-surface-variant">{new Date(p.created_at).toLocaleTimeString()}</span>
-                        </td>
-                        <td className="py-3 sm:py-4 px-2 sm:px-4 font-medium text-on-surface">{p.user_email}</td>
-                        <td className="py-3 sm:py-4 px-2 sm:px-4">
-                          <div className="font-bold text-primary">#{p.reference_number}</div>
-                          <div className="text-xs text-on-surface-variant">{p.phone_number}</div>
-                        </td>
-                        <td className="py-3 sm:py-4 px-2 sm:px-4">
-                          <div className="font-bold text-on-surface">Bs. {p.amount_ves}</div>
-                          <div className="text-xs text-on-surface-variant">${p.amount_usd}</div>
-                        </td>
-                        <td className="py-3 sm:py-4 px-2 sm:px-4">
-                          <span className="inline-block px-1.5 sm:px-2 py-1 bg-primary/10 text-primary text-xs font-bold rounded whitespace-nowrap">
-                            {p.type === 'subscription' ? `Sub ${p.item_id} Mes(es)` : `Pack #${p.item_id}`}
-                          </span>
-                        </td>
-                        <td className="py-3 sm:py-4 px-2 sm:px-4">
-                          {p.status === 'approved' ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs font-bold rounded whitespace-nowrap">
-                              <span className="material-symbols-outlined text-sm">check_circle</span> Aprobado
-                            </span>
-                          ) : p.status === 'rejected' ? (
-                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 text-xs font-bold rounded whitespace-nowrap">
-                              <span className="material-symbols-outlined text-sm">cancel</span> Rechazado
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-1 bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 text-xs font-bold rounded whitespace-nowrap">
-                              <span className="material-symbols-outlined text-sm">pending</span> Pendiente
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              /* ── Sub-vista: Registros Unificados en DocIA ── */
+              <>
+                {/* Barra de Filtros */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div className="relative">
+                    <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-lg">
+                      search
+                    </span>
+                    <input
+                      type="text"
+                      value={earningsSearch}
+                      onChange={(e) => setEarningsSearch(e.target.value)}
+                      placeholder="Buscar correo, referencia, plan..."
+                      className="w-full pl-9 pr-3 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm text-on-surface focus:outline-none focus:border-primary"
+                    />
+                  </div>
+
+                  <select
+                    value={earningsMethodFilter}
+                    onChange={(e) => setEarningsMethodFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="all">Todos los métodos</option>
+                    <option value="pago_movil">Pago Móvil (Bs.)</option>
+                    <option value="binance">Binance Pay (USDT)</option>
+                    <option value="paypal">PayPal (USD)</option>
+                  </select>
+
+                  <select
+                    value={earningsStatusFilter}
+                    onChange={(e) => setEarningsStatusFilter(e.target.value)}
+                    className="px-3 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold text-on-surface focus:outline-none focus:border-primary cursor-pointer"
+                  >
+                    <option value="all">Todos los estados</option>
+                    <option value="completed">Exitosas / Aprobadas</option>
+                    <option value="pending">Pendientes</option>
+                    <option value="failed_or_cancelled">Fallidas o Canceladas</option>
+                    <option value="failed">Solo Rechazadas / Fallidas</option>
+                    <option value="cancelled">Solo Canceladas</option>
+                  </select>
+
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      type="date"
+                      value={earningsDateFilter}
+                      onChange={(e) => setEarningsDateFilter(e.target.value)}
+                      className="flex-1 px-3 py-2 bg-slate-100 dark:bg-[#2a2a2a] border border-outline/30 dark:border-white/10 rounded-xl text-xs sm:text-sm font-bold text-on-surface focus:outline-none focus:border-primary"
+                    />
+                    {(earningsSearch || earningsMethodFilter !== 'all' || earningsStatusFilter !== 'all' || earningsDateFilter) && (
+                      <button
+                        onClick={() => {
+                          setEarningsSearch('');
+                          setEarningsMethodFilter('all');
+                          setEarningsStatusFilter('all');
+                          setEarningsDateFilter('');
+                        }}
+                        className="p-2 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-600 dark:text-red-400 hover:bg-red-100 transition-colors"
+                        title="Limpiar filtros"
+                      >
+                        <span className="material-symbols-outlined text-lg">restart_alt</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {earningsLoading && filteredEarningsTransactions.length === 0 ? (
+                  <div className="flex justify-center py-10">
+                    <Spinner className="h-8 w-8 border-primary" />
+                  </div>
+                ) : filteredEarningsTransactions.length === 0 ? (
+                  <div className="text-center py-8 sm:py-10 text-on-surface-variant bg-surface-variant/20 rounded-xl border border-dashed border-outline/30">
+                    <span className="material-symbols-outlined text-3xl sm:text-4xl mb-2 opacity-50">receipt_long</span>
+                    <p className="font-bold text-sm sm:text-base">No se encontraron transacciones con esos filtros</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                    <table className="w-full text-left border-collapse min-w-[780px]">
+                      <thead>
+                        <tr className="border-b border-outline/20 text-[11px] uppercase tracking-wider text-on-surface-variant">
+                          <th className="pb-3 px-3 font-black">Fecha y Hora</th>
+                          <th className="pb-3 px-3 font-black">Usuario</th>
+                          <th className="pb-3 px-3 font-black">Método</th>
+                          <th className="pb-3 px-3 font-black">Concepto</th>
+                          <th className="pb-3 px-3 font-black">Referencia / ID Orden</th>
+                          <th className="pb-3 px-3 font-black">Estado</th>
+                          <th className="pb-3 px-3 font-black text-right">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-outline/10 text-xs sm:text-sm">
+                        {filteredEarningsTransactions.map((tx) => {
+                          const dtObj = tx.created_at ? new Date(tx.created_at) : null;
+                          const formattedDate = dtObj ? dtObj.toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' }) : tx.date;
+                          const formattedTime = dtObj ? dtObj.toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit' }) : '';
+
+                          return (
+                            <tr key={tx.id} className="hover:bg-surface-variant/20 transition-colors">
+                              <td className="py-3.5 px-3 whitespace-nowrap">
+                                <div className="font-bold text-on-surface">{formattedDate}</div>
+                                <div className="text-[10px] text-on-surface-variant">{formattedTime}</div>
+                              </td>
+                              <td className="py-3.5 px-3">
+                                <div className="font-bold text-on-surface truncate max-w-[190px]">{tx.user_name}</div>
+                                <div className="text-[11px] text-on-surface-variant truncate max-w-[190px]">{tx.user_email}</div>
+                              </td>
+                              <td className="py-3.5 px-3 whitespace-nowrap">
+                                {tx.method === 'pago_movil' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-xs font-black">
+                                    <span className="material-symbols-outlined text-sm">smartphone</span>
+                                    Pago Móvil
+                                  </span>
+                                ) : tx.method === 'binance' ? (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-xs font-black">
+                                    <span className="material-symbols-outlined text-sm">currency_bitcoin</span>
+                                    Binance Pay
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-blue-100 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 text-xs font-black">
+                                    <span className="material-symbols-outlined text-sm">account_balance_wallet</span>
+                                    PayPal
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-3 font-bold text-on-surface">{tx.concept}</td>
+                              <td className="py-3.5 px-3">
+                                <code className="px-2 py-0.5 rounded bg-slate-100 dark:bg-white/10 text-on-surface font-mono text-xs">
+                                  {tx.reference}
+                                </code>
+                                {tx.phone_number && (
+                                  <div className="text-[10px] text-on-surface-variant mt-0.5">Tel: {tx.phone_number}</div>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-3 whitespace-nowrap">
+                                {tx.status === 'completed' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 text-[11px] font-black">
+                                    <span className="material-symbols-outlined text-[14px]">check_circle</span>
+                                    {tx.status_label}
+                                  </span>
+                                ) : tx.status === 'pending' ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[11px] font-black">
+                                    <span className="material-symbols-outlined text-[14px]">schedule</span>
+                                    {tx.status_label}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 text-[11px] font-black">
+                                    <span className="material-symbols-outlined text-[14px]">cancel</span>
+                                    {tx.status_label}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-3.5 px-3 text-right whitespace-nowrap">
+                                <div
+                                  className={`font-black text-sm ${
+                                    tx.status === 'completed'
+                                      ? 'text-emerald-600 dark:text-emerald-400'
+                                      : tx.status === 'pending'
+                                      ? 'text-amber-600 dark:text-amber-400'
+                                      : 'text-red-500 line-through'
+                                  }`}
+                                >
+                                  {tx.status === 'completed' ? '+' : ''}${Number(tx.amount_usd || 0).toFixed(2)} USD
+                                </div>
+                                {tx.amount_ves > 0 && (
+                                  <div className="text-[10px] font-bold text-on-surface-variant">
+                                    Bs. {Number(tx.amount_ves).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         ) : activeTab === 'feedbacks' ? (
@@ -2905,6 +3380,274 @@ export default function AdminPanel() {
                                 {u.is_active ? 'Suspender' : 'Activar'}
                               </button>
                             </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        ) : activeTab === 'earnings' ? (
+          <div className="space-y-6">
+            {/* Encabezado con Ganancia de Hoy / Mes y Botón Refrescar */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-black text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-primary">pie_chart</span>
+                  Balance y Ganancias
+                </h2>
+                <p className="text-xs sm:text-sm text-on-surface-variant font-medium mt-0.5">
+                  Gráficas de distribución por método de pago, estado de operaciones y tabla de ganancias por día.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="px-3.5 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/40 text-xs font-bold text-on-surface">
+                  Hoy: <span className="font-black text-emerald-600 dark:text-emerald-400">+${Number(earningsData.kpis?.today_usd || 0).toFixed(2)} USD</span>
+                </div>
+                <div className="px-3.5 py-2 rounded-xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/40 text-xs font-bold text-on-surface">
+                  Este mes: <span className="font-black text-blue-600 dark:text-blue-400">+${Number(earningsData.kpis?.month_usd || 0).toFixed(2)} USD</span>
+                </div>
+                <button
+                  onClick={fetchEarnings}
+                  disabled={earningsLoading}
+                  className="flex items-center gap-1.5 text-xs sm:text-sm font-bold bg-surface-variant hover:bg-outline/20 text-on-surface px-4 py-2 rounded-xl transition-all shadow-sm active:scale-95 disabled:opacity-50"
+                >
+                  <span className={`material-symbols-outlined text-[18px] ${earningsLoading ? 'animate-spin' : ''}`}>
+                    refresh
+                  </span>
+                  Actualizar
+                </button>
+              </div>
+            </div>
+
+            {/* ── Sección de Gráficas de Pastel (Por Método y Por Estado) ── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              {/* Gráfica de Pastel 1: Ganancia por Método de Pago */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-5 sm:p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-lg">donut_large</span>
+                      Distribución de Ganancias por Método
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant">
+                      Proporción de ingresos confirmados en USD según pasarela de pago
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  {renderDonutChart(
+                    earningsData.pie_by_method,
+                    'Total Ganado',
+                    `$${Number(earningsData.kpis?.total_usd || 0).toFixed(2)}`,
+                    `${earningsData.kpis?.completed_count || 0} pagos exitosos`
+                  )}
+
+                  <div className="flex-1 w-full space-y-3">
+                    {(earningsData.pie_by_method || []).map((item) => (
+                      <div
+                        key={item.method}
+                        onClick={() => {
+                          setEarningsMethodFilter(item.method);
+                          setActiveTab('history');
+                        }}
+                        className="p-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 hover:border-primary/40 transition-all cursor-pointer"
+                        title="Ver transacciones de este método en Historial de Pagos"
+                      >
+                        <div className="flex items-center justify-between text-xs font-bold mb-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-on-surface font-black">{item.label}</span>
+                          </div>
+                          <span className="font-black text-on-surface">
+                            ${Number(item.amount_usd || 0).toFixed(2)} USD ({item.percentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.max(item.percentage > 0 ? 4 : 0, item.percentage)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-on-surface-variant mt-1">
+                          <span>{item.count} {item.count === 1 ? 'transacción aprobada' : 'transacciones aprobadas'}</span>
+                          {item.method === 'pago_movil' && item.amount_ves > 0 && (
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              Bs. {Number(item.amount_ves).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Gráfica de Pastel 2: Estado de las Transacciones */}
+              <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-5 sm:p-6 shadow-sm">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm sm:text-base font-black text-on-surface flex items-center gap-2">
+                      <span className="material-symbols-outlined text-primary text-lg">Rule</span>
+                      Tasa de Éxito vs. Fallidas / Canceladas
+                    </h3>
+                    <p className="text-[11px] text-on-surface-variant">
+                      Desglose de todas las operaciones según su resultado final
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6">
+                  {renderDonutChart(
+                    earningsData.pie_by_status,
+                    'Operaciones',
+                    `${earningsData.kpis?.total_transactions || 0}`,
+                    `${earningsData.pie_by_status?.[0]?.percentage || 0}% exitosas`
+                  )}
+
+                  <div className="flex-1 w-full space-y-3">
+                    {(earningsData.pie_by_status || []).map((item) => (
+                      <div
+                        key={item.status}
+                        onClick={() => {
+                          setEarningsStatusFilter(item.status);
+                          setActiveTab('history');
+                        }}
+                        className="p-3 rounded-xl border border-slate-200/80 dark:border-white/10 bg-slate-50/60 dark:bg-white/5 hover:border-primary/40 transition-all cursor-pointer"
+                        title="Ver transacciones con este estado en Historial de Pagos"
+                      >
+                        <div className="flex items-center justify-between text-xs font-bold mb-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className="w-3 h-3 rounded-full flex-shrink-0"
+                              style={{ backgroundColor: item.color }}
+                            />
+                            <span className="text-on-surface font-black">{item.label}</span>
+                          </div>
+                          <span className="font-black text-on-surface">
+                            {item.count} ops ({item.percentage}%)
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 bg-slate-200 dark:bg-white/10 rounded-full overflow-hidden">
+                          <div
+                            className="h-full rounded-full transition-all duration-500"
+                            style={{
+                              width: `${Math.max(item.percentage > 0 ? 4 : 0, item.percentage)}%`,
+                              backgroundColor: item.color,
+                            }}
+                          />
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-on-surface-variant mt-1">
+                          <span>Volumen equivalente:</span>
+                          <span className="font-bold text-on-surface">
+                            ${Number(item.amount_usd || 0).toFixed(2)} USD
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Tabla de Ganancias por Día y Método de Pago ── */}
+            <div className="bg-white dark:bg-surface border-2 border-slate-200 dark:border-outline-variant/30 rounded-2xl p-4 sm:p-6 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-on-surface flex items-center gap-2">
+                    <span className="material-symbols-outlined text-primary text-lg">table_chart</span>
+                    Ganancias por Día y Método de Pago
+                  </h3>
+                  <p className="text-[11px] text-on-surface-variant">
+                    Resumen diario de cuánto se ganó en cada método y cuántas operaciones fueron exitosas o fallidas. Haz clic en una fecha para ver sus transacciones en Historial de Pagos.
+                  </p>
+                </div>
+              </div>
+
+              {earningsLoading && (!earningsData.daily_summary || earningsData.daily_summary.length === 0) ? (
+                <div className="p-8 text-center">
+                  <Spinner className="h-7 w-7 mx-auto text-primary mb-2" />
+                  <p className="text-xs text-on-surface-variant font-bold">Calculando ganancias por día...</p>
+                </div>
+              ) : (!earningsData.daily_summary || earningsData.daily_summary.length === 0) ? (
+                <div className="p-8 text-center text-on-surface-variant">
+                  <span className="material-symbols-outlined text-3xl mb-1 opacity-50">event_busy</span>
+                  <p className="text-xs sm:text-sm font-bold">Aún no hay registros diarios de transacciones</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto -mx-4 sm:-mx-6 px-4 sm:px-6">
+                  <table className="w-full text-left border-collapse min-w-[740px]">
+                    <thead>
+                      <tr className="border-b border-outline/20 text-[11px] uppercase tracking-wider text-on-surface-variant">
+                        <th className="pb-3 px-3 font-black">Fecha / Día</th>
+                        <th className="pb-3 px-3 font-black">Pago Móvil</th>
+                        <th className="pb-3 px-3 font-black">Binance Pay</th>
+                        <th className="pb-3 px-3 font-black">PayPal</th>
+                        <th className="pb-3 px-3 font-black text-center">Operaciones (Éxito / Fallo)</th>
+                        <th className="pb-3 px-3 font-black text-right">Ganancia del Día</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-outline/10 text-xs sm:text-sm">
+                      {earningsData.daily_summary.map((day) => (
+                        <tr
+                          key={day.date}
+                          onClick={() => {
+                            setEarningsDateFilter(day.date);
+                            setActiveTab('history');
+                          }}
+                          className="hover:bg-surface-variant/20 transition-colors cursor-pointer"
+                          title="Ver detalle de transacciones de este día en Historial de Pagos"
+                        >
+                          <td className="py-3.5 px-3 font-black text-on-surface whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-base text-primary">calendar_today</span>
+                              <span>{day.date}</span>
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3">
+                            <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                              ${Number(day.pago_movil_usd || 0).toFixed(2)}
+                            </span>
+                            {day.pago_movil_ves > 0 && (
+                              <span className="block text-[10px] text-on-surface-variant">
+                                Bs. {Number(day.pago_movil_ves).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-3 font-bold text-amber-600 dark:text-amber-400">
+                            ${Number(day.binance_usd || 0).toFixed(2)} <span className="text-[10px] font-normal">USDT</span>
+                          </td>
+                          <td className="py-3.5 px-3 font-bold text-blue-600 dark:text-blue-400">
+                            ${Number(day.paypal_usd || 0).toFixed(2)} <span className="text-[10px] font-normal">USD</span>
+                          </td>
+                          <td className="py-3.5 px-3 text-center">
+                            <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 text-[10px] font-black">
+                                {day.completed_count} exitosas
+                              </span>
+                              {day.pending_count > 0 && (
+                                <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/50 text-amber-700 dark:text-amber-300 text-[10px] font-black">
+                                  {day.pending_count} pend.
+                                </span>
+                              )}
+                              {day.failed_count > 0 && (
+                                <span className="px-2 py-0.5 rounded-full bg-red-100 dark:bg-red-950/50 text-red-700 dark:text-red-300 text-[10px] font-black">
+                                  {day.failed_count} fallidas (${Number(day.failed_usd || 0).toFixed(2)})
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-3.5 px-3 text-right font-black text-sm sm:text-base text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                            +${Number(day.total_usd || 0).toFixed(2)} USD
                           </td>
                         </tr>
                       ))}

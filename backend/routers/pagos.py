@@ -408,6 +408,16 @@ async def confirmar_pack(
 
     add_extra_tokens(current_user.id, pack.tokens, db)
 
+    # Registrar orden de pack PayPal para el historial financiero de ganancias
+    db.add(Subscription(
+        user_id=current_user.id,
+        paypal_order_id=f"paypal_pack_{pack.id}_{data.order_id}",
+        months_paid=0,
+        tokens_per_month=pack.tokens,
+        status="pack_completed",
+    ))
+    db.commit()
+
     if data.coupon_code:
         clean_code = data.coupon_code.strip().upper()
         coupon = db.query(Coupon).filter(Coupon.code == clean_code).first()

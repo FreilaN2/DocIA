@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from core.database import get_db
-from core.models import User, Plan, Subscription, TokenPack, TokenBalance, TokenTransaction, ProcessedDocument, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
+from core.models import User, Plan, Subscription, BinanceTransaction, TokenPack, TokenBalance, TokenTransaction, ProcessedDocument, PagoMovilTransaction, Coupon, CouponRedemption, Referral, Feedback
 from core.dependencies import get_current_user, get_admin_user
 from core.auth import get_password_hash
 from core.token_service import assign_monthly_tokens, add_extra_tokens, get_or_create_balance as get_or_create_token_balance, create_or_extend_subscription
@@ -802,4 +802,522 @@ async def alternar_estado_usuario_admin(
         "message": f"Cuenta de {user.email} {estado}.",
         "is_active": user.is_active,
     }
+
+
+# ─── Historial de Ganancias y Analítica Financiera ────────
+
+@router.get("/earnings")
+async def obtener_historial_ganancias(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """
+    Retorna métricas financieras consolidadas (Pago Móvil, Binance Pay y PayPal),
+    distribución para gráficas de pastel (por método y por estado),
+    tabla de ganancias por día y el historial completo de transacciones.
+    """
+    from sqlalchemy import func
+
+    users_map = {u.id: u for u in db.query(User).all()}
+    packs_map = {p.id: p for p in db.query(TokenPack).all()}
+
+    # Redenciones de cupones con descuento por referencia de orden
+    redemptions = db.query(CouponRedemption).filter(CouponRedemption.order_reference != None).all()
+    redemptions_by_ref = {r.order_reference: r for r in redemptions if r.order_reference}
+
+    # Suscripciones indexadas por paypal_order_id para cruzar con Binance/Pago Móvil
+    all_subs = db.query(Subscription).order_by(Subscription.created_at.desc()).all()
+    subs_by_order = {s.paypal_order_id: s for s in all_subs if s.paypal_order_id}
+
+    transactions = []
+
+    # 1. Pago Móvil (incluye aprobados, pendientes y rechazados/fallidos)
+    pm_records = db.query(PagoMovilTransaction).order_by(PagoMovilTransaction.created_at.desc()).all()
+    for pm in pm_records:
+        u = users_map.get(pm.user_id)
+        user_email = u.email if u else f"Usuario #{pm.user_id}"
+        user_name = f"{u.first_name or ''} {u.last_name or ''}".strip() if u else "Usuario"
+
+        if pm.item_type == "subscription":
+            months = pm.item_id or 1
+            concept = f"Plan Pro ({months} {'mes' if months == 1 else 'meses'})"
+        else:
+            pack = packs_map.get(pm.item_id)
+            concept = f"Pack {pack.name} (+{pack.tokens} tokens)" if pack else f"Pack de Tokens #{pm.item_id}"
+
+        linked_sub = subs_by_order.get(f"pagomovil_{pm.id}")
+        if pm.status == "approved":
+            if linked_sub and linked_sub.status == "cancelled":
+                tx_status = "cancelled"
+                status_label = "Cancelada"
+            else:
+                tx_status = "completed"
+                status_label = "Exitosa / Aprobada"
+        elif pm.status == "pending":
+            tx_status = "pending"
+            status_label = "Pendiente de Revisión"
+        else:
+            tx_status = "failed"
+            status_label = "Rechazada / Fallida"
+
+        dt = pm.created_at or datetime.now(timezone.utc)
+        date_str = dt.strftime("%Y-%m-%d")
+
+        transactions.append({
+            "id": f"pm-{pm.id}",
+            "raw_id": pm.id,
+            "date": date_str,
+            "created_at": dt.isoformat(),
+            "user_id": pm.user_id,
+            "user_email": user_email,
+            "user_name": user_name or user_email,
+            "method": "pago_movil",
+            "method_label": "Pago Móvil",
+            "concept": concept,
+            "item_type": pm.item_type,
+            "amount_usd": round(float(pm.amount_usd or 0.0), 2),
+            "amount_ves": round(float(pm.amount_ves or 0.0), 2),
+            "reference": pm.reference_number or "N/A",
+            "phone_number": pm.phone_number,
+            "status": tx_status,
+            "status_label": status_label,
+        })
+
+    # 2. Binance Pay (USDT)
+    binance_records = db.query(BinanceTransaction).order_by(BinanceTransaction.created_at.desc()).all()
+    for bt in binance_records:
+        u = users_map.get(bt.user_id)
+        user_email = u.email if u else f"Usuario #{bt.user_id}"
+        user_name = f"{u.first_name or ''} {u.last_name or ''}".strip() if u else "Usuario"
+
+        amt_usd = round(float(bt.amount or 0.0), 2)
+        linked_sub = subs_by_order.get(f"binance_{bt.order_id}")
+
+        if linked_sub:
+            months = linked_sub.months_paid or 1
+            concept = f"Plan Pro ({months} {'mes' if months == 1 else 'meses'})"
+            item_type = "subscription"
+            if linked_sub.status == "cancelled":
+                tx_status = "cancelled"
+                status_label = "Cancelada"
+            else:
+                tx_status = "completed"
+                status_label = "Exitosa / Verificada"
+        else:
+            matched_pack = next((p for p in packs_map.values() if abs(float(p.price) - amt_usd) < 0.05), None)
+            if matched_pack:
+                concept = f"Pack {matched_pack.name} (+{matched_pack.tokens} tokens)"
+            else:
+                concept = "Pack de Tokens / Recarga USDT"
+            item_type = "pack"
+            tx_status = "completed"
+            status_label = "Exitosa / Verificada"
+
+        dt = bt.created_at or datetime.now(timezone.utc)
+        date_str = dt.strftime("%Y-%m-%d")
+
+        transactions.append({
+            "id": f"bn-{bt.id}",
+            "raw_id": bt.id,
+            "date": date_str,
+            "created_at": dt.isoformat(),
+            "user_id": bt.user_id,
+            "user_email": user_email,
+            "user_name": user_name or user_email,
+            "method": "binance",
+            "method_label": "Binance Pay",
+            "concept": concept,
+            "item_type": item_type,
+            "amount_usd": amt_usd,
+            "amount_ves": 0.0,
+            "reference": bt.order_id or "N/A",
+            "phone_number": None,
+            "status": tx_status,
+            "status_label": status_label,
+        })
+
+    # 3. PayPal (Suscripciones y Packs pagados vía PayPal)
+    for sub in all_subs:
+        order_id = (sub.paypal_order_id or "").strip()
+        if not order_id:
+            continue
+        if order_id.startswith(("pagomovil_", "binance_", "admin_grant_", "coupon_")):
+            continue
+
+        u = users_map.get(sub.user_id)
+        user_email = u.email if u else f"Usuario #{sub.user_id}"
+        user_name = f"{u.first_name or ''} {u.last_name or ''}".strip() if u else "Usuario"
+
+        if order_id.startswith("paypal_pack_"):
+            parts = order_id.split("_", 3)
+            pack_id = int(parts[2]) if len(parts) > 2 and parts[2].isdigit() else 0
+            real_ref = parts[3] if len(parts) > 3 else order_id
+            pack = packs_map.get(pack_id)
+            base_price = float(pack.price) if pack else 5.0
+            redemption = redemptions_by_ref.get(real_ref)
+            discount = float(redemption.discount_applied or 0.0) if redemption else 0.0
+            amt_usd = max(0.0, round(base_price - discount, 2))
+            concept = f"Pack {pack.name} (+{pack.tokens} tokens)" if pack else "Pack de Tokens"
+            item_type = "pack"
+            tx_status = "completed"
+            status_label = "Exitosa / Completada"
+        else:
+            months = sub.months_paid or 1
+            base_price = float(SUBSCRIPTION_PRICES.get(months, 5.0))
+            redemption = redemptions_by_ref.get(order_id)
+            discount = float(redemption.discount_applied or 0.0) if redemption else 0.0
+            amt_usd = max(0.0, round(base_price - discount, 2))
+            concept = f"Plan Pro ({months} {'mes' if months == 1 else 'meses'})"
+            item_type = "subscription"
+            real_ref = order_id
+            if sub.status == "cancelled":
+                tx_status = "cancelled"
+                status_label = "Cancelada"
+            else:
+                tx_status = "completed"
+                status_label = "Exitosa / Completada"
+
+        dt = sub.created_at or sub.started_at or datetime.now(timezone.utc)
+        date_str = dt.strftime("%Y-%m-%d")
+
+        transactions.append({
+            "id": f"pp-{sub.id}",
+            "raw_id": sub.id,
+            "date": date_str,
+            "created_at": dt.isoformat(),
+            "user_id": sub.user_id,
+            "user_email": user_email,
+            "user_name": user_name or user_email,
+            "method": "paypal",
+            "method_label": "PayPal",
+            "concept": concept,
+            "item_type": item_type,
+            "amount_usd": amt_usd,
+            "amount_ves": 0.0,
+            "reference": real_ref,
+            "phone_number": None,
+            "status": tx_status,
+            "status_label": status_label,
+        })
+
+    # Ordenar todas las transacciones de más reciente a más antigua
+    transactions.sort(key=lambda x: x["created_at"], reverse=True)
+
+    # Cálculo de KPIs globales
+    now_utc = datetime.now(timezone.utc)
+    today_str = now_utc.strftime("%Y-%m-%d")
+    month_prefix = now_utc.strftime("%Y-%m")
+
+    total_usd = 0.0
+    total_ves = 0.0
+    today_usd = 0.0
+    month_usd = 0.0
+    pending_usd = 0.0
+    failed_or_cancelled_usd = 0.0
+
+    method_totals = {
+        "pago_movil": {"amount_usd": 0.0, "amount_ves": 0.0, "completed_count": 0, "pending_count": 0, "failed_count": 0},
+        "binance": {"amount_usd": 0.0, "amount_ves": 0.0, "completed_count": 0, "pending_count": 0, "failed_count": 0},
+        "paypal": {"amount_usd": 0.0, "amount_ves": 0.0, "completed_count": 0, "pending_count": 0, "failed_count": 0},
+    }
+
+    status_totals = {
+        "completed": {"count": 0, "amount_usd": 0.0},
+        "pending": {"count": 0, "amount_usd": 0.0},
+        "failed": {"count": 0, "amount_usd": 0.0},
+        "cancelled": {"count": 0, "amount_usd": 0.0},
+    }
+
+    daily_map = {}
+
+    for tx in transactions:
+        m = tx["method"]
+        st = tx["status"]
+        amt = tx["amount_usd"]
+        ves = tx["amount_ves"]
+        d = tx["date"]
+
+        if d not in daily_map:
+            daily_map[d] = {
+                "date": d,
+                "total_usd": 0.0,
+                "total_ves": 0.0,
+                "pago_movil_usd": 0.0,
+                "pago_movil_ves": 0.0,
+                "binance_usd": 0.0,
+                "paypal_usd": 0.0,
+                "completed_count": 0,
+                "pending_count": 0,
+                "failed_count": 0,
+                "failed_usd": 0.0,
+            }
+
+        day_entry = daily_map[d]
+
+        if st == "completed":
+            total_usd += amt
+            total_ves += ves
+            if d == today_str:
+                today_usd += amt
+            if d.startswith(month_prefix):
+                month_usd += amt
+
+            method_totals[m]["amount_usd"] += amt
+            method_totals[m]["amount_ves"] += ves
+            method_totals[m]["completed_count"] += 1
+
+            status_totals["completed"]["count"] += 1
+            status_totals["completed"]["amount_usd"] += amt
+
+            day_entry["total_usd"] += amt
+            day_entry["total_ves"] += ves
+            day_entry["completed_count"] += 1
+            if m == "pago_movil":
+                day_entry["pago_movil_usd"] += amt
+                day_entry["pago_movil_ves"] += ves
+            elif m == "binance":
+                day_entry["binance_usd"] += amt
+            elif m == "paypal":
+                day_entry["paypal_usd"] += amt
+
+        elif st == "pending":
+            pending_usd += amt
+            method_totals[m]["pending_count"] += 1
+            status_totals["pending"]["count"] += 1
+            status_totals["pending"]["amount_usd"] += amt
+            day_entry["pending_count"] += 1
+
+        elif st in ("failed", "cancelled"):
+            failed_or_cancelled_usd += amt
+            method_totals[m]["failed_count"] += 1
+            status_totals[st]["count"] += 1
+            status_totals[st]["amount_usd"] += amt
+            day_entry["failed_count"] += 1
+            day_entry["failed_usd"] += amt
+
+    # Costo acumulado de IA (DeepSeek) para mostrar margen neto
+    ai_cost_usd = float(
+        db.query(func.coalesce(func.sum(TokenTransaction.estimated_cost_usd), 0.0)).scalar() or 0.0
+    )
+    net_profit_usd = round(total_usd - ai_cost_usd, 2)
+
+    # Datos para la Gráfica de Pastel #1: Ganancia por Método de Pago
+    base_total_usd = total_usd if total_usd > 0 else 1.0
+    pie_by_method = [
+        {
+            "method": "pago_movil",
+            "label": "Pago Móvil (Bs.)",
+            "amount_usd": round(method_totals["pago_movil"]["amount_usd"], 2),
+            "amount_ves": round(method_totals["pago_movil"]["amount_ves"], 2),
+            "count": method_totals["pago_movil"]["completed_count"],
+            "percentage": round((method_totals["pago_movil"]["amount_usd"] / base_total_usd) * 100, 1) if total_usd > 0 else 0.0,
+            "color": "#10b981",  # Emerald
+        },
+        {
+            "method": "binance",
+            "label": "Binance Pay (USDT)",
+            "amount_usd": round(method_totals["binance"]["amount_usd"], 2),
+            "amount_ves": 0.0,
+            "count": method_totals["binance"]["completed_count"],
+            "percentage": round((method_totals["binance"]["amount_usd"] / base_total_usd) * 100, 1) if total_usd > 0 else 0.0,
+            "color": "#f59e0b",  # Amber / Binance Yellow
+        },
+        {
+            "method": "paypal",
+            "label": "PayPal (USD)",
+            "amount_usd": round(method_totals["paypal"]["amount_usd"], 2),
+            "amount_ves": 0.0,
+            "count": method_totals["paypal"]["completed_count"],
+            "percentage": round((method_totals["paypal"]["amount_usd"] / base_total_usd) * 100, 1) if total_usd > 0 else 0.0,
+            "color": "#3b82f6",  # Blue / PayPal
+        },
+    ]
+
+    # Datos para la Gráfica de Pastel #2: Operaciones por Estado
+    total_tx_count = len(transactions)
+    base_tx_count = total_tx_count if total_tx_count > 0 else 1
+    failed_And_cancelled_count = status_totals["failed"]["count"] + status_totals["cancelled"]["count"]
+    failed_and_cancelled_amt = status_totals["failed"]["amount_usd"] + status_totals["cancelled"]["amount_usd"]
+
+    pie_by_status = [
+        {
+            "status": "completed",
+            "label": "Exitosas / Aprobadas",
+            "count": status_totals["completed"]["count"],
+            "amount_usd": round(status_totals["completed"]["amount_usd"], 2),
+            "percentage": round((status_totals["completed"]["count"] / base_tx_count) * 100, 1) if total_tx_count > 0 else 0.0,
+            "color": "#10b981",  # Emerald
+        },
+        {
+            "status": "pending",
+            "label": "Pendientes",
+            "count": status_totals["pending"]["count"],
+            "amount_usd": round(status_totals["pending"]["amount_usd"], 2),
+            "percentage": round((status_totals["pending"]["count"] / base_tx_count) * 100, 1) if total_tx_count > 0 else 0.0,
+            "color": "#f59e0b",  # Amber
+        },
+        {
+            "status": "failed_or_cancelled",
+            "label": "Fallidas / Rechazadas / Canceladas",
+            "count": failed_And_cancelled_count,
+            "amount_usd": round(failed_and_cancelled_amt, 2),
+            "percentage": round((failed_And_cancelled_count / base_tx_count) * 100, 1) if total_tx_count > 0 else 0.0,
+            "color": "#ef4444",  # Red
+        },
+    ]
+
+    daily_summary = []
+    for d_key in sorted(daily_map.keys(), reverse=True):
+        item = daily_map[d_key]
+        daily_summary.append({
+            "date": item["date"],
+            "total_usd": round(item["total_usd"], 2),
+            "total_ves": round(item["total_ves"], 2),
+            "pago_movil_usd": round(item["pago_movil_usd"], 2),
+            "pago_movil_ves": round(item["pago_movil_ves"], 2),
+            "binance_usd": round(item["binance_usd"], 2),
+            "paypal_usd": round(item["paypal_usd"], 2),
+            "completed_count": item["completed_count"],
+            "pending_count": item["pending_count"],
+            "failed_count": item["failed_count"],
+            "failed_usd": round(item["failed_usd"], 2),
+        })
+
+    return {
+        "status": "success",
+        "kpis": {
+            "total_usd": round(total_usd, 2),
+            "total_ves": round(total_ves, 2),
+            "today_usd": round(today_usd, 2),
+            "month_usd": round(month_usd, 2),
+            "pending_usd": round(pending_usd, 2),
+            "failed_or_cancelled_usd": round(failed_or_cancelled_usd, 2),
+            "ai_cost_usd": round(ai_cost_usd, 4),
+            "net_profit_usd": net_profit_usd,
+            "total_transactions": total_tx_count,
+            "completed_count": status_totals["completed"]["count"],
+            "pending_count": status_totals["pending"]["count"],
+            "failed_count": status_totals["failed"]["count"],
+            "cancelled_count": status_totals["cancelled"]["count"],
+            "failed_or_cancelled_count": failed_And_cancelled_count,
+        },
+        "pie_by_method": pie_by_method,
+        "pie_by_status": pie_by_status,
+        "daily_summary": daily_summary,
+        "transactions": transactions,
+    }
+
+
+@router.get("/binance-live")
+async def consultar_binance_en_vivo(
+    db: Session = Depends(get_db),
+    admin: User = Depends(get_admin_user),
+):
+    """
+    Consulta directamente la API de Binance Pay (solo lectura) con BINANCE_API_KEY
+    y cruza cada orden recibida con la base de datos de DocIA para verificar si un pago
+    realmente entró a la cuenta de Binance y si ya fue canjeado o no.
+    """
+    from core.binance_pay import get_binance_pay_transactions, is_binance_configured
+
+    if not is_binance_configured():
+        return {
+            "status": "unconfigured",
+            "configured": False,
+            "message": "Las variables BINANCE_API_KEY y BINANCE_API_SECRET no están configuradas en el servidor (.env).",
+            "transactions": [],
+        }
+
+    raw = get_binance_pay_transactions()
+    if raw is None:
+        return {
+            "status": "error",
+            "configured": True,
+            "message": "Error al conectar con la API de Binance. Verifica la API Key de solo lectura o la restricción de IP.",
+            "transactions": [],
+        }
+
+    if raw.get("code") != "000000":
+        return {
+            "status": "error",
+            "configured": True,
+            "message": f"Binance devolvió: {raw.get('msg', 'Error desconocido')}",
+            "transactions": [],
+        }
+
+    # Cruzar con BinanceTransaction registrados en DocIA y precios válidos del sistema
+    from core.constants import SUBSCRIPTION_PRICES
+    users_map = {u.id: u for u in db.query(User).all()}
+    claimed_records = db.query(BinanceTransaction).all()
+    claimed_map = {}
+    for cr in claimed_records:
+        if cr.order_id:
+            claimed_map[str(cr.order_id).strip()] = cr
+
+    pack_prices = {round(float(p.price), 2) for p in db.query(TokenPack).all() if p.price is not None}
+    sub_prices = {round(float(v), 2) for v in SUBSCRIPTION_PRICES.values()}
+    valid_docia_prices = pack_prices | sub_prices
+    min_docia_price = min(valid_docia_prices) if valid_docia_prices else 2.0
+
+    live_items = []
+    for tx in raw.get("data", []):
+        raw_amt = float(tx.get("amount", 0.0) or 0.0)
+        # Descartar envíos/retiros salientes hechos desde tu propia cuenta (ej. -5.00 USDT, -0.50 USDT)
+        if raw_amt <= 0:
+            continue
+
+        order_id = str(tx.get("orderId", "") or "").strip()
+        transaction_id = str(tx.get("transactionId", "") or "").strip()
+        currency = str(tx.get("currency", "USDT") or "USDT").upper()
+        tx_status = str(tx.get("status", "SUCCESS") or "SUCCESS")
+        tx_time_ms = tx.get("transactionTime")
+
+        if tx_time_ms:
+            dt = datetime.fromtimestamp(int(tx_time_ms) / 1000.0, tz=timezone.utc)
+            created_iso = dt.isoformat()
+        else:
+            created_iso = None
+
+        payer_info = tx.get("payerInfo") or {}
+        payer_name = (
+            payer_info.get("name")
+            or payer_info.get("nickname")
+            or str(payer_info.get("binanceId") or "Usuario Binance")
+        )
+
+        matched_claim = claimed_map.get(order_id) or claimed_map.get(transaction_id)
+        claimed_user = users_map.get(matched_claim.user_id) if matched_claim else None
+        amt_rounded = round(raw_amt, 2)
+
+        # Es relevante para DocIA si ya fue canjeado o si es un ingreso en USDT compatible con precios del sistema
+        is_docia_candidate = bool(matched_claim) or (
+            currency == "USDT" and (amt_rounded in valid_docia_prices or amt_rounded >= min_docia_price)
+        )
+
+        live_items.append({
+            "order_id": order_id or transaction_id or "N/A",
+            "transaction_id": transaction_id or "N/A",
+            "amount": amt_rounded,
+            "raw_amount": round(raw_amt, 4),
+            "is_incoming": True,
+            "is_docia_candidate": is_docia_candidate,
+            "matches_exact_price": amt_rounded in valid_docia_prices,
+            "currency": currency,
+            "binance_status": tx_status,
+            "payer_name": payer_name,
+            "created_at": created_iso,
+            "claimed_in_docia": bool(matched_claim),
+            "claimed_by_email": claimed_user.email if claimed_user else None,
+            "claimed_by_name": f"{claimed_user.first_name or ''} {claimed_user.last_name or ''}".strip() if claimed_user else None,
+            "claimed_at": matched_claim.created_at.isoformat() if (matched_claim and matched_claim.created_at) else None,
+        })
+
+    return {
+        "status": "success",
+        "configured": True,
+        "message": "Conectado en tiempo real con Binance Pay (Modo Solo Lectura).",
+        "transactions": live_items,
+    }
+
+
 
