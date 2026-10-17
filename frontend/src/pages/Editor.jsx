@@ -10,6 +10,7 @@ import Navbar from '../components/Navbar';
 import PlanBadge from '../components/PlanBadge';
 import ParagraphCard from '../components/ParagraphCard';
 import DocumentPreview from '../components/DocumentPreview';
+import ApaScorecard from '../components/ApaScorecard';
 import Footer from '../components/Footer';
 import FeedbackModal from '../components/FeedbackModal';
 import { 
@@ -248,6 +249,18 @@ export default function Editor() {
     }
   }, []);
 
+  // Asegurar que auditoría esté presente incluso tras recargar o editar categorías
+  useEffect(() => {
+    if (result && result.detalles && !result.auditoria) {
+      api.post('/auditar-documento/', {
+        parrafos: result.detalles,
+        plan: isPro ? 'pro' : 'free',
+      }).then(res => {
+        setResult(prev => prev ? { ...prev, auditoria: res.data } : prev);
+      }).catch(() => {});
+    }
+  }, [result?.detalles, isPro]);
+
   const handleDismissAdBlock = () => {
     try {
       sessionStorage.setItem('docai_adblock_dismissed', 'true');
@@ -356,6 +369,10 @@ export default function Editor() {
 
   const handleUpload = async () => {
     if (!file) return;
+    if (exceedsFreeLimit) {
+      navigate('/upgrade');
+      return;
+    }
     setLoading(true);
     setProgreso(0);
     setLoteActual(0);
@@ -446,7 +463,8 @@ export default function Editor() {
           setResult({
             detalles: detalles,
             resumen: evento.stats,
-            nPortada: realNPortada
+            nPortada: realNPortada,
+            auditoria: evento.auditoria || null
           });
           es.close();
           esRef.current = null;
@@ -605,6 +623,9 @@ export default function Editor() {
   const solidTokenPercent = Math.max(0, tokenPercent - consumedVisualPercent);
   const hasTokens = totalUserTokens > 0;
   const noTokensForPro = isPro && (fileMetrics && !result ? !fileMetrics.has_enough_tokens : (tokenBalance !== null && !hasTokens));
+  const exceedsFreeLimit = !isPro && Boolean(fileMetrics?.exceeds_free_limit);
+  const estimatedPages = fileMetrics?.estimated_pages || 1;
+  const maxPagesFree = fileMetrics?.max_pages_free || 15;
 
   return (
     <div className="bg-background min-h-screen text-on-background relative overflow-x-hidden">
@@ -901,7 +922,70 @@ export default function Editor() {
                         {t('editor.drag_drop')}
                       </p>
                     )}
+                    {analyzingFile && (
+                      <div className="flex items-center gap-2 text-xs font-bold text-primary-container animate-pulse mt-1">
+                        <Spinner className="w-3.5 h-3.5 text-primary-container" />
+                        <span>{t('editor.calculating_usage')}</span>
+                      </div>
+                    )}
+                    {file && fileMetrics && !analyzingFile && (
+                      <div className="flex flex-wrap items-center justify-center gap-2 text-xs font-bold mt-1 text-slate-500 dark:text-on-surface-variant">
+                        <span><strong className="text-on-surface font-black">~{formatMiles(fileMetrics.total_words)}</strong> {t('editor.words')}</span>
+                        <span className="text-slate-300 dark:text-outline-variant">•</span>
+                        <span><strong className="text-on-surface font-black">~{estimatedPages}</strong> {t('editor.pages')}</span>
+                        {!isPro && (
+                          <>
+                            <span className="text-slate-300 dark:text-outline-variant">•</span>
+                            <span className={`px-2 py-0.5 rounded-full text-[11px] font-black ${
+                              exceedsFreeLimit
+                                ? 'bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300'
+                                : 'bg-emerald-100 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300'
+                            }`}>
+                              {exceedsFreeLimit 
+                                ? t('editor.pages_free_limit_badge', { max: maxPagesFree })
+                                : `DocIA Free (${estimatedPages}/${maxPagesFree} págs)`}
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </label>
+
+                {/* Banner de Límite de Páginas para Free */}
+                {exceedsFreeLimit && (
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.98 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3 }}
+                    className="mt-6 bg-gradient-to-r from-amber-500/10 via-orange-500/10 to-amber-500/10 border-2 border-amber-500/40 rounded-2xl p-4 sm:p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-sm"
+                  >
+                    <div className="flex items-start gap-3.5">
+                      <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="material-symbols-outlined text-2xl">auto_stories</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-black text-on-surface text-sm sm:text-base">
+                            {t('editor.page_limit_title', { pages: estimatedPages })}
+                          </h4>
+                          <span className="text-[10px] uppercase tracking-wider font-black px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300">
+                            {t('editor.pages_free_limit_badge', { max: maxPagesFree })}
+                          </span>
+                        </div>
+                        <p className="text-xs sm:text-sm text-on-surface-variant mt-1 leading-relaxed max-w-xl">
+                          {t('editor.page_limit_desc', { max: maxPagesFree })}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      to="/upgrade"
+                      className="shrink-0 w-full md:w-auto px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl font-black text-xs sm:text-sm bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white shadow-md hover:shadow-lg transition-all no-underline flex items-center justify-center gap-2 text-center"
+                    >
+                      <span className="material-symbols-outlined text-sm">workspace_premium</span>
+                      {t('editor.page_limit_cta')}
+                    </Link>
+                  </motion.div>
+                )}
 
                 {/* Barra de progreso */}
                 {loading ? (
@@ -942,17 +1026,27 @@ export default function Editor() {
                         <span>{errorProceso}</span>
                       </motion.div>
                     )}
-                    <button
-                      onClick={handleUpload}
-                      disabled={!file || noTokensForPro /* || adBlockDetected */}
-                      className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-2xl font-black text-sm sm:text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 sm:gap-3 active:scale-95
-                        ${!file || noTokensForPro /* || adBlockDetected */
-                          ? 'bg-slate-200 dark:bg-surface-variant text-slate-400 dark:text-on-surface-variant/50 cursor-not-allowed shadow-none'
-                          : 'bg-primary-container shadow-primary-container/20 hover:opacity-90'}`}
-                    >
-                      <span className="material-symbols-outlined text-lg sm:text-xl">auto_fix_high</span>
-                      {t('editor.analyze')}
-                    </button>
+                    {exceedsFreeLimit ? (
+                      <Link
+                        to="/upgrade"
+                        className="w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-2xl font-black text-sm sm:text-base text-white shadow-lg bg-gradient-to-r from-orange-500 via-primary-container to-amber-500 hover:opacity-95 transition-all flex items-center justify-center gap-2 sm:gap-3 no-underline shadow-orange-500/25 active:scale-95 text-center"
+                      >
+                        <span className="material-symbols-outlined text-lg sm:text-xl">workspace_premium</span>
+                        {t('editor.page_limit_btn', { max: maxPagesFree })}
+                      </Link>
+                    ) : (
+                      <button
+                        onClick={handleUpload}
+                        disabled={!file || noTokensForPro /* || adBlockDetected */}
+                        className={`w-full mt-6 sm:mt-8 py-4 sm:py-5 rounded-2xl font-black text-sm sm:text-base text-white shadow-lg transition-all flex items-center justify-center gap-2 sm:gap-3 active:scale-95
+                          ${!file || noTokensForPro /* || adBlockDetected */
+                            ? 'bg-slate-200 dark:bg-surface-variant text-slate-400 dark:text-on-surface-variant/50 cursor-not-allowed shadow-none'
+                            : 'bg-primary-container shadow-primary-container/20 hover:opacity-90'}`}
+                      >
+                        <span className="material-symbols-outlined text-lg sm:text-xl">auto_fix_high</span>
+                        {t('editor.analyze')}
+                      </button>
+                    )}
                   </>
                 )}
               </div>
@@ -1005,6 +1099,14 @@ export default function Editor() {
                     </div>
                   )}
                 </div>
+
+                {/* Diagnóstico de Salud APA y Auditoría de Citas */}
+                {result.auditoria && (
+                  <ApaScorecard
+                    auditoria={result.auditoria}
+                    isPro={isPro}
+                  />
+                )}
 
                 {/* Vista de resultados */}
                 <AnimatePresence mode="wait">

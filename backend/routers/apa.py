@@ -28,7 +28,9 @@ from core.database import get_db
 from core.models import User, ProcessedDocument
 from core.apa_rules import procesar_con_reglas
 from core.apa_ai import procesar_con_ia, procesar_con_ia_stream, estimar_tokens_documento, _extraer_textos
+from core.apa_auditor import ejecutar_auditoria_completa
 from core.token_service import get_available_tokens, consume_tokens, deepseek_tokens_to_docai
+from core.constants import MAX_PAGES_FREE, WORDS_PER_PAGE_APA, MAX_WORDS_FREE
 from core.dependencies import get_current_user, get_optional_current_user, _decode_user_from_token
 from core.schemas import DatosFinales, ParrafoCorregido
 from core.storage import storage, upload_storage
@@ -88,6 +90,34 @@ async def limpiar_archivos_antiguos():
     await asyncio.get_event_loop().run_in_executor(None, _do_cleanup)
 
 
+def estimar_paginas_documento(doc: Document, total_palabras: int = 0) -> int:
+    """
+    Estima el número de páginas de un documento DOCX.
+    Combina:
+    1. Conteo de palabras bajo estándar APA (~250 palabras por página con interlineado doble).
+    2. Saltos de página explícitos (<w:br w:type="page"/>) y marcas de renderizado (<w:lastRenderedPageBreak/>).
+    Devuelve al menos 1 página.
+    """
+    if total_palabras <= 0:
+        total_palabras = sum(len(p.text.split()) for p in doc.paragraphs if p.text and p.text.strip())
+
+    pages_by_words = max(1, round(total_palabras / WORDS_PER_PAGE_APA)) if total_palabras > 0 else 1
+    explicit_breaks = 0
+    try:
+        w_ns = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main'
+        for p in doc.paragraphs:
+            for br in p._p.iter(f'{{{w_ns}}}br'):
+                if br.get(f'{{{w_ns}}}type') == 'page':
+                    explicit_breaks += 1
+            for _ in p._p.iter(f'{{{w_ns}}}lastRenderedPageBreak'):
+                explicit_breaks += 1
+    except Exception as e:
+        logger.debug(f"Error detectando saltos de página XML: {e}")
+
+    pages_by_breaks = explicit_breaks + 1 if explicit_breaks > 0 else 1
+    return max(pages_by_words, pages_by_breaks)
+
+
 # ─── Endpoints ────────────────────────────────────────────
 
 @router.post("/upload-documento/")
@@ -119,7 +149,7 @@ async def upload_documento(
     upload_storage.set(upload_id, (input_path, safe_name))
     logger.info(f"Upload #{upload_id}: {safe_name} ({len(contents)} bytes)")
 
-    # Análisis y estimación de consumo de tokens para el documento
+    # Análisis y estimación de consumo de tokens y páginas para el documento
     metrics = {
         "total_paragraphs": 0,
         "total_words": 0,
@@ -130,6 +160,9 @@ async def upload_documento(
         "user_tokens_available": 0,
         "has_enough_tokens": True,
         "tokens_after_process": 0,
+        "estimated_pages": 1,
+        "max_pages_free": MAX_PAGES_FREE,
+        "exceeds_free_limit": False,
     }
 
     try:
@@ -144,6 +177,12 @@ async def upload_documento(
         metrics["user_tokens_available"] = user_balance
         metrics["has_enough_tokens"] = user_balance >= metrics["estimated_docai_tokens"]
         metrics["tokens_after_process"] = max(0, user_balance - metrics["estimated_docai_tokens"])
+
+        # Estimación de páginas según estándar APA y saltos explícitos
+        estimated_pages = estimar_paginas_documento(doc, metrics.get("total_words", 0))
+        metrics["estimated_pages"] = estimated_pages
+        metrics["max_pages_free"] = MAX_PAGES_FREE
+        metrics["exceeds_free_limit"] = estimated_pages > MAX_PAGES_FREE
     except Exception as e:
         logger.warning(f"Error calculando estimación de tokens para {safe_name}: {e}")
 
@@ -187,8 +226,21 @@ async def procesar_apa_stream(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"No se pudo leer el .docx: {e}")
 
+    total_palabras_doc = sum(len(p.text.split()) for p in doc.paragraphs if p.text and p.text.strip())
+    paginas_estimadas_doc = estimar_paginas_documento(doc, total_palabras_doc)
+
+    if plan != "pro" and paginas_estimadas_doc > MAX_PAGES_FREE:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Tu documento tiene aprox. {paginas_estimadas_doc} páginas y supera el límite de {MAX_PAGES_FREE} páginas de la versión Free. Pásate a DocIA Pro para formatear tesis y documentos extensos sin límite."
+        )
+
     async def event_generator() -> AsyncGenerator[str, None]:
         try:
+            if plan != "pro" and paginas_estimadas_doc > MAX_PAGES_FREE:
+                yield f"data: {json.dumps({'tipo': 'error', 'mensaje': f'El documento tiene aprox. {paginas_estimadas_doc} páginas y supera el límite de {MAX_PAGES_FREE} páginas del plan Free. Actualiza a DocIA Pro para continuar.'}, ensure_ascii=False)}\n\n"
+                return
+
             if plan == "pro":
                 async for evento in procesar_con_ia_stream(doc.paragraphs):
                     if evento.get("tipo") == "finalizado":
@@ -205,6 +257,7 @@ async def procesar_apa_stream(
                         )
                         consumed_val = res_tokens.get("consumed", 0) if isinstance(res_tokens, dict) else res_tokens
                         evento["tokens_consumed"] = consumed_val
+                        evento["auditoria"] = ejecutar_auditoria_completa(evento.get("detalles", []), plan="pro")
                         try:
                             db.add(ProcessedDocument(
                                 user_id=current_user.id,
@@ -236,8 +289,9 @@ async def procesar_apa_stream(
                         db.commit()
                     except Exception:
                         db.rollback()
+                auditoria = ejecutar_auditoria_completa(resultado['detalles'], plan="free")
                 yield f"data: {json.dumps({'tipo': 'inicio', 'total_lotes': 1, 'progreso': 0, 'modelo': 'reglas'}, ensure_ascii=False)}\n\n"
-                yield f"data: {json.dumps({'tipo': 'finalizado', 'progreso': 100, 'stats': resultado['stats'], 'detalles': resultado['detalles'], 'deepseek_tokens': 0}, ensure_ascii=False)}\n\n"
+                yield f"data: {json.dumps({'tipo': 'finalizado', 'progreso': 100, 'stats': resultado['stats'], 'detalles': resultado['detalles'], 'auditoria': auditoria, 'deepseek_tokens': 0}, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'tipo': 'error', 'mensaje': str(e)}, ensure_ascii=False)}\n\n"
 
@@ -274,24 +328,49 @@ async def procesar_documento(
 
     logger.info(f"Procesando: {safe_name} (Plan: {plan}, Edicion: {edicion})")
 
-    if plan == "pro":
+    total_palabras_doc = sum(len(p.text.split()) for p in doc.paragraphs if p.text and p.text.strip())
+    paginas_estimadas_doc = estimar_paginas_documento(doc, total_palabras_doc)
+
+    if plan != "pro":
+        if paginas_estimadas_doc > MAX_PAGES_FREE:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Tu documento tiene aprox. {paginas_estimadas_doc} páginas y supera el límite de {MAX_PAGES_FREE} páginas de la versión Free. Pásate a DocIA Pro para formatear tesis y documentos extensos sin límite."
+            )
+        resultado = procesar_con_reglas(doc.paragraphs)
+        deepseek_tokens = 0
+    else:
+        if not current_user:
+            raise HTTPException(status_code=401, detail="Debes iniciar sesión para usar DocAI Pro.")
         balance = get_available_tokens(current_user.id, db)
         if balance["total"] <= 0:
             raise HTTPException(status_code=402, detail="No tienes tokens disponibles.")
         resultado   = procesar_con_ia(doc.paragraphs)
         deepseek_tokens = resultado.get('deepseek_tokens', 0)
         consume_tokens(current_user.id, deepseek_tokens, safe_name, db)
-    else:
-        resultado = procesar_con_reglas(doc.paragraphs)
-        resultado["deepseek_tokens"] = 0
+
+    auditoria = ejecutar_auditoria_completa(resultado["detalles"], plan=plan)
 
     return {
         "status": "success",
         "plan": plan,
         "resumen": resultado["stats"],
         "detalles": resultado["detalles"],
-        "tokens_consumed": deepseek_tokens_to_docai(resultado.get("deepseek_tokens", 0)),
+        "auditoria": auditoria,
+        "tokens_consumed": deepseek_tokens_to_docai(deepseek_tokens),
     }
+
+
+@router.post("/auditar-documento/")
+async def auditar_documento(payload: dict):
+    """
+    Ejecuta auditoría de citas vs bibliografía y evaluación de Salud APA bajo demanda.
+    No consume IA (0 coste de tokens) y responde en < 5 ms.
+    """
+    parrafos = payload.get("parrafos", [])
+    plan = payload.get("plan", "free")
+    return ejecutar_auditoria_completa(parrafos, plan=plan)
+
 
 
 @router.get("/tokens/balance")

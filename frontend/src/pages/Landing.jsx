@@ -234,6 +234,10 @@ export default function Landing() {
                   <span className="material-symbols-outlined text-primary text-sm flex-shrink-0">check_circle</span> 
                   <span>{t('landing.feat_refactor')}</span>
                 </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface text-sm sm:text-base">
+                  <span className="material-symbols-outlined text-amber-500 text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_free_pages')}</span>
+                </li>
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface-variant text-sm sm:text-base opacity-70">
                   <span className="material-symbols-outlined text-on-surface-variant text-sm flex-shrink-0">close</span> 
                   <span>{t('landing.feat_free_precision')}</span>
@@ -288,6 +292,10 @@ export default function Landing() {
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
                   <span>{t('landing.feat_refactor')}</span>
+                </li>
+                <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-bold text-sm sm:text-base text-primary-container">
+                  <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 
+                  <span>{t('landing.feat_pro_pages')}</span>
                 </li>
                 <li className="flex items-center gap-2 sm:gap-3 text-on-surface font-medium text-sm sm:text-base">
                   <span className="material-symbols-outlined text-primary-container text-sm flex-shrink-0">check_circle</span> 

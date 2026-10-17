@@ -359,6 +359,10 @@ export default function Upgrade() {
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_refactor')}
                     </li>
+                    <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-primary-container font-black">
+                      <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
+                      {t('landing.feat_pro_pages')}
+                    </li>
                     <li className="flex items-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] text-on-surface">
                       <span className="material-symbols-outlined text-primary-container text-xs sm:text-sm flex-shrink-0">check_circle</span>
                       {t('landing.feat_pro_precision')}

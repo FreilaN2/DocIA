@@ -14,3 +14,8 @@ SUBSCRIPTION_PRICES: dict[int, float] = {
 
 # Tokens asignados por mes en el plan Pro
 TOKENS_PER_MONTH_PRO: int = 10000
+
+# Límite de páginas de la versión Free (ensayos y tareas cortas)
+MAX_PAGES_FREE: int = 15
+WORDS_PER_PAGE_APA: int = 250
+MAX_WORDS_FREE: int = MAX_PAGES_FREE * WORDS_PER_PAGE_APA  # 3750 palabras
