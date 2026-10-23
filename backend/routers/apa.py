@@ -748,6 +748,7 @@ async def generar_final(
 
     reglas = dict(NORMAS_APA.get(datos.edicion, NORMAS_APA["7ma"]))
     reglas["edicion"] = datos.edicion
+    reglas["alineacion"] = getattr(datos, "alineacion", "justify") or "justify"
     if datos.edicion == "6ta":
         reglas["fuente"] = DEFAULT_APA_FONT
         reglas["tamano"] = FUENTES_APA[DEFAULT_APA_FONT]["tamano"]
@@ -872,6 +873,15 @@ async def generar_final(
             if _normalizar_categoria(parrafos[i + 1].categoria) == "PARRAFO_NORMAL":
                 paragraph = doc.add_paragraph()
                 configurar_parrafo_estilo(paragraph, cat, reglas, body_text=parrafos[i + 1].texto.strip())
+                target_inline_align = parrafos[i + 1].textAlign or reglas.get("alineacion", "justify")
+                _MAP_ALIGN = {
+                    'left':    WD_ALIGN_PARAGRAPH.LEFT,
+                    'center':  WD_ALIGN_PARAGRAPH.CENTER,
+                    'right':   WD_ALIGN_PARAGRAPH.RIGHT,
+                    'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+                }
+                if target_inline_align in _MAP_ALIGN:
+                    paragraph.alignment = _MAP_ALIGN[target_inline_align]
                 paragraph_counter += 1
                 i += 2
                 continue
@@ -913,15 +923,16 @@ async def generar_final(
         ph = doc.add_paragraph(p.texto)
         configurar_parrafo_estilo(ph, cat, reglas)
         # Aplicar alineación personalizada del usuario (si la especificó en el editor)
-        if p.textAlign:
-            _MAP_ALIGN = {
-                'left':   WD_ALIGN_PARAGRAPH.LEFT,
-                'center': WD_ALIGN_PARAGRAPH.CENTER,
-                'right':  WD_ALIGN_PARAGRAPH.RIGHT,
-                'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
-            }
-            if p.textAlign in _MAP_ALIGN:
-                ph.alignment = _MAP_ALIGN[p.textAlign]
+        _MAP_ALIGN = {
+            'left':    WD_ALIGN_PARAGRAPH.LEFT,
+            'center':  WD_ALIGN_PARAGRAPH.CENTER,
+            'right':   WD_ALIGN_PARAGRAPH.RIGHT,
+            'justify': WD_ALIGN_PARAGRAPH.JUSTIFY,
+        }
+        target_align = p.textAlign or (reglas.get("alineacion", "justify") if cat == "PARRAFO_NORMAL" else None)
+        if target_align and target_align in _MAP_ALIGN:
+            ph.alignment = _MAP_ALIGN[target_align]
+
         paragraph_counter += 1
         i += 1
 

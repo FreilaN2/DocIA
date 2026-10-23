@@ -58,6 +58,7 @@ function EditableParagraph({
   flatIndex, dragFrom, dragOver,
   onDragStart, onDragOver, onDragEnd,
   isPortada = false,
+  alineacion = 'justify',
 }) {
   const { i18n } = useTranslation();
   const isEn = (i18n.language || 'es').startsWith('en');
@@ -69,7 +70,10 @@ function EditableParagraph({
   const menuRef     = useRef(null);
 
   const style    = APA_STYLES[item.categoria] || APA_STYLES.PARRAFO_NORMAL;
-  const textAlign = item.textAlign || style.defaultAlign || 'left';
+  const defaultAlign = item.categoria === 'PARRAFO_NORMAL'
+    ? (alineacion || style.defaultAlign || 'justify')
+    : (style.defaultAlign || 'left');
+  const textAlign = item.textAlign || defaultAlign;
   const isDragging = dragFrom === flatIndex;
   const isDragOver = dragOver === flatIndex && dragFrom !== flatIndex;
   const isCoverItem = isPortada && (item.categoria.startsWith('TITULO') || item.categoria === 'PARRAFO_NORMAL' || item.categoria.startsWith('PORTADA'));
@@ -359,7 +363,7 @@ function EditableParagraph({
 }
 
 // ─── Hoja de papel ────────────────────────────────────────────────────────────
-function PaperSheet({ parrafos, edicion, fuente, onLabelChange, onTextChange, onAlignChange, onDragStart, onDragOver, onDragEnd, dragFrom, dragOver, uploadId, fullscreen = false, pageNumber = 1, isPortada = false }) {
+function PaperSheet({ parrafos, edicion, fuente, alineacion = 'justify', onLabelChange, onTextChange, onAlignChange, onDragStart, onDragOver, onDragEnd, dragFrom, dragOver, uploadId, fullscreen = false, pageNumber = 1, isPortada = false }) {
   const fontFamily =
     fuente === 'Times New Roman' ? '"Times New Roman", Times, serif' :
     fuente === 'Arial'           ? 'Arial, Helvetica, sans-serif'    :
@@ -401,6 +405,7 @@ function PaperSheet({ parrafos, edicion, fuente, onLabelChange, onTextChange, on
             item={item}
             edicion={edicion}
             fuente={fuente}
+            alineacion={alineacion}
             onLabelChange={onLabelChange}
             onTextChange={onTextChange}
             onAlignChange={onAlignChange}
@@ -420,7 +425,7 @@ function PaperSheet({ parrafos, edicion, fuente, onLabelChange, onTextChange, on
 }
 
 // ─── Componente principal ─────────────────────────────────────────────────────
-export default function DocumentPreview({ parrafos, edicion, fuente, onLabelChange, onTextChange, onAlignChange, onReorder, uploadId }) {
+export default function DocumentPreview({ parrafos, edicion, fuente, alineacion = 'justify', onLabelChange, onTextChange, onAlignChange, onReorder, uploadId }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [dragFrom, setDragFrom]         = useState(null);
   const [dragOver, setDragOver]         = useState(null);
@@ -508,7 +513,7 @@ export default function DocumentPreview({ parrafos, edicion, fuente, onLabelChan
   }, [isFullscreen]);
 
   const sharedProps = {
-    edicion, fuente, onLabelChange, onTextChange, onAlignChange, uploadId,
+    edicion, fuente, alineacion, onLabelChange, onTextChange, onAlignChange, uploadId,
     dragFrom, dragOver,
     onDragStart: handleDragStart,
     onDragOver:  handleDragOver,

@@ -326,7 +326,10 @@ def configurar_parrafo_estilo(
 
     # PARRAFO_NORMAL (default)
     pf.first_line_indent = Inches(reglas["sangria_primera_linea"])
-    paragraph.alignment  = WD_ALIGN_PARAGRAPH.LEFT
+    if reglas.get("alineacion", "justify") == "left":
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    else:
+        paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
     for run in paragraph.runs:
         run.font.name, run.font.size = reglas["fuente"], Pt(reglas["tamano"])
 

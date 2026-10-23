@@ -28,7 +28,11 @@ _RE_ENDS_WITH_DASH_COLON = re.compile(r"[\s\-:]+$")
 _RE_NON_WORD_CHARS = re.compile(r"[^\wÁÉÍÓÚÑÜÇ'-]")
 _RE_PUNCTUATION_END = re.compile(r'[.!?]$')
 _RE_REFERENCIA_APA = re.compile(
-    r'^[A-ZÁÉÍÓÚÑÜÇ][\wÁÉÍÓÚÑÜÇ\'-]+,\s+[A-ZÁÉÍÓÚÑÜÇ]\.\s*\(\d{4}\)'
+    r'^[A-ZÁÉÍÓÚÑÜÇ][\wÁÉÍÓÚÑÜÇ\'-]+,\s+[A-ZÁÉÍÓÚÑÜÇ]\.[^()]{0,160}?\(\s*\d{4}[a-z]?\s*\)'
+)
+_RE_PAGINA_CITA = re.compile(
+    r'\([^)]*?\b(?:p\.|pp\.|pág\.|pag\.|párr\.|parr\.)\s*\d+[^)]*?\)[\s.]*$',
+    re.IGNORECASE
 )
 _RE_CAPITULO_ANEXO = re.compile(
     r'^(cap[ií]tulo|anexo|ap[eé]ndice|apendice|figura|tabla)\b', 
@@ -186,16 +190,30 @@ def _es_referencia_apa(texto: str) -> bool:
 
 def _es_bloque_cita(texto: str) -> bool:
     """
-    Detecta bloques de cita por longitud (≥40 palabras).
-    Optimización: contar espacios en lugar de split() para textos muy largos.
+    Detecta si un párrafo es realmente un bloque de cita textual larga (≥40 palabras)
+    según estándar APA.
+    Para ser una CITA_LARGA debe:
+      1. Tener al menos 40 palabras.
+      2. Tener indicadores claros de cita textual:
+         - Cita de página/párrafo al final: ej. (p. 45), (pp. 12-14), (párr. 5).
+         - O comenzar con comillas ("...", «...», “...”).
+    Un párrafo regular de redacción del autor (incluso si supera 40 palabras)
+    es PARRAFO_NORMAL, no CITA_LARGA.
     """
     texto_stripped = texto.strip()
-    # Verificar que no empiece con comillas
-    if texto_stripped.startswith(('"', '"', '"', '«')):
-        return False
-    # Contar palabras (más rápido que split() para textos largos)
     palabras = texto_stripped.split()
-    return len(palabras) >= CITA_LARGA_MIN_PALABRAS
+    if len(palabras) < CITA_LARGA_MIN_PALABRAS:
+        return False
+
+    # Si empieza con comillas y tiene >= 40 palabras, es cita larga
+    if texto_stripped.startswith(('"', '“', '«', "'")):
+        return True
+
+    # Si termina con cita de página (p. XX) típica de cita textual
+    if _RE_PAGINA_CITA.search(texto_stripped):
+        return True
+
+    return False
 
 
 # ═══════════════════════════════════════════════════════════
@@ -481,4 +499,4 @@ def procesar_con_reglas(doc_paragraphs) -> dict:
             "categoria": categoria,
         })
 
-    return {"stats": stats, "detalles": detalles}
+    return {"stats": stats, "detalles": detalles}

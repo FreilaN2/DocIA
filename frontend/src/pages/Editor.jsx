@@ -50,6 +50,7 @@ export default function Editor() {
   }, [edicion, fuente]);
   
   const [downloadFormat, setDownloadFormat] = useState('docx');
+  const [alineacion, setAlineacion] = useState('justify');
   const [isDragging, setIsDragging] = useState(false);
   const [adBlockDetected, setAdBlockDetected] = useState(false);
   const [tokenBalance, setTokenBalance] = useState(null);
@@ -565,7 +566,8 @@ export default function Editor() {
         edicion, fuente,
         filename: file ? file.name : (savedFilename || 'documento_docai.docx'),
         plan,
-        parrafos: result.detalles.map(d => ({ texto: d.texto, categoria: d.categoria, textAlign: d.textAlign || null, id: typeof d.id === 'number' ? d.id : null })),
+        alineacion,
+        parrafos: result.detalles.map(d => ({ texto: d.texto, categoria: d.categoria, textAlign: d.textAlign || (d.categoria === 'PARRAFO_NORMAL' ? (alineacion || 'justify') : null), id: typeof d.id === 'number' ? d.id : null })),
         incluir_indice: isPro ? includeTOC : false,
         formato: downloadFormat,
         upload_id: uploadId || null,
@@ -817,7 +819,7 @@ export default function Editor() {
 
               <div className="bg-white/70 dark:bg-[#1a1512]/70 backdrop-blur-[20px] rounded-2xl sm:rounded-card border border-slate-200 dark:border-outline-variant/30 p-4 sm:p-6 md:p-8 shadow-sm">
                 {/* Opciones de configuración */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6 mb-6 sm:mb-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6 sm:mb-8">
                   <div className="space-y-1.5 sm:space-y-2">
                     <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
                       {t('editor.style')}
@@ -846,7 +848,20 @@ export default function Editor() {
                       ))}
                     </select>
                   </div>
-                  <div className="space-y-1.5 sm:space-y-2 sm:col-span-2 md:col-span-1">
+                  <div className="space-y-1.5 sm:space-y-2">
+                    <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
+                      {t('editor.alignment')}
+                    </label>
+                    <select 
+                      value={alineacion} 
+                      onChange={(e) => setAlineacion(e.target.value)}
+                      className="w-full p-3.5 sm:p-4 bg-white dark:bg-surface border border-slate-200 dark:border-outline-variant/30 rounded-xl sm:rounded-2xl focus:ring-4 focus:ring-orange-100 dark:focus:ring-primary/20 outline-none text-sm sm:text-base font-bold transition-all cursor-pointer"
+                    >
+                      <option value="justify">{t('editor.align_justify')}</option>
+                      <option value="left">{t('editor.align_left')}</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5 sm:space-y-2">
                     <label className="text-xs sm:text-sm font-black text-slate-500 dark:text-on-surface-variant uppercase tracking-wider ml-1">
                       {t('editor.format')}
                     </label>
@@ -1139,6 +1154,7 @@ export default function Editor() {
                         parrafos={result.detalles || []}
                         edicion={edicion}
                         fuente={fuente}
+                        alineacion={alineacion}
                         onLabelChange={handleLabelChange}
                         onTextChange={handleTextChange}
                         onAlignChange={handleAlignChange}

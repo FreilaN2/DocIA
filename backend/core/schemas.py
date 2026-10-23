@@ -27,6 +27,7 @@ class DatosFinales(BaseModel):
     incluir_indice: bool = False
     formato: str = "docx"
     fuente: str = DEFAULT_APA_FONT
+    alineacion: Optional[str] = "justify"
     upload_id: Optional[str] = None   # ID del archivo original (para copiar portada e imágenes)
     n_portada: int = 0                 # Número de párrafos de portada a copiar del original
 
